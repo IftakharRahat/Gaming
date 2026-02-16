@@ -1,0 +1,30 @@
+# Task: Greedy Market Implementation
+
+- [x] Project setup and initialization [x]
+    - [x] Initialize React.js project (Vite) with Tailwind CSS
+    - [x] Set up directory structure (including `doc` folder)
+    - [x] Install dependencies (Framer Motion, Socket.io, etc.)
+- [x] Phase 1: Loading / Entry Page [x]
+    - [x] Create loading screen with progress bar
+    - [x] Implement asset preloading logic
+    - [x] Add entry animations
+- [/] Phase 2: Main Game Page (Betting State) [ ]
+    - [ ] Implement responsive 9:16 layout
+    - [ ] Build item grid and betting UI
+    - [ ] Add timer pulse and betting animations
+- [ ] Phase 3: Drawing Page (Spin Animation) [ ]
+    - [ ] Implement circular spin logic with Framer Motion
+    - [ ] Set up Socket.io server/client for game state sync
+    - [ ] Add visual polish (glow effects, scaling)
+- [ ] Phase 4: Result / "Showtime" Page [ ]
+    - [ ] Build Win/Loss overlays
+    - [ ] Implement diamond explosion (canvas-confetti)
+    - [ ] Add balance counter-up animation
+- [ ] Phase 5: Modals & Sidebar [ ]
+    - [ ] Create Rules, Records, and Ranks modals
+    - [ ] Implement staggered list animations
+    - [ ] Add sidebar navigation
+- [ ] Audio & Final Integration [ ]
+    - [ ] Integrate howler.js for game sounds
+    - [ ] Perform final performance optimization
+    - [ ] Conduct comprehensive verification
