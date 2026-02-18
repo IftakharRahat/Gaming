@@ -9,6 +9,7 @@ const ARTBOARD = { width: 402, height: 735 } as const;
 const BET_SECONDS = 20;
 const DRAW_SECONDS = 4;
 const SHOW_SECONDS = 3;
+const PRE_DRAW_MS = 2000; 
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
@@ -149,34 +150,58 @@ const buildEmptyBets = (): BetsState => ({
 });
 
 const buildFireworkParticles = (): FireworkParticle[] => {
+  // ✅ Bursts placed at TOP area (above win banner)
+  // These coords are in your artboard coordinate space (402x735)
   const burstAnchors = [
-    { left: 98, top: 210 },
-    { left: 206, top: 250 },
-    { left: 315, top: 218 },
+  { left: 90, top: 260 },
+  { left: 200, top: 240 },
+  { left: 312, top: 260 },
+  { left: 150, top: 295 },
+  { left: 255, top: 295 },
+];
+
+
+  // ✅ More vibrant palette
+  const palette = [
+    '#FF2D55', // hot pink/red
+    '#FF9500', // orange
+    '#FFCC00', // yellow
+    '#34C759', // green
+    '#00C7FF', // cyan
+    '#007AFF', // blue
+    '#AF52DE', // purple
+    '#FFFFFF', // sparkle white
   ];
-  const palette = ['#ffffff', '#ffeeb2', '#fff5df', '#ffd8ff', '#d9f7ff'];
+
   const particles: FireworkParticle[] = [];
 
   burstAnchors.forEach((anchor, burstIdx) => {
-    const count = 12 + Math.floor(Math.random() * 9);
+    const count = 30 + Math.floor(Math.random() * 18);
+// ✅ more particles
     for (let i = 0; i < count; i += 1) {
       const theta = Math.random() * Math.PI * 2;
-      const distance = 34 + Math.random() * 62;
+
+      // ✅ bigger burst radius
+      const distance = 52 + Math.random() * 88;
+
+      const color = palette[Math.floor(Math.random() * palette.length)];
+
       particles.push({
         id: `burst-${burstIdx}-${i}-${Math.round(Math.random() * 100000)}`,
-        originLeft: anchor.left + (Math.random() * 10 - 5),
-        originTop: anchor.top + (Math.random() * 10 - 5),
+        originLeft: anchor.left + (Math.random() * 14 - 7),
+        originTop: anchor.top + (Math.random() * 14 - 7),
         x: Math.cos(theta) * distance,
         y: Math.sin(theta) * distance,
-        size: 3 + Math.random() * 6,
-        delay: i * 0.015 + Math.random() * 0.09,
-        color: palette[Math.floor(Math.random() * palette.length)],
+        size: 3.5 + Math.random() * 7.5, // ✅ larger particles
+        delay: i * 0.009 + Math.random() * 0.05, // ✅ faster fill
+        color,
       });
     }
   });
 
   return particles;
 };
+
 
 type FireworksOverlayProps = {
   seed: number;
@@ -187,7 +212,7 @@ const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
 
   return (
     <motion.div
-      className="pointer-events-none absolute inset-0 z-[560]"
+     className="pointer-events-none absolute inset-0 z-[900]"
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -198,21 +223,25 @@ const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
           key={particle.id}
           className="absolute rounded-full"
           style={{
-            left: particle.originLeft,
-            top: particle.originTop,
-            width: particle.size,
-            height: particle.size,
-            background: particle.color,
-            boxShadow: `0 0 9px ${particle.color}`,
-          }}
-          initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
-          animate={{
-            opacity: [1, 0.92, 0],
-            scale: [0, 1.4, 0],
-            x: [0, particle.x],
-            y: [0, particle.y],
-          }}
-          transition={{ duration: 0.9, ease: 'easeOut', delay: particle.delay }}
+  left: particle.originLeft,
+  top: particle.originTop,
+  width: particle.size,
+  height: particle.size,
+  background: particle.color,
+  // ✅ stronger glow (duller look comes from low glow + too-white palette)
+  boxShadow: `0 0 14px ${particle.color}, 0 0 26px ${particle.color}`,
+  filter: 'saturate(1.35) brightness(1.15)',
+}}
+
+          initial={{ opacity: 0, scale: 0.2, x: 0, y: 0 }}
+animate={{
+  opacity: [0, 1, 0.9, 0],
+  scale: [0.2, 1.2, 1, 0.2],
+  x: [0, particle.x],
+  y: [0, particle.y],
+}}
+transition={{ duration: 1.05, ease: 'easeOut', delay: particle.delay }}
+
         />
       ))}
     </motion.div>
@@ -401,8 +430,8 @@ const INITIAL_RESULT_SRCS = [
 ];
 
 const CHIPS: ChipSpec[] = [
-  { src: '/image2/chip_10.png', left: 29 + 17, top: 523 + 24, width: 54, height: 54 },
-  { src: '/image2/chip_100.png', left: 29 + 81, top: 523 + 26, width: 55, height: 53, shadow: true },
+  { src: '/image2/chip_10.png', left: 29 + 17, top: 526 + 24, width: 54, height: 54 },
+  { src: '/image2/chip_100.png', left: 20+ 81, top: 512 + 26, width: 70, height: 70, shadow: true },
   { src: '/image2/chip_500_orange.png', left: 29 + 146, top: 523 + 25, width: 55, height: 54, shadow: true },
   { src: '/image2/chip_1k.png', left: 29 + 211, top: 523 + 24, width: 54, height: 53, shadow: true },
   { src: '/image2/chip_5k.png', left: 29 + 275, top: 523 + 24, width: 54, height: 54, shadow: true },
@@ -532,6 +561,8 @@ const GamePage = () => {
   const isAdvanceMode = mode === 'ADVANCE';
   const [phase, setPhase] = useState<Phase>('BETTING');
   const [timeLeft, setTimeLeft] = useState(BET_SECONDS);
+  const [showPreDraw, setShowPreDraw] = useState(false);
+  const preDrawTimeoutRef = useRef<number | null>(null);
 
   const [selectedChip, setSelectedChip] = useState<(typeof CHIP_VALUES)[number]>(100);
 
@@ -597,9 +628,16 @@ const GamePage = () => {
     );
   }, []);
 
-  const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showResultBoard;
+  const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
   const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
+
+  useEffect(() => {
+  return () => {
+    if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+  };
+}, []);
+
 
   useEffect(() => {
     if (!showGameOn) return;
@@ -608,14 +646,15 @@ const GamePage = () => {
   }, [showGameOn]);
 
   useEffect(() => {
-  if (activeModal !== 'NONE' || showGameOn) return;
+  if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
 
   const id = window.setInterval(() => {
     setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
   }, 1000);
 
   return () => window.clearInterval(id);
-}, [activeModal, showGameOn]);
+}, [activeModal, showGameOn, showPreDraw]);
+
 
 
   useEffect(() => {
@@ -654,14 +693,23 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      const picked = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
-      winnerRef.current = picked;
-      setWinnerId(picked);
-      setShowFireworks(false);
-      setPhase('DRAWING');
-      setTimeLeft(DRAW_SECONDS);
-      return;
-    }
+  const picked = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
+  winnerRef.current = picked;
+  setWinnerId(picked);
+
+  // ✅ show Game On overlay for 2s before drawing starts
+  setShowPreDraw(true);
+
+  if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+  preDrawTimeoutRef.current = window.setTimeout(() => {
+    setShowPreDraw(false);
+    setPhase('DRAWING');
+    setTimeLeft(DRAW_SECONDS);
+  }, PRE_DRAW_MS);
+
+  return;
+}
+
 
     if (phase === 'DRAWING') {
       const winner = winnerRef.current;
@@ -682,8 +730,14 @@ const GamePage = () => {
 
       setPhase('SHOWTIME');
       setTimeLeft(SHOW_SECONDS);
-      setShowFireworks(true);
-      setFireworksSeed((prev) => prev + 1);
+      if (winAmount > 0) {
+  setShowFireworks(true);
+  setFireworksSeed((prev) => prev + 1);
+} else {
+  setShowFireworks(false);
+}
+
+
 
       setShowResultBoard(true);
 
@@ -1507,7 +1561,45 @@ const GamePage = () => {
           ) : null}
         </AnimatePresence>
 
-        
+        <AnimatePresence>
+  {showPreDraw ? (
+    <motion.div
+      className="absolute inset-0 z-[160]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+    >
+      {/* background dim + blur */}
+      <div
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(3px)' }}
+      />
+
+      {/* banner centered, NOT stretched */}
+      <motion.div
+        className="absolute left-0 right-0 flex justify-center"
+        style={{ top: 120 }}
+        initial={{ scale: 0.98, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.995, opacity: 0, y: -8 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+      >
+        <img
+          src="/image2/game_on.png"
+          alt="Game On"
+          style={{
+            width: ARTBOARD.width, // 402
+            height: 'auto',        // ✅ keeps ratio (no stretch)
+            display: 'block',
+          }}
+        />
+      </motion.div>
+    </motion.div>
+  ) : null}
+</AnimatePresence>
+
+
 
         <AnimatePresence>
   {showResultBoard && pendingWin ? (
