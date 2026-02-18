@@ -11,7 +11,6 @@ const DRAW_SECONDS = 4;
 const SHOW_SECONDS = 3;
 
 const GAME_ON_MS = 1200;
-const WIN_SPLASH_MS = 1300;
 const ADVANCE_UNLOCK_BET = 500000;
 
 const CHIP_VALUES = [10, 100, 500, 1000, 5000] as const;
@@ -24,8 +23,8 @@ type RankTab = 'TODAY' | 'YESTERDAY';
 type ResultKind = 'WIN' | 'LOSE' | 'NOBET';
 
 const POINTER_BASE_POSITION = { left: 247, top: 115 } as const;
-const POINTER_SIZE = { width: 189, height: 189 } as const;
-const POINTER_HOTSPOT = { x: 86, y: 108 } as const;
+const POINTER_SIZE = { width: 125, height: 125} as const;
+const POINTER_HOTSPOT = { x: 25, y: 35} as const;
 const POINTER_TOUR_ORDER: ItemId[] = ['lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk', 'honey', 'tomato'];
 const DRAW_HIGHLIGHT_ORDER: ItemId[] = ['honey', 'tomato', 'lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk'];
 
@@ -530,6 +529,7 @@ const GamePage = () => {
   }, []);
 
   const [mode, setMode] = useState<Mode>('BASIC');
+  const isAdvanceMode = mode === 'ADVANCE';
   const [phase, setPhase] = useState<Phase>('BETTING');
   const [timeLeft, setTimeLeft] = useState(BET_SECONDS);
 
@@ -546,7 +546,7 @@ const GamePage = () => {
   const [resultKind, setResultKind] = useState<ResultKind>('LOSE');
 
   const [showGameOn, setShowGameOn] = useState(true);
-  const [showWinSplash, setShowWinSplash] = useState(false);
+
   const [showResultBoard, setShowResultBoard] = useState(false);
 
   const [winnerId, setWinnerId] = useState<ItemId | null>(null);
@@ -566,22 +566,27 @@ const GamePage = () => {
   const [showFireworks, setShowFireworks] = useState(false);
   const [fireworksSeed, setFireworksSeed] = useState(0);
 
-  const splashTimeoutRef = useRef<number | null>(null);
+
   const floatingChipIdRef = useRef(0);
   const floatingChipTimeoutsRef = useRef<number[]>([]);
 
   const totalBet = useMemo(() => Object.values(bets).reduce((sum, val) => sum + val, 0), [bets]);
   const progressRatio = Math.max(0, Math.min(1, todayWin / 1000000));
+  
+  // FIXED: Pointer stops now correctly point to the center of each item
   const pointerStops = useMemo(() => {
     return POINTER_TOUR_ORDER.map((id) => {
       const item = itemMap[id];
-      const targetX = item.left + item.width * 0.82;
-      const targetY = item.top + item.height * 0.82;
-      const left = Math.max(0, Math.min(ARTBOARD.width - POINTER_SIZE.width, targetX - POINTER_HOTSPOT.x));
-      const top = Math.max(0, Math.min(ARTBOARD.height - POINTER_SIZE.height, targetY - POINTER_HOTSPOT.y));
+      // Calculate the center of the item
+      const centerX = item.left + item.width / 2;
+      const centerY = item.top + item.height / 2;
+      // Position pointer so its hotspot points at the item center
+      const left = centerX - POINTER_HOTSPOT.x;
+      const top = centerY - POINTER_HOTSPOT.y;
       return { left, top };
     });
   }, [itemMap]);
+  
   const chipSrcByValue = useMemo(() => {
     return CHIP_VALUES.reduce(
       (acc, value, idx) => {
@@ -592,9 +597,9 @@ const GamePage = () => {
     );
   }, []);
 
-  const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showWinSplash || showResultBoard;
+  const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showResultBoard;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
-  const canOpenSystemModal = phase === 'BETTING' && !showGameOn && !showWinSplash;
+  const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
 
   useEffect(() => {
     if (!showGameOn) return;
@@ -603,14 +608,15 @@ const GamePage = () => {
   }, [showGameOn]);
 
   useEffect(() => {
-    if (activeModal !== 'NONE' || showGameOn || showWinSplash) return;
+  if (activeModal !== 'NONE' || showGameOn) return;
 
-    const id = window.setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+  const id = window.setInterval(() => {
+    setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+  }, 1000);
 
-    return () => window.clearInterval(id);
-  }, [activeModal, showGameOn, showWinSplash]);
+  return () => window.clearInterval(id);
+}, [activeModal, showGameOn]);
+
 
   useEffect(() => {
     if (!canBet || pointerStops.length === 0) return;
@@ -635,16 +641,16 @@ const GamePage = () => {
   }, [phase]);
 
   useEffect(
-    () => () => {
-      if (splashTimeoutRef.current) window.clearTimeout(splashTimeoutRef.current);
-      floatingChipTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
-      floatingChipTimeoutsRef.current = [];
-    },
-    []
-  );
+  () => () => {
+    floatingChipTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
+    floatingChipTimeoutsRef.current = [];
+  },
+  []
+);
+
 
   useEffect(() => {
-    if (activeModal !== 'NONE' || showGameOn || showWinSplash) return;
+    if (activeModal !== 'NONE' || showGameOn) return;
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
@@ -679,17 +685,8 @@ const GamePage = () => {
       setShowFireworks(true);
       setFireworksSeed((prev) => prev + 1);
 
-      if (winAmount > 0) {
-        setShowWinSplash(true);
-        setShowResultBoard(false);
-        splashTimeoutRef.current = window.setTimeout(() => {
-          setShowWinSplash(false);
-          setShowResultBoard(true);
-        }, WIN_SPLASH_MS);
-      } else {
-        setShowWinSplash(false);
-        setShowResultBoard(true);
-      }
+      setShowResultBoard(true);
+
       return;
     }
 
@@ -730,7 +727,7 @@ const GamePage = () => {
       winnerRef.current = null;
 
       setShowResultBoard(false);
-      setShowWinSplash(false);
+      
       setShowFireworks(false);
 
       setPhase('BETTING');
@@ -745,7 +742,7 @@ const GamePage = () => {
     pendingWin,
     phase,
     showGameOn,
-    showWinSplash,
+    
     timeLeft,
     totalBet,
   ]);
@@ -785,12 +782,10 @@ const GamePage = () => {
   };
 
   const handleAdvanceClick = () => {
-    if (lifetimeBet >= ADVANCE_UNLOCK_BET) {
-      setMode('ADVANCE');
-      return;
-    }
-    setActiveModal('ADVANCED');
-  };
+  // Always show popup first (as you requested)
+  setActiveModal('ADVANCED');
+};
+
 
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
@@ -805,11 +800,12 @@ const GamePage = () => {
     <ScaledArtboard width={ARTBOARD.width} height={ARTBOARD.height} metricsMode={flags.metrics}>
       <div className={`relative h-full w-full ${debugClass(DEBUG)}`} style={{ background: '#8DA6DE' }}>
         <img
-          src="/image2/city_background.png"
-          alt=""
-          className="absolute z-0 object-cover"
-          style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: 'overlay', opacity: 1 }}
-        />
+  src={isAdvanceMode ? '/image2/advance_bg.png' : '/image2/city_background.png'}
+  alt=""
+  className="absolute z-0 object-cover"
+  style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: 'overlay', opacity: 1 }}
+/>
+
 
         <div
           className="absolute z-[1]"
@@ -971,19 +967,22 @@ const GamePage = () => {
           }}
         >
           <motion.div
-            className="absolute"
-            style={{
-              left: 1,
-              top: 1.5,
-              width: 86,
-              height: 24.764331817626953,
-              borderRadius: 109.55,
-              background: 'linear-gradient(178.63deg, #FFDB19 31.27%, #E09613 98.84%)',
-              border: '0.55px solid #A45721',
-            }}
-            animate={{ x: mode === 'BASIC' ? 0 : 88 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-          />
+  className="absolute"
+  style={{
+    left: 3,
+    top: .5,
+    width: 86,
+    height: 24.764331817626953,
+    borderRadius: 109.55,
+    background: isAdvanceMode
+      ? 'linear-gradient(359.93deg, #C22F19 0.06%, #E92407 61.53%)'
+      : 'linear-gradient(178.63deg, #FFDB19 31.27%, #E09613 98.84%)',
+    border: '0.55px solid #A45721',
+  }}
+  animate={{ x: mode === 'BASIC' ? 0 : 88 }}
+  transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+/>
+
 
           <button
             type="button"
@@ -1046,7 +1045,7 @@ const GamePage = () => {
             height: 196,
             filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.25))',
           }}
-          animate={{ y: [0, -2, 0], rotate: [-0.4, 0.4, -0.4] }}
+          
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
 
@@ -1078,8 +1077,8 @@ const GamePage = () => {
               exit={{ opacity: 0 }}
               transition={{
                 opacity: { duration: 0.14 },
-                left: { duration: 0.01, ease: 'linear' },
-                top: { duration: 0.01, ease: 'linear' },
+                left: { duration: 0.6, ease: 'easeInOut' },
+                top: { duration: 0.6, ease: 'easeInOut' },
                 y: { duration: 0.46, times: [0, 0.5, 1], ease: 'easeInOut' },
                 scale: { duration: 0.46, times: [0, 0.5, 1], ease: 'easeInOut' },
               }}
@@ -1090,7 +1089,7 @@ const GamePage = () => {
         <div
           className="absolute z-40 flex items-center justify-center"
           style={{
-            left: 170,
+            left: 150,
             top: 304,
             width: 120,
             height: 16,
@@ -1108,7 +1107,7 @@ const GamePage = () => {
         <motion.div
           className="absolute z-40 flex items-center justify-center"
           style={{
-            left: 182,
+            left: 170,
             top: 324.69,
             width: 80,
             height: 16,
@@ -1274,33 +1273,60 @@ const GamePage = () => {
         </AnimatePresence>
 
         <div className="absolute z-50" style={{ left: 4, top: 444, width: 394, height: 72 }}>
-          <img
-            src="/image2/tab_vegetables.png"
-            alt=""
-            className="absolute z-10 object-contain"
-            style={{ left: 0, top: 0, width: 75, height: 72 }}
-          />
+  {/* flares behind tabs (both modes) */}
+  <motion.img
+    src="/image2/flare.png"
+    alt=""
+    aria-hidden="true"
+    className="pointer-events-none absolute z-[1] object-contain"
+    style={{ left: -60, top: -83, width: 200, height: 200 }}
+    animate={{ opacity: [0.35, 0.85, 0.35], scale: [0.92, 1.06, 0.92] }}
+    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+  />
+  <motion.img
+    src="/image2/flare.png"
+    alt=""
+    aria-hidden="true"
+    className="pointer-events-none absolute z-[1] object-contain"
+    style={{ left: 256, top: -85, width: 200, height: 200 }}
+    animate={{ opacity: [0.35, 0.9, 0.35], scale: [0.92, 1.08, 0.92] }}
+    transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.15 }}
+  />
 
-          <img
-            src="/image2/tab_drinks.png"
-            alt=""
-            className="absolute z-10 object-contain"
-            style={{ left: 315, top: 1, width: 79, height: 68 }}
-          />
+  {/* tabs (stay above flare) */}
+  <img
+    src="/image2/tab_vegetables.png"
+    alt=""
+    className="absolute z-10 object-contain"
+    style={{ left: 0, top: 0, width: 75, height: 72 }}
+  />
+
+  <img
+    src="/image2/tab_drinks.png"
+    alt=""
+    className="absolute z-10 object-contain"
+    style={{ left: 315, top: 1, width: 79, height: 68 }}
+  />
 
           <div
-            className="absolute z-20"
-            style={{
-              left: 77,
-              top: 41,
-              width: 234,
-              height: 26,
-              borderRadius: 200,
-              background: '#0F6095',
-              border: '1.5px solid #92D0F9',
-              boxShadow: 'inset 0px 0px 8px rgba(0,0,0,0.30), 0px 0px 12px rgba(0,0,0,0.40)',
-            }}
-          >
+  className="absolute z-20"
+  style={{
+    left: 77,
+    top: 41,
+    width: 234,
+    height: 26,
+    borderRadius: 200,
+
+    background: isAdvanceMode ? '#6F372F' : '#0F6095',
+    border: isAdvanceMode ? '1.5px solid #E92407' : '1.5px solid #92D0F9',
+
+    // advance mode shadows exactly as you gave
+    boxShadow: isAdvanceMode
+      ? 'inset 0px 0px 8px 0px #0000004D, 0px 0px 12px 0px #00000066'
+      : 'inset 0px 0px 8px rgba(0,0,0,0.30), 0px 0px 12px rgba(0,0,0,0.40)',
+  }}
+>
+
             <div
               className="absolute z-10 flex items-center whitespace-nowrap"
               style={{
@@ -1339,20 +1365,41 @@ const GamePage = () => {
           </div>
         </div>
 
-        <div className="absolute" style={{ left: 0, top: 477, width: 402, height: 297, background: '#2B93CA', zIndex: 5 }} />
+        <div
+  className="absolute"
+  style={{
+    left: 0,
+    top: 477,
+    width: 402,
+    height: 297,
+    background: isAdvanceMode ? '#72342B' : '#2B93CA',
+    zIndex: 5,
+  }}
+/>
+
 
         <div className="absolute z-40 overflow-hidden" style={{ left: 4, top: 444, width: 394, height: 281, borderRadius: 32 }}>
           <img
-            src="/image2/curtain.png"
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute z-0"
-            style={{ left: 0, right: 0, top: 32.91, width: '100%', height: 81.2218246459961, objectFit: 'fill' }}
-          />
+  src={isAdvanceMode ? '/image2/curtain_red.png' : '/image2/curtain.png'}
+  alt=""
+  aria-hidden="true"
+  className="pointer-events-none absolute z-0"
+  style={{ left: 0, right: 0, top: 32.91, width: '100%', height: 81.2218246459961, objectFit: 'fill' }}
+/>
+
 
           <motion.div
             className="absolute z-10"
-            style={{ left: 25, top: 79, width: 345, height: 101, borderRadius: 20, background: '#0F6095', border: '5px solid #1087C6' }}
+            style={{
+  left: 25,
+  top: 79,
+  width: 345,
+  height: 101,
+  borderRadius: 20,
+  background: isAdvanceMode ? '#D95B48' : '#0F6095',
+  border: isAdvanceMode ? '5px solid #E92407' : '5px solid #1087C6',
+}}
+
             animate={phase === 'DRAWING' ? { opacity: 0.72 } : { opacity: 1 }}
             transition={{ duration: 0.24 }}
           />
@@ -1395,7 +1442,16 @@ const GamePage = () => {
 
           <div
             className="absolute z-10 overflow-hidden"
-            style={{ left: 25, top: 195, width: 343, height: 18, borderRadius: 20, background: '#0F6095', border: '1px solid #1087C6' }}
+          style={{
+  left: 25,
+  top: 195,
+  width: 343,
+  height: 18,
+  borderRadius: 20,
+  background: isAdvanceMode ? '#D95B48' : '#0F6095',
+  border: isAdvanceMode ? '1px solid #E92407' : '1px solid #1087C6',
+}}
+
           >
             <motion.div
               style={{ height: '100%', background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)' }}
@@ -1408,13 +1464,29 @@ const GamePage = () => {
             <img key={idx} src={c.src} alt="" className="absolute z-20 object-contain" style={{ left: c.left - 4, top: c.top - 444, width: c.width, height: c.height }} />
           ))}
 
-          <div className="absolute z-10" style={{ left: 27, top: 236, width: 343, height: 45, borderRadius: 12, background: '#0F6095', border: '2px solid #1087C6', boxShadow: '0px 1px 0px #4ABAF9' }} />
+          <div
+  className="absolute z-10"
+  style={{
+    left: 27,
+    top: 236,
+    width: 343,
+    height: 45,
+    borderRadius: 12,
+    background: isAdvanceMode ? '#D95B48' : '#0F6095',
+    border: isAdvanceMode ? '2px solid #E92407' : '2px solid #1087C6',
+    boxShadow: isAdvanceMode ? '0px 1px 0px 0px #A87C75' : '0px 1px 0px #4ABAF9',
+  }}
+/>
+
 
           <div className="absolute z-20 flex items-center" style={{ left: 40, top: 250, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
             Result
           </div>
 
-          <div className="absolute z-20" style={{ left: 92.5, top: 246, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)', borderImageSlice: 1 }} />
+          <div className="absolute z-20" style={{ left: 92.5, top: 246, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
+  ? 'linear-gradient(180deg, #D95B48 -6.25%, #FFFFFF 50%, #D95B48 106.25%)'
+  : 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)',
+ borderImageSlice: 1 }} />
 
           {RESULT_POSITIONS.map((pos, idx) => {
             const src = resultSrcs[idx] ?? INITIAL_RESULT_SRCS[idx];
@@ -1435,278 +1507,404 @@ const GamePage = () => {
           ) : null}
         </AnimatePresence>
 
+        
+
         <AnimatePresence>
-          {showWinSplash && pendingWin ? (
-            <motion.div className="absolute inset-0 z-[510]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(3px)' }} />
-              <img
-                src="/image2/congratulations.png"
-                alt="Congratulation!"
-                className="absolute left-1/2 -translate-x-1/2 object-contain"
-                style={{ top: 116, width: 350, height: 96 }}
-              />
-              <img src="/image2/diamonds.png" alt="" className="absolute left-1/2 -translate-x-1/2 object-contain" style={{ top: 206, width: 260, height: 130 }} />
-              <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2" style={{ top: 340, color: '#fff', fontFamily: 'Inria Serif, serif', fontSize: 48 }}>
-                <BlumondIcon size={22} />
-                <span>{formatNum(pendingWin.amount)}</span>
+  {showResultBoard && pendingWin ? (
+    <motion.div
+      className="absolute inset-0 z-[520]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
+
+      {/* ✅ WIN PANEL (match screenshot) */}
+      {resultKind === 'WIN' && winnerItem ? (
+        <div className="absolute" style={{ left: -6, top: 277, width: 414, height: 414 }}>
+          <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+
+          {/* winner row like your WIN screenshot */}
+          <div className="absolute" style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}>
+            <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
+              <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
+              <div
+                style={{
+                  color: '#fff',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontWeight: 800,
+                  fontSize: 20,
+                  lineHeight: '20px',
+                  textTransform: 'lowercase',
+                }}
+              >
+                {winnerItem.id}
               </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+            </div>
 
-        <AnimatePresence>
-          {showResultBoard && pendingWin ? (
-            <motion.div className="absolute inset-0 z-[520]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
+            <div
+              className="absolute flex items-center justify-end"
+              style={{
+                right: 0,
+                top: 0,
+                height: 40,
+                gap: 8,
+                color: '#ffe56a',
+                fontFamily: 'Inria Serif, serif',
+                fontSize: 30,
+                fontWeight: 800,
+                textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <BlumondIcon size={22} />
+              <span>{winAmountLabel}</span>
+            </div>
+          </div>
 
-              {resultKind === 'WIN' && winnerItem ? (
-                <div className="absolute" style={{ left: 34, top: 298, width: 334, height: 356 }}>
-                  <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+          {/* leaderboard rows (same as your existing win panel) */}
+          {rankRows.slice(0, 3).map((row, idx) => (
+            <div
+              key={`${row.name}-${idx}`}
+              className="absolute"
+              style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
+            >
+              <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
+                <PodiumBadge index={idx} size={28} />
+              </div>
 
-                  {/* Header strip content */}
-                  <div className="absolute" style={{ left: 28, top: 142, width: 278, height: 34, overflow: 'hidden' }}>
-                    <div
-                      className="absolute"
-                      style={{
-                        left: 126,
-                        top: 3,
-                        width: 1,
-                        height: 27,
-                        background: 'rgba(255,255,255,0.28)',
-                      }}
-                    />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 40,
+                  top: 12,
+                  width: 160,
+                  color: '#fff',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontWeight: 700,
+                  fontSize: 20,
+                  lineHeight: '20px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {row.name}
+              </div>
 
-                    <div className="absolute flex items-center" style={{ left: 8, top: 0, width: 116, height: 34, gap: 4 }}>
-                      <img src={winnerItem.src} alt="" className="h-[24px] w-[24px] shrink-0 object-contain" />
-                      <div
-                        style={{
-                          color: '#fff',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 700,
-                          fontSize: 14,
-                          lineHeight: '16px',
-                          textTransform: 'lowercase',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {winnerItem.id}
-                      </div>
-                    </div>
+              <div
+                className="absolute flex items-center justify-end"
+                style={{
+                  right: 0,
+                  top: 12,
+                  width: 110,
+                  gap: 6,
+                  color: '#ffe9ff',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontWeight: 800,
+                  fontSize: 20,
+                  lineHeight: '20px',
+                  textShadow: '0 1px 0 rgba(0,0,0,0.35)',
+                }}
+              >
+                <BlumondIcon size={16} />
+                {formatK(row.diamonds)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* ✅ NO BET + LOSE PANEL (match screenshot size/pos) */
+        <div className="absolute" style={{ left: 13, top: 340, width: 374, height: 374 }}>
+          <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-                    <div
-                      className="absolute flex items-center justify-end"
-                      style={{
-                        right: 8,
-                        top: 0,
-                        width: 138,
-                        height: 34,
-                        gap: 5,
-                        color: '#ffe56a',
-                        fontFamily: 'Inria Serif, serif',
-                        fontSize: winAmountFontSize,
-                        lineHeight: `${winAmountFontSize}px`,
-                        fontWeight: 700,
-                        textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <BlumondIcon size={21} className="shrink-0" />
-                      <span>{winAmountLabel}</span>
-                    </div>
-                  </div>
-
-                  {/* Leader rows */}
-                  {rankRows.slice(0, 3).map((row, idx) => (
-                    <div key={`${row.name}-${idx}`} className="absolute" style={{ left: 30, top: 198 + idx * 43, width: 272, height: 36, overflow: 'hidden' }}>
-                      <div className="absolute" style={{ left: 4, top: 4, width: 26, height: 26 }}>
-                        <PodiumBadge index={idx} size={26} />
-                      </div>
-
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: 40,
-                          top: 8,
-                          width: 130,
-                          color: '#fff',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 600,
-                          fontSize: 18,
-                          lineHeight: '20px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {row.name}
-                      </div>
-
-                      <div
-                        className="absolute flex items-center justify-end"
-                      style={{
-                        right: 2,
-                        top: 8,
-                        width: 104,
-                        gap: 4,
-                        color: '#ffe9ff',
-                        fontFamily: 'Inter, system-ui, sans-serif',
-                        fontWeight: 700,
-                        fontSize: 17,
-                        lineHeight: '20px',
-                        textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                      }}
-                    >
-                        <BlumondIcon size={14} />
-                        {formatK(row.diamonds)}
-                      </div>
-                    </div>
-                  ))}
+          {/* NO BET header (keep like screenshot) */}
+          {resultKind === 'NOBET' ? (
+            <div className="absolute flex items-center" style={{ left: 36, top: 52, width: 302, height: 48, gap: 14 }}>
+              <img src={winnerItem ? winnerItem.src : '/image2/lemon.png'} alt="" className="h-[34px] w-[34px] object-contain" />
+              <div
+                style={{
+                  color: '#fff',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontSize: 20,
+                  fontWeight: 800,
+                  lineHeight: '20px',
+                }}
+              >
+                You did not bet in this round
+              </div>
+            </div>
+          ) : (
+            /* ✅ LOSE header: same “winner row style” as WIN, but diamonds 0 */
+            <div className="absolute" style={{ left: 34, top: 52, width: 306, height: 48, overflow: 'hidden' }}>
+              <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 48, gap: 10 }}>
+                <img src={winnerItem ? winnerItem.src : '/image2/lemon.png'} alt="" className="h-[34px] w-[34px] object-contain" />
+                <div
+                  style={{
+                    color: '#fff',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 800,
+                    fontSize: 20,
+                    lineHeight: '20px',
+                    textTransform: 'lowercase',
+                  }}
+                >
+                  {winnerItem ? winnerItem.id : 'none'}
                 </div>
-              ) : (
-                <div className="absolute" style={{ left: 49, top: 314, width: 304, height: 248 }}>
-                  <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+              </div>
 
-                  <div className="absolute flex items-center" style={{ left: 24, top: 17, width: 256, height: 34, gap: 6, overflow: 'hidden' }}>
-                    <img src={winnerItem ? winnerItem.src : '/image2/lemon.png'} alt="" className="h-[20px] w-[20px] object-contain" />
-                    <div
-                      style={{
-                        color: '#fff',
-                        fontFamily: 'Inter, system-ui, sans-serif',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        lineHeight: '14px',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {resultKind === 'NOBET' ? 'You did not bet in this round' : 'Better luck next round'}
-                    </div>
-                  </div>
+              <div
+                className="absolute flex items-center justify-end"
+                style={{
+                  right: 0,
+                  top: 0,
+                  height: 48,
+                  gap: 8,
+                  color: '#ffe56a',
+                  fontFamily: 'Inria Serif, serif',
+                  fontSize: 28,
+                  fontWeight: 800,
+                  textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <BlumondIcon size={20} />
+                <span>0</span>
+              </div>
+            </div>
+          )}
 
-                  {NO_BET_ROWS.map((row, idx) => (
-                    <div key={`${row.name}-${idx}`} className="absolute" style={{ left: 20, top: 86 + idx * 44, width: 264, height: 34, overflow: 'hidden' }}>
-                      <div className="absolute" style={{ left: 4, top: 4, width: 26, height: 26 }}>
-                        <PodiumBadge index={idx} size={26} />
-                      </div>
+          {/* rows same as before */}
+          {NO_BET_ROWS.map((row, idx) => (
+            <div key={`${row.name}-${idx}`} className="absolute" style={{ left: 34, top: 140 + idx * 74, width: 306, height: 56, overflow: 'hidden' }}>
+              <div className="absolute" style={{ left: 0, top: 12, width: 30, height: 30 }}>
+                <PodiumBadge index={idx} size={30} />
+              </div>
 
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: 40,
-                          top: 7,
-                          width: 126,
-                          color: '#fff',
-                          fontFamily: 'Inria Serif, serif',
-                          fontSize: 18,
-                          lineHeight: '20px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {row.name}
-                      </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 44,
+                  top: 16,
+                  width: 170,
+                  color: '#fff',
+                  fontFamily: 'Inria Serif, serif',
+                  fontSize: 24,
+                  lineHeight: '24px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {row.name}
+              </div>
 
-                      <div
-                        className="absolute flex items-center justify-end"
-                      style={{
-                        right: 2,
-                        top: 7,
-                        width: 94,
-                        gap: 5,
-                          color: '#ffe8a9',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 700,
-                          fontSize: 17,
-                        lineHeight: '20px',
-                        textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                      }}
-                    >
-                        <BlumondIcon size={14} />
-                        {formatK(row.amount)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+              <div
+                className="absolute flex items-center justify-end"
+                style={{
+                  right: 0,
+                  top: 16,
+                  width: 120,
+                  gap: 8,
+                  color: '#ffe8a9',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontWeight: 800,
+                  fontSize: 22,
+                  lineHeight: '22px',
+                  textShadow: '0 1px 0 rgba(0,0,0,0.35)',
+                }}
+              >
+                <BlumondIcon size={18} />
+                {formatK(row.amount)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  ) : null}
+</AnimatePresence>
+
 
         <AnimatePresence>{showFireworks ? <FireworksOverlay key={`fireworks-${fireworksSeed}`} seed={fireworksSeed} /> : null}</AnimatePresence>
 
         <AnimatePresence>
-          {activeModal !== 'NONE' ? (
-            <motion.div className="absolute inset-0 z-[700]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <button type="button" onClick={() => setActiveModal('NONE')} className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(4px)' }} />
+  {activeModal !== 'NONE' ? (
+    <motion.div
+      className="absolute inset-0 z-[700]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <button
+        type="button"
+        onClick={() => setActiveModal('NONE')}
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(4px)' }}
+      />
 
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: 326, height: 430 }}>
-                {activeModal === 'RULE' ? (
-                  <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
-                ) : null}
-
-                {activeModal === 'RECORDS' ? (
-                  <div className="relative h-full w-full">
-                    <img src="/image2/popup_game_records.png" alt="" className="h-full w-full object-fill" />
-                    <div className="absolute left-[28px] right-[30px] top-[90px] text-[13px] text-[#be6a31]">
-                      {records.length > 0
-                        ? `Round ${records[0].round} | Winner: ${records[0].winner} | Win: ${formatNum(records[0].win)}`
-                        : 'Display game records of the last 7 days, with a maximum of 200 records.'}
-                    </div>
-                  </div>
-                ) : null}
-
-                {activeModal === 'PRIZE' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-4 text-[#8f4f1f]">
-                    <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">Prize distribution</div>
-                    <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000</div>
-                  </div>
-                ) : null}
-
-                {activeModal === 'RANK' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff4d4] to-[#ffe3b3] p-3">
-                    <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">Game Rank</div>
-                    <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
-                      <button type="button" onClick={() => setRankTab('TODAY')} className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'}`}>Today</button>
-                      <button type="button" onClick={() => setRankTab('YESTERDAY')} className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'}`}>Yesterday</button>
-                    </div>
-                    <div className="space-y-1">
-                      {rankRows.slice(0, 7).map((row, idx) => (
-                        <div key={`${row.name}-${idx}`} className="relative h-[42px]">
-                          <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
-                          <div className="absolute left-[14px] top-[8px] text-[20px] text-[#7b471d]">{idx + 1}</div>
-                          <div className="absolute left-[70px] top-[8px] text-[18px] text-[#7b471d]">{row.name}</div>
-                          <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">{formatNum(row.diamonds)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {activeModal === 'ADVANCED' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff2cb] to-[#ffe7b8] p-4 text-[#b56026]">
-                    <div className="mx-auto mb-3 flex h-[44px] w-[220px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">Advanced Mode</div>
-                    <div className="text-[14px]">Users who have placed bets exceeding 500,000 coins in the past 7 days can unlock premium mode.</div>
-                    <div className="mt-3 text-[14px]">{`Keep going! Only ${formatNum(remainingForAdvance)} diamonds to unlock!`}</div>
-                    <img src="/image2/diamonds.png" alt="" className="mx-auto mt-4 h-[86px] w-[170px] object-contain" />
-                  </div>
-                ) : null}
-
-                <button type="button" onClick={() => setActiveModal('NONE')} className="absolute right-[-8px] top-[6px] flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#ff4e40] text-[22px] text-white">x</button>
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        {flags.overlay ? (
-          <img
-            src="/image2/figma_ref.png"
-            alt="Figma overlay"
-            className="pointer-events-none absolute inset-0 z-[9999] h-full w-full object-fill"
-            style={{ opacity: 0.4 }}
-          />
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={{ width: 326, height: 430 }}
+      >
+        {activeModal === 'RULE' ? (
+          <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
         ) : null}
+
+        {activeModal === 'RECORDS' ? (
+          <div className="relative h-full w-full">
+            <img src="/image2/popup_game_records.png" alt="" className="h-full w-full object-fill" />
+            <div className="absolute left-[28px] right-[30px] top-[90px] text-[13px] text-[#be6a31]">
+              {records.length > 0
+                ? `Round ${records[0].round} | Winner: ${records[0].winner} | Win: ${formatNum(records[0].win)}`
+                : 'Display game records of the last 7 days, with a maximum of 200 records.'}
+            </div>
+          </div>
+        ) : null}
+
+        {activeModal === 'PRIZE' ? (
+          <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-4 text-[#8f4f1f]">
+            <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">
+              Prize distribution
+            </div>
+            <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
+              1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
+            </div>
+          </div>
+        ) : null}
+
+        {activeModal === 'RANK' ? (
+          <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff4d4] to-[#ffe3b3] p-3">
+            <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
+              Game Rank
+            </div>
+
+            <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
+              <button
+                type="button"
+                onClick={() => setRankTab('TODAY')}
+                className={`h-full w-1/2 rounded-[16px] text-[14px] ${
+                  rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setRankTab('YESTERDAY')}
+                className={`h-full w-1/2 rounded-[16px] text-[14px] ${
+                  rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                }`}
+              >
+                Yesterday
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {rankRows.slice(0, 7).map((row, idx) => (
+                <div key={`${row.name}-${idx}`} className="relative h-[42px]">
+                  <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
+                  <div className="absolute left-[14px] top-[8px] text-[20px] text-[#7b471d]">{idx + 1}</div>
+                  <div className="absolute left-[70px] top-[8px] text-[18px] text-[#7b471d]">{row.name}</div>
+                  <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
+                    {formatNum(row.diamonds)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activeModal === 'ADVANCED' ? (
+          <div className="relative h-full w-full">
+            <img src="/image2/popup_small.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+
+            <button
+              type="button"
+              onClick={() => setActiveModal('NONE')}
+              className="absolute"
+              style={{ right: 6, top: 10, width: 44, height: 44 }}
+              aria-label="Close"
+            >
+              <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
+            </button>
+
+            <div
+              className="absolute left-1/2 -translate-x-1/2 text-center"
+              style={{
+                top: 34,
+                width: 250,
+                fontFamily: 'Inria Serif, serif',
+                fontWeight: 800,
+                fontSize: 30,
+                color: '#7a3c08',
+                textShadow: '0 2px 0 rgba(0,0,0,0.15)',
+              }}
+            >
+              Advanced Mode
+            </div>
+
+            <div
+              className="absolute"
+              style={{
+                left: 28,
+                right: 28,
+                top: 120,
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontWeight: 600,
+                fontSize: 18,
+                lineHeight: '26px',
+                color: '#be6a31',
+              }}
+            >
+              <div>Users who have placed bets exceeding 500,000 coins in the past 7 days can unlock the premium mode.</div>
+
+              <div style={{ marginTop: 18 }}>
+                Keep going! Only{' '}
+                <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvance)}</span>{' '}
+                diamonds to unlock!
+              </div>
+            </div>
+
+            <img
+              src="/image2/diamonds.png"
+              alt=""
+              className="absolute left-1/2 -translate-x-1/2 object-contain"
+              style={{ top: 235, width: 210, height: 120 }}
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('ADVANCE');
+                setActiveModal('NONE');
+              }}
+              className="absolute left-1/2 -translate-x-1/2"
+              style={{
+                bottom: 30,
+                width: 240,
+                height: 62,
+                borderRadius: 999,
+                background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                border: '2px solid rgba(0,0,0,0.18)',
+                boxShadow: '0 10px 18px rgba(0,0,0,0.22)',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontWeight: 900,
+                fontSize: 28,
+                color: '#ffffff',
+                textShadow: '0 2px 0 rgba(0,0,0,0.25)',
+              }}
+            >
+              OK
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </motion.div>
+  ) : null}
+</AnimatePresence>
+
       </div>
     </ScaledArtboard>
   );
