@@ -205,8 +205,11 @@ type FloatingBetChip = {
   id: number;
   left: number;
   top: number;
+  endLeft: number;
+  endTop: number;
   src: string;
 };
+
 
 type FireworkDot = {
   id: string;
@@ -427,6 +430,9 @@ const ScaledArtboard = ({ width, height, metricsMode, children }: ScaledArtboard
     </div>
   );
 };
+// --- Tab groups ---
+const VEG_ITEMS: ItemId[] = ['tomato', 'lemon', 'pumpkin', 'zucchini'];
+const DRINK_ITEMS: ItemId[] = ['milk', 'cola', 'water', 'honey']; // honey treated as "drinks" bucket here
 
 const ITEMS: ItemSpec[] = [
   {
@@ -1064,7 +1070,9 @@ const GamePage = () => {
   const [mode, setMode] = useState<Mode>('BASIC');
   const isAdvanceMode = mode === 'ADVANCE';
   const [phase, setPhase] = useState<Phase>('BETTING');
-  const [timeLeft, setTimeLeft] = useState(BET_SECONDS);
+  const [timeLeft, setTimeLeft] = useState(0); 
+  const [showGameOn, setShowGameOn] = useState(true);
+
   const [showPreDraw, setShowPreDraw] = useState(false);
   const preDrawTimeoutRef = useRef<number | null>(null);
 
@@ -1080,7 +1088,7 @@ const GamePage = () => {
   const [resultSrcs, setResultSrcs] = useState<string[]>(INITIAL_RESULT_SRCS);
   const [resultKind, setResultKind] = useState<ResultKind>('LOSE');
 
-  const [showGameOn, setShowGameOn] = useState(true);
+  
 
   const [showResultBoard, setShowResultBoard] = useState(false);
 
@@ -1108,7 +1116,35 @@ const GamePage = () => {
   const totalBet = useMemo(() => Object.values(bets).reduce((sum, val) => sum + val, 0), [bets]);
 
   /* Progress bar reaches each chest box at its threshold value */
-  const BOX_THRESHOLDS = [10000, 50000, 100000, 500000, 1000000]; // 10K, 50K, 100K, 500K, 1M
+  
+  // thresholds in order (must match visual order)
+  const BOX_THRESHOLDS = [10000, 50000, 100000, 500000, 1000000] as const;
+
+// closed -> open chest image mapping (from your folder screenshot)
+const CHEST_OPEN_SRC_BY_THRESHOLD: Record<number, string> = {
+  10000: '/image2/chest_10k_open.png',
+  50000: '/image2/chest_50k_open.png',
+  100000: '/image2/chest_100k_open.png',
+  500000: '/image2/chest_500k_open.png',
+  1000000: '/image2/chest_1m_open.png',
+};
+const [openedChests, setOpenedChests] = useState<Record<number, boolean>>({
+  10000: false,
+  50000: false,
+  100000: false,
+  500000: false,
+  1000000: false,
+});
+// IMPORTANT: set your real reward amounts here (example values).
+// The popup in your screenshot shows 500, so adjust as needed per chest.
+const CHEST_REWARD_AMOUNT_BY_THRESHOLD: Record<number, number> = {
+  10000: 100,
+  50000: 200,
+  100000: 300,
+  500000: 400,
+  1000000: 500,
+};
+const isChestReady = (threshold: number) => todayWin >= threshold && !openedChests[threshold];
   const progressRatio = useMemo(() => {
     if (todayWin <= 0) return 0;
     const segmentWidth = 1 / BOX_THRESHOLDS.length; // each box = 20%
@@ -1122,7 +1158,17 @@ const GamePage = () => {
     }
     return 1; // exceeded all thresholds
   }, [todayWin]);
+const openChest = (threshold: number) => {
+  // can ONLY open if it's ready (met threshold + currently not opened)
+  if (!isChestReady(threshold)) return;
 
+  // mark opened
+  setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
+
+  // show popup
+  const amount = CHEST_REWARD_AMOUNT_BY_THRESHOLD[threshold] ?? 0;
+  setChestPopup({ threshold, amount });
+};
   // FIXED: Pointer stops now correctly point to the center of each item
   const pointerStops = useMemo(() => {
     return POINTER_TOUR_ORDER.map((id) => {
@@ -1147,7 +1193,98 @@ const GamePage = () => {
     );
   }, [chipValues]);
 
-  const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard;
+  const beginRound = () => {
+  setPhase('BETTING');
+  setTimeLeft(BET_SECONDS);     // set now, countdown is paused while showPreDraw=true
+  setShowPreDraw(true);         // ✅ show game_on.png BEFORE betting
+};
+
+
+const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
+const placeGroupBet = (group: ItemId[]) => {
+  if (!canBet) return;
+
+  // Unique + valid ids only
+  const ids = Array.from(new Set(group));
+
+  const totalCost = selectedChip * ids.length;
+  if (balance < totalCost) return; // require enough balance to bet on ALL items
+
+  // 1) Update local UI state in one shot
+  setBalance((prev) => prev - totalCost);
+  setLifetimeBet((prev) => prev + totalCost);
+
+  setBets((prev) => {
+    const next = { ...prev };
+    for (const id of ids) next[id] = (next[id] ?? 0) + selectedChip;
+    return next;
+  });
+
+  // 2) Pulse each item quickly (nice feedback)
+  ids.forEach((id, idx) => {
+    window.setTimeout(() => {
+      setItemPulse((prev) => ({ id, key: prev.key + 1 }));
+    }, idx * 70);
+  });
+
+  // 3) Optional: small floating chips (same rules as single bet)
+  // 3) Floating chips: ALWAYS during BETTING, from selected chip -> each item
+if (phase === 'BETTING') {
+  const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
+  const start = getSelectedChipStartPosition();
+
+  ids.forEach((id, idx) => {
+    const item = itemMap[id];
+    if (!item) return;
+
+    window.setTimeout(() => {
+      const chipId = floatingChipIdRef.current + 1;
+      floatingChipIdRef.current = chipId;
+
+      const endLeft = item.left + item.width / 2 - 22;
+      const endTop = item.top + item.height / 2 - 22;
+
+      setFloatingBetChips((prev) => [
+        ...prev,
+        { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
+      ]);
+
+      const removeId = window.setTimeout(() => {
+        setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
+        floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
+      }, 700);
+
+      floatingChipTimeoutsRef.current.push(removeId);
+    }, idx * 60);
+  });
+  }
+
+  // 4) Submit bets to API in sequence with a running balance
+  let runningBalance = balance;
+  ids.forEach((itemId) => {
+    runningBalance -= selectedChip;
+
+    const elementId = elementApiIds[itemId] || 0;
+    fetch('/game/player/gaming/participants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        player_id: PLAYER_ID,
+        balance: runningBalance,
+        bet: selectedChip,
+        element: elementId,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
+      })
+      .catch((err) => console.warn('[API] Bet submit error:', err));
+  });
+};
+
+
+  const hasBlockingOverlay =
+  activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard || chestPopup !== null;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
   const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
 
@@ -1156,13 +1293,19 @@ const GamePage = () => {
       if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
     };
   }, []);
+  useEffect(() => {
+  beginRound();
+  
+}, []);
 
 
   useEffect(() => {
-    if (!showGameOn) return;
-    const id = window.setTimeout(() => setShowGameOn(false), GAME_ON_MS);
-    return () => window.clearTimeout(id);
-  }, [showGameOn]);
+  if (!showGameOn) return;
+  const id = window.setTimeout(() => setShowGameOn(false), GAME_ON_MS);
+  return () => window.clearTimeout(id);
+}, [showGameOn]);
+
+
 
   useEffect(() => {
     if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
@@ -1233,6 +1376,19 @@ const GamePage = () => {
     },
     []
   );
+  useEffect(() => {
+  if (!showPreDraw) return;
+
+  if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+
+  preDrawTimeoutRef.current = window.setTimeout(() => {
+    setShowPreDraw(false); // ✅ after this, BET countdown starts automatically
+  }, PRE_DRAW_MS);
+
+  return () => {
+    if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+  };
+}, [showPreDraw]);
 
 
   useEffect(() => {
@@ -1244,17 +1400,11 @@ const GamePage = () => {
       winnerRef.current = picked;
       setWinnerId(picked);
 
-      // ✅ show Game On overlay for 2s before drawing starts
-      setShowPreDraw(true);
+      
+      setPhase('DRAWING');
+setTimeLeft(DRAW_SECONDS);
+return;
 
-      if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
-      preDrawTimeoutRef.current = window.setTimeout(() => {
-        setShowPreDraw(false);
-        setPhase('DRAWING');
-        setTimeLeft(DRAW_SECONDS);
-      }, PRE_DRAW_MS);
-
-      return;
     }
 
 
@@ -1332,9 +1482,9 @@ const GamePage = () => {
 
       setShowFireworks(false);
 
-      setPhase('BETTING');
-      setTimeLeft(BET_SECONDS);
-      setShowGameOn(true);
+      beginRound();
+
+      
     }
   }, [
     activeModal,
@@ -1381,24 +1531,32 @@ const GamePage = () => {
       })
       .catch((err) => console.warn('[API] Bet submit error:', err));
 
-    if (phase === 'BETTING' && timeLeft <= 10) {
-      const chipSrc = chipSrcByValue[selectedChip];
-      const item = itemMap[itemId];
-      if (chipSrc && item) {
-        const chipId = floatingChipIdRef.current + 1;
-        floatingChipIdRef.current = chipId;
+    
+      if (phase === 'BETTING') {
+  const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
+  const item = itemMap[itemId];
+  if (!chipSrc || !item) return;
 
-        const chipLeft = item.left + item.width * 0.5 - 18;
-        const chipTop = item.top + item.height * 0.78;
-        setFloatingBetChips((prev) => [...prev, { id: chipId, left: chipLeft, top: chipTop, src: chipSrc }]);
+  const chipId = floatingChipIdRef.current + 1;
+  floatingChipIdRef.current = chipId;
 
-        const removeId = window.setTimeout(() => {
-          setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
-          floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((id) => id !== removeId);
-        }, 700);
-        floatingChipTimeoutsRef.current.push(removeId);
-      }
-    }
+  const start = getSelectedChipStartPosition();
+
+  const endLeft = item.left + item.width / 2 - 22;
+  const endTop = item.top + item.height / 2 - 22;
+
+  setFloatingBetChips((prev) => [
+    ...prev,
+    { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
+  ]);
+
+  const removeId = window.setTimeout(() => {
+    setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
+    floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
+  }, 700);
+
+  floatingChipTimeoutsRef.current.push(removeId);
+}
   };
 
   const handleAdvanceClick = () => {
@@ -1406,6 +1564,38 @@ const GamePage = () => {
     setActiveModal('ADVANCED');
   };
 
+  const getSelectedChipStartPosition = (value = selectedChip) => {
+  const index = chipValues.indexOf(value);
+  if (index === -1) return { left: 200, top: 520 };
+
+  // Matches your slider container exactly:
+  // <div style={{ left: 30, top: 88, width: 340, height: 80 }} ... />
+  const containerLeft = 30;
+  const containerTop = 88;
+  const containerWidth = 340;
+  const containerHeight = 80;
+
+  const n = chipValues.length;
+
+  // Must match the sizing logic in your render
+  const baseSize = n > 5 ? 48 : 54;
+  const activeSize = baseSize + 12;
+
+  // Build the exact widths array (because active chip is bigger)
+  const widths = chipValues.map((v) => (v === value ? activeSize : baseSize));
+  const totalW = widths.reduce((s, w) => s + w, 0);
+
+  // justify-evenly => (n + 1) equal gaps
+  const gap = (containerWidth - totalW) / (n + 1);
+
+  // X position = left + gap + widths before + half current width
+  const beforeW = widths.slice(0, index).reduce((s, w) => s + w, 0);
+  const centerX = containerLeft + gap * (index + 1) + beforeW + widths[index] / 2;
+  const centerY = containerTop + containerHeight / 2;
+
+  // flying chip rendered 44x44 => offset by 22
+  return { left: centerX - 22, top: centerY - 22 };
+};
 
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
@@ -1448,20 +1638,34 @@ const GamePage = () => {
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-10 object-contain"
-          style={{ left: -27, top: 5, width: 149, height: 149 }}
+          style={{ left: -27, top: 5, width: 145, height: 145 }}
           animate={{ opacity: [0.42, 0.9, 0.42], scale: [0.95, 1.05, 0.95] }}
           transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
         />
 
         <motion.img
-          src="/image2/flare.png"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute z-10 object-contain"
-          style={{ left: 276, top: 5, width: 149, height: 149 }}
-          animate={{ opacity: [0.42, 0.95, 0.42], scale: [0.95, 1.05, 0.95] }}
-          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.18 }}
-        />
+  src="/image2/flare_circular.png"
+  alt=""
+  aria-hidden="true"
+  className="pointer-events-none absolute z-10 object-contain"
+  style={{
+    left: 276,
+    top: 5,
+    width: 149,
+    height: 149,
+    transformOrigin: '50% 50%',
+  }}
+  animate={{ rotate: 360 }}
+  transition={{
+    repeat: Infinity,
+    repeatType: "loop",
+    duration: 1,   // 🔥 much faster
+    ease: "linear"
+  }}
+/>
+
+
+
 
         {/* Dynamic diamond balance bar — layered from individual assets */}
         <div
@@ -1619,7 +1823,14 @@ const GamePage = () => {
           className="absolute z-40 overflow-hidden"
           style={{ left: 18, top: 53, width: 51, height: 50, borderRadius: 19.5 }}
         >
-          <img src={trophySrc} alt="" className="h-full w-full object-contain" />
+            <motion.img
+    src={trophySrc}
+    alt=""
+    className="h-full w-full object-contain"
+    animate={{ y: [0, -2.2, 0] }}
+    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+  />
+
         </button>
 
         <div className="absolute z-50" style={{ left: 29, top: 98, height: 16 }}>
@@ -2039,16 +2250,24 @@ const GamePage = () => {
         <AnimatePresence initial={false}>
           {floatingBetChips.map((chip) => (
             <motion.img
-              key={chip.id}
-              src={chip.src}
-              alt=""
-              className="pointer-events-none absolute z-[130] object-contain"
-              style={{ left: chip.left, top: chip.top, width: 36, height: 36 }}
-              initial={{ opacity: 0, scale: 0.78, y: 12 }}
-              animate={{ opacity: [0, 1, 0], scale: [0.78, 1.02, 0.92], y: [12, -8, -32] }}
-              exit={{ opacity: 0, scale: 0.9, y: -36 }}
-              transition={{ duration: 0.62, ease: 'easeOut' }}
-            />
+  key={chip.id}
+  src={chip.src}
+  alt=""
+  className="pointer-events-none absolute z-[130] object-contain"
+  style={{ left: chip.left, top: chip.top, width: 44, height: 44 }}
+  initial={{ scale: 1, x: 0, y: 0, opacity: 1 }}
+  animate={{
+    x: chip.endLeft - chip.left,
+    y: chip.endTop - chip.top,
+    scale: [1, 1.1, 0.95],
+  }}
+  exit={{ opacity: 0 }}
+  transition={{
+    duration: 0.55,
+    ease: [0.22, 1, 0.36, 1], // smooth arc feeling
+  }}
+/>
+
           ))}
         </AnimatePresence>
 
@@ -2074,19 +2293,50 @@ const GamePage = () => {
           />
 
           {/* tabs (stay above flare) */}
-          <img
-            src="/image2/tab_vegetables.png"
-            alt=""
-            className="absolute z-10 object-contain"
-            style={{ left: 0, top: 0, width: 75, height: 72 }}
-          />
+          <button
+  type="button"
+  onClick={() => placeGroupBet(VEG_ITEMS)}
+  disabled={!canBet}
+  className="absolute z-10 p-0 border-none bg-transparent"
+  style={{
+    left: 0,
+    top: 0,
+    width: 75,
+    height: 72,
+    cursor: canBet ? 'pointer' : 'default',
+    opacity: canBet ? 1 : 0.6,
+  }}
+>
+  <img
+    src="/image2/tab_vegetables.png"
+    alt="Vegetables"
+    className="h-full w-full object-contain"
+    draggable={false}
+  />
+</button>
 
-          <img
-            src="/image2/tab_drinks.png"
-            alt=""
-            className="absolute z-10 object-contain"
-            style={{ left: 315, top: 1, width: 79, height: 68 }}
-          />
+<button
+  type="button"
+  onClick={() => placeGroupBet(DRINK_ITEMS)}
+  disabled={!canBet}
+  className="absolute z-10 p-0 border-none bg-transparent"
+  style={{
+    left: 315,
+    top: 1,
+    width: 79,
+    height: 68,
+    cursor: canBet ? 'pointer' : 'default',
+    opacity: canBet ? 1 : 0.6,
+  }}
+>
+  <img
+    src="/image2/tab_drinks.png"
+    alt="Drinks"
+    className="h-full w-full object-contain"
+    draggable={false}
+  />
+</button>
+
 
           <div
             className="absolute z-20"
@@ -2249,19 +2499,86 @@ const GamePage = () => {
           </div>
 
           {/* ── Dynamic chests from API ── */}
-          {boxData.map((box, idx) => {
-            const totalBoxes = boxData.length;
-            const containerWidth = 310;
-            const boxWidth = 48;
-            const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
-            const xPos = 47 + idx * spacing;
+          {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
+{boxData.map((box, idx) => {
+  const totalBoxes = boxData.length;
+  const containerWidth = 310;
+  const boxWidth = 48;
+  const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
+  const xPos = 47 + idx * spacing;
 
-            return (
-              <div key={idx} className="absolute z-20 flex flex-col items-center" style={{ left: xPos, top: 188, width: boxWidth }}>
-                <img src={box.src} alt="" className="object-contain" style={{ width: boxWidth, height: boxWidth }} />
-              </div>
-            );
-          })}
+  const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
+  const opened = !!openedChests[threshold];
+  const ready = isChestReady(threshold);
+
+  const closedSrc = box.src;
+  const openSrc = CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
+  const chestSrc = opened ? openSrc : closedSrc;
+
+  const flareSize = boxWidth + 60; // ✅ moved here
+
+  return (
+    <button
+      key={`${threshold}-${idx}`}
+      type="button"
+      onClick={() => openChest(threshold)}
+      className="absolute z-20 p-0 border-none bg-transparent"
+      style={{
+        left: xPos,
+        top: 188,
+        width: boxWidth,
+        height: boxWidth,
+        cursor: ready ? 'pointer' : 'default',
+        pointerEvents: ready ? 'auto' : 'none',
+      }}
+      aria-label={`Chest ${threshold}`}
+    >
+      <AnimatePresence>
+        {ready ? (
+  <div
+    className="pointer-events-none absolute"
+    style={{
+      left: '50%',
+      top: '40%',
+      width: flareSize,
+      height: flareSize,
+      transform: 'translate(-50%, -50%)', // ✅ stays stable (NOT animated)
+      zIndex: 0,
+    }}
+  >
+    <motion.img
+      src="/image2/flare_circular.png"
+      alt=""
+      aria-hidden="true"
+      className="h-full w-full object-contain"
+      initial={{ opacity: 0, scale: 0.9, rotate: 0 }}
+      animate={{ opacity: 0.95, scale: 1, rotate: 360 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{
+        opacity: { duration: 0.2 },
+        scale: { duration: 0.2 },
+        rotate: { duration: 1.0, ease: 'linear', repeat: Infinity },
+      }}
+    />
+  </div>
+) : null}
+      </AnimatePresence>
+
+      <motion.img
+        src={chestSrc}
+        alt=""
+        className="absolute object-contain"
+        style={{ left: 0, top: 0, width: boxWidth, height: boxWidth, zIndex: 1 }}
+        animate={
+          ready
+            ? { x: [0, -2, 2, -2, 2, 0], rotate: [0, -2, 2, -2, 2, 0], scale: [1, 1.03, 1] }
+            : { x: 0, rotate: 0, scale: 1 }
+        }
+        transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+      />
+    </button>
+  );
+})}
 
           <div
             className="absolute z-10"
@@ -2464,7 +2781,83 @@ const GamePage = () => {
           ) : null}
         </AnimatePresence>
 
+<AnimatePresence>
+  {chestPopup ? (
+    <motion.div
+      className="absolute inset-0 z-[800]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+    >
+      {/* dim + blur */}
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} />
 
+      {/* popup content */}
+      <motion.div
+        className="absolute left-1/2 -translate-x-1/2"
+        style={{ top: 120, width: 340, height: 520 }}
+        initial={{ scale: 0.92, y: 18, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, y: 10, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+      >
+        {/* Congratulations image */}
+        <img
+  src="/image2/congratulations.png"
+  alt="Congratulations"
+  className="absolute left-1/2 -translate-x-1/2 object-contain"
+  style={{
+    top: -10,
+    width: 340,     // bigger
+    height: 'auto', // keep ratio (no stretch)
+  }}
+/>
+
+        {/* Diamonds pile */}
+        <img
+          src="/image2/diamonds.png"
+          alt=""
+          className="absolute left-1/2 -translate-x-1/2 object-contain"
+          style={{ top: 92, width: 260, height: 200 }}
+        />
+
+        {/* Blumond + amount (matches your typography requirements) */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center"
+          style={{ top: 305, gap: 10 }}
+        >
+          <img src="/image2/blumond.png" alt="" className="object-contain" style={{ width: 34, height: 34 }} />
+          <span
+            style={{
+              fontFamily: 'Inria Serif, serif',
+              fontWeight: 700,
+              fontStyle: 'normal',
+              fontSize: 26,
+              lineHeight: '100%',
+              letterSpacing: '0%',
+              color: '#FFFFFF',
+              textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+            }}
+          >
+            {formatNum(chestPopup.amount)}
+          </span>
+        </div>
+
+        {/* Close button */}
+        <button
+          type="button"
+          onClick={() => setChestPopup(null)}
+          className="absolute left-1/2 -translate-x-1/2"
+          style={{ top: 360, width: 54, height: 54 }}
+          aria-label="Close chest reward"
+        >
+          <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
+        </button>
+      </motion.div>
+    </motion.div>
+  ) : null}
+</AnimatePresence>
         <AnimatePresence>{showFireworks ? <FireworksOverlay key={`fireworks-${fireworksSeed}`} seed={fireworksSeed} /> : null}</AnimatePresence>
 
         <AnimatePresence>
