@@ -1,0 +1,109 @@
+
+========== BOXES (HTTP 200) ==========
+[
+  {
+    "box_image": "games/button/images/Box_1.png",
+    "box_source": 10
+  },
+  {
+    "box_image": "games/button/images/Box_2.png",
+    "box_source": 20
+  },
+  {
+    "box_image": "games/button/images/Box_3.png",
+    "box_source": 30
+  },
+  {
+    "box_image": "games/button/images/Box_4.png",
+    "box_source": 40
+  },
+  {
+    "box_image": "games/button/images/Box_5.png",
+    "box_source": 50
+  }
+]
+
+========== BUTTONS (HTTP 200) ==========
+[
+  {
+    "source_image": "games/button/images/10_button.png",
+    "source": 10
+  },
+  {
+    "source_image": "games/button/images/100.png",
+    "source": 100
+  },
+  {
+    "source_image": "games/button/images/500.png",
+    "source": 500
+  },
+  {
+    "source_image": "games/button/images/1k.png",
+    "source": 1000
+  },
+  {
+    "source_image": "games/button/images/5k.png",
+    "source": 5000
+  },
+  {
+    "source_image": "games/button/images/10k.png",
+    "source": 10000
+  }
+]
+
+========== ELEMENTS (HTTP 200) ==========
+[
+  {
+    "element_name": "Blur",
+    "element_icon": "games/icons/Blur.png",
+    "paytable": 2,
+    "win_weights": 2
+  },
+  {
+    "element_name": "pumpkin",
+    "element_icon": "games/icons/pumpkin.png",
+    "paytable": 1,
+    "win_weights": 3
+  },
+  {
+    "element_name": "lemon",
+    "element_icon": "games/icons/lemon_37f7wh5.png",
+    "paytable": 1,
+    "win_weights": 1
+  },
+  {
+    "element_name": "Tomato",
+    "element_icon": "games/icons/Tomato.png",
+    "paytable": 4,
+    "win_weights": 4
+  },
+  {
+    "element_name": "Water",
+    "element_icon": "games/icons/Water.png",
+    "paytable": 5,
+    "win_weights": 5
+  },
+  {
+    "element_name": "Coke",
+    "element_icon": "games/icons/Coke.png",
+    "paytable": 6,
+    "win_weights": 6
+  },
+  {
+    "element_name": "Milk",
+    "element_icon": "games/icons/Milk.png",
+    "paytable": 7,
+    "win_weights": 7
+  },
+  {
+    "element_name": "Honey",
+    "element_icon": "games/icons/Honey.png",
+    "paytable": 8,
+    "win_weights": 8
+  }
+]
+
+========== MAX_FRUITS (HTTP 200) ==========
+{
+  "max_players": 8
+}

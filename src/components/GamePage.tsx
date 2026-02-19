@@ -7,14 +7,115 @@ const DEBUG = false;
 const ARTBOARD = { width: 402, height: 735 } as const;
 
 const BET_SECONDS = 20;
-const DRAW_SECONDS = 4;
+const DRAW_SECONDS = 7;
 const SHOW_SECONDS = 3;
-const PRE_DRAW_MS = 2000; 
+const PRE_DRAW_MS = 2000;
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
 
-const CHIP_VALUES = [10, 100, 500, 1000, 5000] as const;
+const DEFAULT_CHIP_VALUES = [10, 100, 500, 1000, 5000] as const;
+
+/* Map chip value → local image path */
+const CHIP_IMAGE_MAP: Record<number, string> = {
+  10: '/image2/chip_10.png',
+  100: '/image2/chip_100.png',
+  500: '/image2/chip_500_orange.png',
+  1000: '/image2/chip_1k.png',
+  5000: '/image2/chip_5k.png',
+  10000: '/image2/chip_10k.png',
+};
+
+/* Map box value → local chest image */
+const BOX_VALUE_TO_CHEST: Record<number, string> = {
+  10: '/image2/chest_10k.png',
+  20: '/image2/chest_50k.png',
+  30: '/image2/chest_100k.png',
+  40: '/image2/chest_500k.png',
+  50: '/image2/chest_1m.png',
+};
+
+/* Format box value label */
+const BOX_LABELS: Record<number, string> = {
+  10: '10K',
+  20: '50K',
+  30: '100K',
+  40: '500K',
+  50: '1M',
+};
+
+/* ── API config ── */
+const API_BASE = ''; // proxied via vite.config.ts
+const API_BODY = JSON.stringify({ regisation: '3' });
+
+type ApiElement = {
+  id: number;
+  element_name: string;
+  element_icon: string;
+  paytable: number;
+  win_weights: number;
+};
+
+type ApiButton = {
+  source_image: string;
+  source: number;
+};
+
+type ApiBox = {
+  box_image: string;
+  box_source: number;
+};
+
+type ApiTrophy = {
+  icon: string;
+};
+
+/* Map API element_name → local ItemId */
+const API_NAME_TO_ID: Record<string, ItemId> = {
+  Honey: 'honey',
+  Tomato: 'tomato',
+  lemon: 'lemon',
+  Milk: 'milk',
+  pumpkin: 'pumpkin',
+  Blur: 'zucchini',
+  Coke: 'cola',
+  Water: 'water',
+};
+
+/* Reverse map: local ItemId → API element_name */
+const ID_TO_API_NAME: Record<ItemId, string> = {
+  honey: 'Honey',
+  tomato: 'Tomato',
+  lemon: 'lemon',
+  milk: 'Milk',
+  pumpkin: 'pumpkin',
+  zucchini: 'Blur',
+  cola: 'Coke',
+  water: 'Water',
+};
+
+const PLAYER_ID = 1065465; // TODO: make dynamic per user
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: API_BODY,
+  });
+  if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+  return res.json();
+}
+
+/* Weighted random pick */
+function weightedRandomPick(items: ItemSpec[], weights: Record<ItemId, number>): ItemId {
+  const totalWeight = items.reduce((sum, item) => sum + (weights[item.id] || 1), 0);
+  let r = Math.random() * totalWeight;
+  for (const item of items) {
+    r -= weights[item.id] || 1;
+    if (r <= 0) return item.id;
+  }
+  return items[items.length - 1].id;
+}
 
 type ItemId = 'honey' | 'tomato' | 'lemon' | 'milk' | 'pumpkin' | 'zucchini' | 'cola' | 'water';
 type Phase = 'BETTING' | 'DRAWING' | 'SHOWTIME';
@@ -24,8 +125,8 @@ type RankTab = 'TODAY' | 'YESTERDAY';
 type ResultKind = 'WIN' | 'LOSE' | 'NOBET';
 
 const POINTER_BASE_POSITION = { left: 247, top: 115 } as const;
-const POINTER_SIZE = { width: 125, height: 125} as const;
-const POINTER_HOTSPOT = { x: 25, y: 35} as const;
+const POINTER_SIZE = { width: 125, height: 125 } as const;
+const POINTER_HOTSPOT = { x: 25, y: 35 } as const;
 const POINTER_TOUR_ORDER: ItemId[] = ['lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk', 'honey', 'tomato'];
 const DRAW_HIGHLIGHT_ORDER: ItemId[] = ['honey', 'tomato', 'lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk'];
 
@@ -153,12 +254,12 @@ const buildFireworkParticles = (): FireworkParticle[] => {
   // ✅ Bursts placed at TOP area (above win banner)
   // These coords are in your artboard coordinate space (402x735)
   const burstAnchors = [
-  { left: 90, top: 260 },
-  { left: 200, top: 240 },
-  { left: 312, top: 260 },
-  { left: 150, top: 295 },
-  { left: 255, top: 295 },
-];
+    { left: 90, top: 260 },
+    { left: 200, top: 240 },
+    { left: 312, top: 260 },
+    { left: 150, top: 295 },
+    { left: 255, top: 295 },
+  ];
 
 
   // ✅ More vibrant palette
@@ -177,7 +278,7 @@ const buildFireworkParticles = (): FireworkParticle[] => {
 
   burstAnchors.forEach((anchor, burstIdx) => {
     const count = 30 + Math.floor(Math.random() * 18);
-// ✅ more particles
+    // ✅ more particles
     for (let i = 0; i < count; i += 1) {
       const theta = Math.random() * Math.PI * 2;
 
@@ -212,7 +313,7 @@ const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
 
   return (
     <motion.div
-     className="pointer-events-none absolute inset-0 z-[900]"
+      className="pointer-events-none absolute inset-0 z-[900]"
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -223,24 +324,24 @@ const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
           key={particle.id}
           className="absolute rounded-full"
           style={{
-  left: particle.originLeft,
-  top: particle.originTop,
-  width: particle.size,
-  height: particle.size,
-  background: particle.color,
-  // ✅ stronger glow (duller look comes from low glow + too-white palette)
-  boxShadow: `0 0 14px ${particle.color}, 0 0 26px ${particle.color}`,
-  filter: 'saturate(1.35) brightness(1.15)',
-}}
+            left: particle.originLeft,
+            top: particle.originTop,
+            width: particle.size,
+            height: particle.size,
+            background: particle.color,
+            // ✅ stronger glow (duller look comes from low glow + too-white palette)
+            boxShadow: `0 0 14px ${particle.color}, 0 0 26px ${particle.color}`,
+            filter: 'saturate(1.35) brightness(1.15)',
+          }}
 
           initial={{ opacity: 0, scale: 0.2, x: 0, y: 0 }}
-animate={{
-  opacity: [0, 1, 0.9, 0],
-  scale: [0.2, 1.2, 1, 0.2],
-  x: [0, particle.x],
-  y: [0, particle.y],
-}}
-transition={{ duration: 1.05, ease: 'easeOut', delay: particle.delay }}
+          animate={{
+            opacity: [0, 1, 0.9, 0],
+            scale: [0.2, 1.2, 1, 0.2],
+            x: [0, particle.x],
+            y: [0, particle.y],
+          }}
+          transition={{ duration: 1.05, ease: 'easeOut', delay: particle.delay }}
 
         />
       ))}
@@ -396,15 +497,28 @@ const ITEMS: ItemSpec[] = [
   },
 ];
 
-const ITEM_MULTIPLIER: Record<ItemId, number> = {
-  honey: 45,
-  milk: 25,
-  cola: 15,
-  water: 10,
-  tomato: 5,
-  lemon: 5,
-  pumpkin: 5,
-  zucchini: 5,
+/* Default multipliers — overridden by API data at runtime */
+const DEFAULT_MULTIPLIER: Record<ItemId, number> = {
+  honey: 8,
+  milk: 7,
+  cola: 6,
+  water: 5,
+  tomato: 4,
+  lemon: 1,
+  pumpkin: 1,
+  zucchini: 2,
+};
+
+/* Default win weights — overridden by API data at runtime */
+const DEFAULT_WIN_WEIGHTS: Record<ItemId, number> = {
+  honey: 8,
+  milk: 7,
+  cola: 6,
+  water: 5,
+  tomato: 4,
+  lemon: 1,
+  pumpkin: 3,
+  zucchini: 2,
 };
 
 const RESULT_POSITIONS: ResultPos[] = [
@@ -431,7 +545,7 @@ const INITIAL_RESULT_SRCS = [
 
 const CHIPS: ChipSpec[] = [
   { src: '/image2/chip_10.png', left: 29 + 17, top: 526 + 24, width: 54, height: 54 },
-  { src: '/image2/chip_100.png', left: 20+ 81, top: 512 + 26, width: 70, height: 70, shadow: true },
+  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 70, height: 70, shadow: true },
   { src: '/image2/chip_500_orange.png', left: 29 + 146, top: 523 + 25, width: 55, height: 54, shadow: true },
   { src: '/image2/chip_1k.png', left: 29 + 211, top: 523 + 24, width: 54, height: 53, shadow: true },
   { src: '/image2/chip_5k.png', left: 29 + 275, top: 523 + 24, width: 54, height: 54, shadow: true },
@@ -557,6 +671,115 @@ const GamePage = () => {
     }, {} as Record<ItemId, ItemSpec>);
   }, []);
 
+  /* ── API state ── */
+  const [apiLoaded, setApiLoaded] = useState(false);
+  const [itemMultiplier, setItemMultiplier] = useState<Record<ItemId, number>>(DEFAULT_MULTIPLIER);
+  const [winWeights, setWinWeights] = useState<Record<ItemId, number>>(DEFAULT_WIN_WEIGHTS);
+  const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
+  const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
+  const [boxData, setBoxData] = useState<{ src: string; label: string }[]>(
+    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, label: BOX_LABELS[Number(val)] || '' }))
+  );
+  const [maxPlayers, setMaxPlayers] = useState(8);
+  const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
+  const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
+
+  /* Fetch API data on mount */
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const results = await Promise.allSettled([
+          apiFetch<ApiElement[]>('/game/game/elements'),
+          apiFetch<ApiButton[]>('/game/sorce/buttons'),
+          apiFetch<ApiBox[]>('/game/magic/boxs'),
+          apiFetch<{ max_players: number }>('/game/maximum/fruits/per/turn'),
+          apiFetch<ApiTrophy>('/game/game/trophy'),
+        ]);
+
+        if (cancelled) return;
+
+        const elements = results[0].status === 'fulfilled' ? results[0].value : null;
+        const buttons = results[1].status === 'fulfilled' ? results[1].value : null;
+        const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
+        const maxFruits = results[3].status === 'fulfilled' ? results[3].value : null;
+        const trophy = results[4].status === 'fulfilled' ? results[4].value : null;
+
+        /* Log failures */
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') console.warn(`[API] Call ${i} failed:`, r.reason);
+        });
+
+        /* Build multiplier + weights + badges from elements API */
+        if (elements) {
+          const multipliers = { ...DEFAULT_MULTIPLIER };
+          const weights = { ...DEFAULT_WIN_WEIGHTS };
+          const badges: Record<string, string> = {};
+
+          for (const el of elements) {
+            const id = API_NAME_TO_ID[el.element_name];
+            if (id) {
+              multipliers[id] = el.paytable;
+              weights[id] = el.win_weights;
+              badges[id] = `x${el.paytable}`;
+            }
+          }
+
+          setItemMultiplier(multipliers);
+          setWinWeights(weights);
+          setBadgeOverrides(badges as Record<ItemId, string>);
+
+          /* Store element database IDs for bet API */
+          const apiIds: Record<string, number> = {};
+          elements.forEach((el) => {
+            const id = API_NAME_TO_ID[el.element_name];
+            if (id) apiIds[id] = el.id;
+          });
+          setElementApiIds(apiIds);
+          console.log('[API] Elements loaded:', multipliers);
+        }
+
+        /* Build chip values from buttons API */
+        if (buttons && buttons.length > 0) {
+          const vals = buttons.map((b) => b.source).sort((a, b) => a - b);
+          setChipValues(vals);
+          console.log('[API] Buttons loaded:', vals);
+        }
+
+        /* Build box/chest data from boxes API */
+        if (boxes && boxes.length > 0) {
+          const bd = boxes.map((b) => ({
+            src: BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png',
+            label: BOX_LABELS[b.box_source] || `${b.box_source}`,
+          }));
+          setBoxData(bd);
+          console.log('[API] Boxes loaded:', bd);
+        }
+
+        /* Max players */
+        if (maxFruits?.max_players) {
+          setMaxPlayers(maxFruits.max_players);
+          console.log('[API] Max players:', maxFruits.max_players);
+        }
+
+        /* Trophy image */
+        if (trophy?.icon) {
+          const imgUrl = `https://gameadmin.nanovisionltd.com${trophy.icon}`;
+          setTrophySrc(imgUrl);
+          console.log('[API] Trophy loaded:', imgUrl);
+        }
+
+        setApiLoaded(true);
+      } catch (err) {
+        console.warn('[API] Unexpected error:', err);
+        setApiLoaded(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
   const [mode, setMode] = useState<Mode>('BASIC');
   const isAdvanceMode = mode === 'ADVANCE';
   const [phase, setPhase] = useState<Phase>('BETTING');
@@ -564,7 +787,7 @@ const GamePage = () => {
   const [showPreDraw, setShowPreDraw] = useState(false);
   const preDrawTimeoutRef = useRef<number | null>(null);
 
-  const [selectedChip, setSelectedChip] = useState<(typeof CHIP_VALUES)[number]>(100);
+  const [selectedChip, setSelectedChip] = useState<number>(100);
 
   const [balance, setBalance] = useState(129454);
   const [todayWin, setTodayWin] = useState(0);
@@ -602,8 +825,23 @@ const GamePage = () => {
   const floatingChipTimeoutsRef = useRef<number[]>([]);
 
   const totalBet = useMemo(() => Object.values(bets).reduce((sum, val) => sum + val, 0), [bets]);
-  const progressRatio = Math.max(0, Math.min(1, todayWin / 1000000));
-  
+
+  /* Progress bar reaches each chest box at its threshold value */
+  const BOX_THRESHOLDS = [10000, 50000, 100000, 500000, 1000000]; // 10K, 50K, 100K, 500K, 1M
+  const progressRatio = useMemo(() => {
+    if (todayWin <= 0) return 0;
+    const segmentWidth = 1 / BOX_THRESHOLDS.length; // each box = 20%
+    for (let i = 0; i < BOX_THRESHOLDS.length; i++) {
+      const lo = i === 0 ? 0 : BOX_THRESHOLDS[i - 1];
+      const hi = BOX_THRESHOLDS[i];
+      if (todayWin <= hi) {
+        const segmentProgress = (todayWin - lo) / (hi - lo);
+        return segmentWidth * i + segmentWidth * segmentProgress;
+      }
+    }
+    return 1; // exceeded all thresholds
+  }, [todayWin]);
+
   // FIXED: Pointer stops now correctly point to the center of each item
   const pointerStops = useMemo(() => {
     return POINTER_TOUR_ORDER.map((id) => {
@@ -617,26 +855,26 @@ const GamePage = () => {
       return { left, top };
     });
   }, [itemMap]);
-  
+
   const chipSrcByValue = useMemo(() => {
-    return CHIP_VALUES.reduce(
-      (acc, value, idx) => {
-        acc[value] = CHIPS[idx].src;
+    return chipValues.reduce(
+      (acc: Record<number, string>, value: number, idx: number) => {
+        if (CHIPS[idx]) acc[value] = CHIPS[idx].src;
         return acc;
       },
-      {} as Record<(typeof CHIP_VALUES)[number], string>
+      {} as Record<number, string>
     );
-  }, []);
+  }, [chipValues]);
 
   const hasBlockingOverlay = activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
   const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
 
   useEffect(() => {
-  return () => {
-    if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
-  };
-}, []);
+    return () => {
+      if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -646,14 +884,14 @@ const GamePage = () => {
   }, [showGameOn]);
 
   useEffect(() => {
-  if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
+    if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
 
-  const id = window.setInterval(() => {
-    setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-  }, 1000);
+    const id = window.setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
 
-  return () => window.clearInterval(id);
-}, [activeModal, showGameOn, showPreDraw]);
+    return () => window.clearInterval(id);
+  }, [activeModal, showGameOn, showPreDraw]);
 
 
 
@@ -668,24 +906,52 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [canBet, pointerStops.length]);
 
+  // ── Sequential lottery-style spinning during DRAWING ──
+  // Cycles through items in order (like a roulette wheel) with decelerating speed,
+  // landing on the winner
   useEffect(() => {
     if (phase !== 'DRAWING') return;
 
-    setDrawHighlightIndex(0);
-    const id = window.setInterval(() => {
-      setDrawHighlightIndex((prev) => (prev + 1) % DRAW_HIGHLIGHT_ORDER.length);
-    }, 300);
+    const winner = winnerRef.current;
+    if (!winner) return;
 
-    return () => window.clearInterval(id);
+    const order = DRAW_HIGHLIGHT_ORDER;
+    const winnerIdx = order.indexOf(winner);
+
+    // Calculate total steps: 3 full loops + extra to land on winner
+    const fullLoops = 3 + Math.floor(Math.random() * 2); // 3-4 full loops
+    const totalSteps = fullLoops * order.length + winnerIdx + 1;
+
+    // Schedule each step with decelerating delay
+    let elapsed = 0;
+    const timers: number[] = [];
+
+    for (let i = 0; i < totalSteps; i++) {
+      const progress = i / (totalSteps - 1); // 0 → 1
+      // Starts at ~100ms, slows to ~600ms near the end
+      const delay = 100 + 500 * (progress * progress * progress); // cubic easing
+      elapsed += delay;
+
+      const step = i;
+      const timerId = window.setTimeout(() => {
+        setDrawHighlightIndex(step % order.length);
+      }, elapsed);
+
+      timers.push(timerId);
+    }
+
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+    };
   }, [phase]);
 
   useEffect(
-  () => () => {
-    floatingChipTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
-    floatingChipTimeoutsRef.current = [];
-  },
-  []
-);
+    () => () => {
+      floatingChipTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
+      floatingChipTimeoutsRef.current = [];
+    },
+    []
+  );
 
 
   useEffect(() => {
@@ -693,22 +959,22 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-  const picked = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
-  winnerRef.current = picked;
-  setWinnerId(picked);
+      const picked = weightedRandomPick(ITEMS, winWeights);
+      winnerRef.current = picked;
+      setWinnerId(picked);
 
-  // ✅ show Game On overlay for 2s before drawing starts
-  setShowPreDraw(true);
+      // ✅ show Game On overlay for 2s before drawing starts
+      setShowPreDraw(true);
 
-  if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
-  preDrawTimeoutRef.current = window.setTimeout(() => {
-    setShowPreDraw(false);
-    setPhase('DRAWING');
-    setTimeLeft(DRAW_SECONDS);
-  }, PRE_DRAW_MS);
+      if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+      preDrawTimeoutRef.current = window.setTimeout(() => {
+        setShowPreDraw(false);
+        setPhase('DRAWING');
+        setTimeLeft(DRAW_SECONDS);
+      }, PRE_DRAW_MS);
 
-  return;
-}
+      return;
+    }
 
 
     if (phase === 'DRAWING') {
@@ -716,7 +982,7 @@ const GamePage = () => {
       if (!winner) return;
 
       const betOnWinner = bets[winner] ?? 0;
-      const winAmount = betOnWinner > 0 ? betOnWinner * ITEM_MULTIPLIER[winner] : 0;
+      const winAmount = betOnWinner > 0 ? betOnWinner * itemMultiplier[winner] : 0;
       const hadAnyBet = totalBet > 0;
 
       setPendingWin({ itemId: winner, amount: winAmount, hadAnyBet, totalBet });
@@ -731,11 +997,11 @@ const GamePage = () => {
       setPhase('SHOWTIME');
       setTimeLeft(SHOW_SECONDS);
       if (winAmount > 0) {
-  setShowFireworks(true);
-  setFireworksSeed((prev) => prev + 1);
-} else {
-  setShowFireworks(false);
-}
+        setShowFireworks(true);
+        setFireworksSeed((prev) => prev + 1);
+      } else {
+        setShowFireworks(false);
+      }
 
 
 
@@ -779,9 +1045,10 @@ const GamePage = () => {
       setPendingWin(null);
       setWinnerId(null);
       winnerRef.current = null;
+      setDrawHighlightIndex(0);
 
       setShowResultBoard(false);
-      
+
       setShowFireworks(false);
 
       setPhase('BETTING');
@@ -796,7 +1063,7 @@ const GamePage = () => {
     pendingWin,
     phase,
     showGameOn,
-    
+
     timeLeft,
     totalBet,
   ]);
@@ -814,6 +1081,24 @@ const GamePage = () => {
     }));
 
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
+
+    /* Submit bet to API */
+    const elementId = elementApiIds[itemId] || 0;
+    fetch('/game/player/gaming/participants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        player_id: PLAYER_ID,
+        balance: balance - selectedChip,
+        bet: selectedChip,
+        element: elementId,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
+        else console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
+      })
+      .catch((err) => console.warn('[API] Bet submit error:', err));
 
     if (phase === 'BETTING' && timeLeft <= 10) {
       const chipSrc = chipSrcByValue[selectedChip];
@@ -836,9 +1121,9 @@ const GamePage = () => {
   };
 
   const handleAdvanceClick = () => {
-  // Always show popup first (as you requested)
-  setActiveModal('ADVANCED');
-};
+    // Always show popup first (as you requested)
+    setActiveModal('ADVANCED');
+  };
 
 
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
@@ -854,11 +1139,11 @@ const GamePage = () => {
     <ScaledArtboard width={ARTBOARD.width} height={ARTBOARD.height} metricsMode={flags.metrics}>
       <div className={`relative h-full w-full ${debugClass(DEBUG)}`} style={{ background: '#8DA6DE' }}>
         <img
-  src={isAdvanceMode ? '/image2/advance_bg.png' : '/image2/city_background.png'}
-  alt=""
-  className="absolute z-0 object-cover"
-  style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: 'overlay', opacity: 1 }}
-/>
+          src={isAdvanceMode ? '/image2/advance_bg.png' : '/image2/city_background.png'}
+          alt=""
+          className="absolute z-0 object-cover"
+          style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: 'overlay', opacity: 1 }}
+        />
 
 
         <div
@@ -897,18 +1182,81 @@ const GamePage = () => {
           transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', delay: 0.18 }}
         />
 
+        {/* Dynamic diamond balance bar — layered from individual assets */}
         <div
-          className="absolute z-30"
-          style={{ left: 14, top: 11, width: 371.7438659667969, height: 34.34597396850586 }}
+          className="absolute z-30 flex items-center"
+          style={{
+            left: 20,
+            top: 14,
+            height: 28,
+          }}
         >
-          <img src="/image2/Group_23.png" alt="" className="h-full w-full object-contain" />
+          {/* Pill background (Rectangle 4) */}
+          <div className="relative" style={{ width: 140, height: 28 }}>
+            <img
+              src="/image2/Rectangle 4.png"
+              alt=""
+              className="absolute inset-0 h-full w-full object-fill"
+              style={{ borderRadius: 14 }}
+            />
+
+            {/* Diamond icon — overlapping left edge */}
+            <img
+              src="/image2/diamond.png"
+              alt=""
+              className="absolute object-contain"
+              style={{ left: -8, top: -3, width: 32, height: 32 }}
+            />
+
+            {/* Balance text */}
+            <span
+              className="absolute"
+              style={{
+                left: 28,
+                top: 0,
+                height: 28,
+                lineHeight: '28px',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontWeight: 700,
+                fontSize: 13,
+                color: '#FFFFFF',
+                textShadow: '0 1px 2px rgba(0,0,0,0.45)',
+                letterSpacing: '0.03em',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {formatNum(balance)}
+            </span>
+
+            {/* Green + button (Ellipse 5 + Plus icon) */}
+            <div
+              className="absolute flex items-center justify-center"
+              style={{ right: -3, top: 1, width: 26, height: 26 }}
+            >
+              <img
+                src="/image2/Ellipse 5.png"
+                alt=""
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+              <img
+                src="/image2/Plus.png"
+                alt=""
+                className="relative object-contain"
+                style={{ width: 12, height: 12 }}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Top action icon hitboxes (icons are baked into Group_23.png) */}
-        <div className="absolute z-50" style={{ left: 258, top: 9, width: 124, height: 33 }}>
+
+
+
+        {/* Top action icon buttons */}
+        <div className="absolute z-50 flex items-center" style={{ left: 258, top: 9, gap: 3 }}>
           {[
             {
               key: 'music',
+              icon: '/image2/music.png',
               onClick: () => {
                 if (!canOpenSystemModal) return;
                 setMusicOn((prev) => !prev);
@@ -916,6 +1264,7 @@ const GamePage = () => {
             },
             {
               key: 'records',
+              icon: '/image2/clipboard.png',
               onClick: () => {
                 if (!canOpenSystemModal) return;
                 setActiveModal('RECORDS');
@@ -923,6 +1272,7 @@ const GamePage = () => {
             },
             {
               key: 'rules',
+              icon: '/image2/help.png',
               onClick: () => {
                 if (!canOpenSystemModal) return;
                 setActiveModal('RULE');
@@ -930,26 +1280,52 @@ const GamePage = () => {
             },
             {
               key: 'close',
+              icon: '/image2/close.png',
               onClick: () => setActiveModal('NONE'),
             },
-          ].map((iconBtn, idx) => (
+          ].map((iconBtn) => (
             <button
               key={iconBtn.key}
               type="button"
               onClick={iconBtn.onClick}
-              className="absolute rounded-full"
+              className="relative flex items-center justify-center"
               style={{
-                left: idx * 31,
-                top: 0,
                 width: 30,
                 height: 30,
-                background: iconBtn.key === 'music' && !musicOn ? 'rgba(0,0,0,0.22)' : 'transparent',
                 border: 'none',
+                background: 'transparent',
                 cursor: canOpenSystemModal || iconBtn.key === 'close' ? 'pointer' : 'default',
                 pointerEvents: canOpenSystemModal || iconBtn.key === 'close' ? 'auto' : 'none',
+                opacity: iconBtn.key === 'music' && !musicOn ? 0.5 : 1,
               }}
               aria-label={iconBtn.key}
-            />
+            >
+              <img
+                src="/image2/Ellipse 4.png"
+                alt=""
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+              {'icon' in iconBtn && iconBtn.icon ? (
+                <img
+                  src={iconBtn.icon}
+                  alt=""
+                  className="relative object-contain"
+                  style={{ width: 16, height: 16 }}
+                />
+              ) : (
+                <span
+                  className="relative"
+                  style={{
+                    fontWeight: 800,
+                    fontSize: 15,
+                    color: '#fff',
+                    lineHeight: 1,
+                  }}
+                >
+                  {iconBtn.text}
+                </span>
+              )}
+            </button>
           ))}
         </div>
 
@@ -962,7 +1338,7 @@ const GamePage = () => {
           className="absolute z-40 overflow-hidden"
           style={{ left: 18, top: 53, width: 51, height: 50, borderRadius: 19.5 }}
         >
-          <img src="/image2/trophy.png" alt="" className="h-full w-full object-contain" />
+          <img src={trophySrc} alt="" className="h-full w-full object-contain" />
         </button>
 
         <div className="absolute z-50" style={{ left: 29, top: 98, height: 16 }}>
@@ -1021,21 +1397,21 @@ const GamePage = () => {
           }}
         >
           <motion.div
-  className="absolute"
-  style={{
-    left: 3,
-    top: .5,
-    width: 86,
-    height: 24.764331817626953,
-    borderRadius: 109.55,
-    background: isAdvanceMode
-      ? 'linear-gradient(359.93deg, #C22F19 0.06%, #E92407 61.53%)'
-      : 'linear-gradient(178.63deg, #FFDB19 31.27%, #E09613 98.84%)',
-    border: '0.55px solid #A45721',
-  }}
-  animate={{ x: mode === 'BASIC' ? 0 : 88 }}
-  transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-/>
+            className="absolute"
+            style={{
+              left: 3,
+              top: .5,
+              width: 86,
+              height: 24.764331817626953,
+              borderRadius: 109.55,
+              background: isAdvanceMode
+                ? 'linear-gradient(359.93deg, #C22F19 0.06%, #E92407 61.53%)'
+                : 'linear-gradient(178.63deg, #FFDB19 31.27%, #E09613 98.84%)',
+              border: '0.55px solid #A45721',
+            }}
+            animate={{ x: mode === 'BASIC' ? 0 : 88 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+          />
 
 
           <button
@@ -1099,7 +1475,7 @@ const GamePage = () => {
             height: 196,
             filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.25))',
           }}
-          
+
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
 
@@ -1206,21 +1582,21 @@ const GamePage = () => {
                 isShowWinner
                   ? { scale: [1, 1.1, 1], opacity: 1 }
                   : phase === 'DRAWING'
-                  ? { opacity: isDrawingActive ? 1 : 0.72, scale: isDrawingActive ? 1.04 : 1 }
-                  : phase === 'SHOWTIME'
-                  ? { opacity: 0.82 }
-                  : justPulsed
-                  ? { scale: [1, 1.12, 1] }
-                  : { scale: 1, opacity: 1 }
+                    ? { opacity: isDrawingActive ? 1 : 0.72, scale: isDrawingActive ? 1.04 : 1 }
+                    : phase === 'SHOWTIME'
+                      ? { opacity: 0.82 }
+                      : justPulsed
+                        ? { scale: [1, 1.12, 1] }
+                        : { scale: 1, opacity: 1 }
               }
               transition={
                 isShowWinner
                   ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' }
                   : phase === 'DRAWING'
-                  ? { duration: 0.14, ease: 'easeOut' }
-                  : justPulsed
-                  ? { duration: 0.28, ease: 'easeOut' }
-                  : { duration: 0.2 }
+                    ? { duration: 0.14, ease: 'easeOut' }
+                    : justPulsed
+                      ? { duration: 0.28, ease: 'easeOut' }
+                      : { duration: 0.2 }
               }
               disabled={!canBet}
             >
@@ -1236,12 +1612,81 @@ const GamePage = () => {
                         ? 'brightness(1) saturate(1)'
                         : 'brightness(0.62) saturate(0.55)'
                       : phase === 'SHOWTIME'
-                      ? isShowWinner
-                        ? 'brightness(0.98) saturate(0.98)'
-                        : 'brightness(0.8) saturate(0.72)'
-                      : undefined,
+                        ? isShowWinner
+                          ? 'brightness(0.98) saturate(0.98)'
+                          : 'brightness(0.8) saturate(0.72)'
+                        : undefined,
                 }}
               />
+
+              {/* ── Winner starburst sparkle effect ── */}
+              {isShowWinner && (
+                <div className="pointer-events-none absolute inset-0 z-[-1] overflow-visible" style={{ left: '50%', top: '50%', width: 0, height: 0 }}>
+                  {/* Radial light rays */}
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <motion.div
+                      key={`ray-${i}`}
+                      className="absolute"
+                      style={{
+                        left: 0,
+                        top: 0,
+                        width: 3,
+                        height: 50,
+                        background: 'linear-gradient(180deg, rgba(255,255,200,0.9) 0%, rgba(255,255,100,0) 100%)',
+                        transformOrigin: '50% 0%',
+                        transform: `rotate(${i * 30}deg)`,
+                        borderRadius: 2,
+                      }}
+                      initial={{ opacity: 0, scaleY: 0.3 }}
+                      animate={{
+                        opacity: [0, 0.9, 0.5, 0.9],
+                        scaleY: [0.3, 1.2, 0.8, 1.2],
+                      }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut', delay: i * 0.05 }}
+                    />
+                  ))}
+
+                  {/* Sparkle dots */}
+                  {Array.from({ length: 16 }).map((_, i) => {
+                    const angle = (i / 16) * Math.PI * 2;
+                    const dist = 30 + Math.random() * 25;
+                    return (
+                      <motion.div
+                        key={`spark-${i}`}
+                        className="absolute rounded-full"
+                        style={{
+                          width: 4 + Math.random() * 4,
+                          height: 4 + Math.random() * 4,
+                          background: ['#FFCC00', '#FFE866', '#FFFFFF', '#FF9500'][i % 4],
+                          boxShadow: `0 0 8px ${['#FFCC00', '#FFE866', '#FFFFFF', '#FF9500'][i % 4]}`,
+                        }}
+                        initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
+                        animate={{
+                          opacity: [0, 1, 0.8, 0],
+                          x: [0, Math.cos(angle) * dist, Math.cos(angle) * (dist + 15)],
+                          y: [0, Math.sin(angle) * dist, Math.sin(angle) * (dist + 15)],
+                          scale: [0, 1.3, 0.5],
+                        }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'easeOut', delay: i * 0.06 }}
+                      />
+                    );
+                  })}
+
+                  {/* Central glow */}
+                  <motion.div
+                    className="absolute rounded-full"
+                    style={{
+                      left: -30,
+                      top: -30,
+                      width: 60,
+                      height: 60,
+                      background: 'radial-gradient(circle, rgba(255,255,200,0.6) 0%, rgba(255,200,0,0.2) 50%, transparent 70%)',
+                    }}
+                    animate={{ scale: [0.8, 1.3, 0.8], opacity: [0.5, 0.9, 0.5] }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                </div>
+              )}
 
               <motion.div
                 className="absolute flex items-center justify-center"
@@ -1263,7 +1708,7 @@ const GamePage = () => {
                 animate={isShowWinner ? { opacity: [0.4, 1, 0.4, 1] } : { opacity: 1 }}
                 transition={isShowWinner ? { duration: 0.8, repeat: Infinity } : { duration: 0.2 }}
               >
-                {it.badge.text}
+                {badgeOverrides[it.id] || it.badge.text}
               </motion.div>
 
               {betAmt > 0 && it.betLabel ? (
@@ -1327,59 +1772,59 @@ const GamePage = () => {
         </AnimatePresence>
 
         <div className="absolute z-50" style={{ left: 4, top: 444, width: 394, height: 72 }}>
-  {/* flares behind tabs (both modes) */}
-  <motion.img
-    src="/image2/flare.png"
-    alt=""
-    aria-hidden="true"
-    className="pointer-events-none absolute z-[1] object-contain"
-    style={{ left: -60, top: -83, width: 200, height: 200 }}
-    animate={{ opacity: [0.35, 0.85, 0.35], scale: [0.92, 1.06, 0.92] }}
-    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-  />
-  <motion.img
-    src="/image2/flare.png"
-    alt=""
-    aria-hidden="true"
-    className="pointer-events-none absolute z-[1] object-contain"
-    style={{ left: 256, top: -85, width: 200, height: 200 }}
-    animate={{ opacity: [0.35, 0.9, 0.35], scale: [0.92, 1.08, 0.92] }}
-    transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.15 }}
-  />
+          {/* flares behind tabs (both modes) */}
+          <motion.img
+            src="/image2/flare.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[1] object-contain"
+            style={{ left: -60, top: -83, width: 200, height: 200 }}
+            animate={{ opacity: [0.35, 0.85, 0.35], scale: [0.92, 1.06, 0.92] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <motion.img
+            src="/image2/flare.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[1] object-contain"
+            style={{ left: 256, top: -85, width: 200, height: 200 }}
+            animate={{ opacity: [0.35, 0.9, 0.35], scale: [0.92, 1.08, 0.92] }}
+            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.15 }}
+          />
 
-  {/* tabs (stay above flare) */}
-  <img
-    src="/image2/tab_vegetables.png"
-    alt=""
-    className="absolute z-10 object-contain"
-    style={{ left: 0, top: 0, width: 75, height: 72 }}
-  />
+          {/* tabs (stay above flare) */}
+          <img
+            src="/image2/tab_vegetables.png"
+            alt=""
+            className="absolute z-10 object-contain"
+            style={{ left: 0, top: 0, width: 75, height: 72 }}
+          />
 
-  <img
-    src="/image2/tab_drinks.png"
-    alt=""
-    className="absolute z-10 object-contain"
-    style={{ left: 315, top: 1, width: 79, height: 68 }}
-  />
+          <img
+            src="/image2/tab_drinks.png"
+            alt=""
+            className="absolute z-10 object-contain"
+            style={{ left: 315, top: 1, width: 79, height: 68 }}
+          />
 
           <div
-  className="absolute z-20"
-  style={{
-    left: 77,
-    top: 41,
-    width: 234,
-    height: 26,
-    borderRadius: 200,
+            className="absolute z-20"
+            style={{
+              left: 77,
+              top: 41,
+              width: 234,
+              height: 26,
+              borderRadius: 200,
 
-    background: isAdvanceMode ? '#6F372F' : '#0F6095',
-    border: isAdvanceMode ? '1.5px solid #E92407' : '1.5px solid #92D0F9',
+              background: isAdvanceMode ? '#6F372F' : '#0F6095',
+              border: isAdvanceMode ? '1.5px solid #E92407' : '1.5px solid #92D0F9',
 
-    // advance mode shadows exactly as you gave
-    boxShadow: isAdvanceMode
-      ? 'inset 0px 0px 8px 0px #0000004D, 0px 0px 12px 0px #00000066'
-      : 'inset 0px 0px 8px rgba(0,0,0,0.30), 0px 0px 12px rgba(0,0,0,0.40)',
-  }}
->
+              // advance mode shadows exactly as you gave
+              boxShadow: isAdvanceMode
+                ? 'inset 0px 0px 8px 0px #0000004D, 0px 0px 12px 0px #00000066'
+                : 'inset 0px 0px 8px rgba(0,0,0,0.30), 0px 0px 12px rgba(0,0,0,0.40)',
+            }}
+          >
 
             <div
               className="absolute z-10 flex items-center whitespace-nowrap"
@@ -1420,92 +1865,100 @@ const GamePage = () => {
         </div>
 
         <div
-  className="absolute"
-  style={{
-    left: 0,
-    top: 477,
-    width: 402,
-    height: 297,
-    background: isAdvanceMode ? '#72342B' : '#2B93CA',
-    zIndex: 5,
-  }}
-/>
+          className="absolute"
+          style={{
+            left: 0,
+            top: 477,
+            width: 402,
+            height: 297,
+            background: isAdvanceMode ? '#72342B' : '#2B93CA',
+            zIndex: 5,
+          }}
+        />
 
 
         <div className="absolute z-40 overflow-hidden" style={{ left: 4, top: 444, width: 394, height: 281, borderRadius: 32 }}>
           <img
-  src={isAdvanceMode ? '/image2/curtain_red.png' : '/image2/curtain.png'}
-  alt=""
-  aria-hidden="true"
-  className="pointer-events-none absolute z-0"
-  style={{ left: 0, right: 0, top: 32.91, width: '100%', height: 81.2218246459961, objectFit: 'fill' }}
-/>
+            src={isAdvanceMode ? '/image2/curtain_red.png' : '/image2/curtain.png'}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute z-0"
+            style={{ left: 0, right: 0, top: 32.91, width: '100%', height: 81.2218246459961, objectFit: 'fill' }}
+          />
 
 
           <motion.div
             className="absolute z-10"
             style={{
-  left: 25,
-  top: 79,
-  width: 345,
-  height: 101,
-  borderRadius: 20,
-  background: isAdvanceMode ? '#D95B48' : '#0F6095',
-  border: isAdvanceMode ? '5px solid #E92407' : '5px solid #1087C6',
-}}
+              left: 25,
+              top: 79,
+              width: 345,
+              height: 101,
+              borderRadius: 20,
+              background: isAdvanceMode ? '#D95B48' : '#0F6095',
+              border: isAdvanceMode ? '5px solid #E92407' : '5px solid #1087C6',
+            }}
 
             animate={phase === 'DRAWING' ? { opacity: 0.72 } : { opacity: 1 }}
             transition={{ duration: 0.24 }}
           />
 
-          {CHIPS.map((c, idx) => {
-            const value = CHIP_VALUES[idx] ?? 0;
-            const active = value === selectedChip;
+          {/* ── Dynamic chip slider ── */}
+          <div
+            className="absolute z-20 flex items-center justify-evenly"
+            style={{
+              left: 30,
+              top: 88,
+              width: 340,
+              height: 80,
+              pointerEvents: canBet ? 'auto' : 'none',
+            }}
+          >
+            {chipValues.map((value) => {
+              const active = value === selectedChip;
+              const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
+              const chipSize = chipValues.length > 5 ? 48 : 54;
+              const activeSize = chipSize + 12;
 
-            return (
-              <motion.button
-                key={c.src}
-                type="button"
-                onClick={() => {
-                  if (!canBet) return;
-                  setSelectedChip(value);
-                }}
-                className="absolute z-20 border-none bg-transparent p-0"
-                style={{
-                  left: c.left - 4,
-                  top: c.top - 444,
-                  width: c.width,
-                  height: c.height,
-                  cursor: canBet ? 'pointer' : 'default',
-                  filter: active
-                    ? 'drop-shadow(0px 0px 16px rgba(255,255,255,0.65))'
-                    : c.shadow
-                    ? 'drop-shadow(0px 0px 12px rgba(0,0,0,0.55))'
-                    : undefined,
-                  borderRadius: 999,
-                  pointerEvents: canBet ? 'auto' : 'none',
-                }}
-                animate={{ scale: active ? 1.08 : 1 }}
-                transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-                whileTap={canBet ? { scale: 0.94 } : undefined}
-              >
-                <img src={c.src} alt="" className="h-full w-full object-contain" />
-              </motion.button>
-            );
-          })}
+              return (
+                <motion.button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    if (!canBet) return;
+                    setSelectedChip(value);
+                  }}
+                  className="shrink-0 border-none bg-transparent p-0"
+                  style={{
+                    width: active ? activeSize : chipSize,
+                    height: active ? activeSize : chipSize,
+                    cursor: canBet ? 'pointer' : 'default',
+                    filter: active
+                      ? 'drop-shadow(0px 0px 16px rgba(255,255,255,0.65))'
+                      : 'drop-shadow(0px 0px 12px rgba(0,0,0,0.55))',
+                    borderRadius: 999,
+                  }}
+                  animate={{ scale: active ? 1.08 : 1 }}
+                  transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+                  whileTap={canBet ? { scale: 0.94 } : undefined}
+                >
+                  <img src={imgSrc} alt={`${value}`} className="h-full w-full object-contain" />
+                </motion.button>
+              );
+            })}
+          </div>
 
           <div
             className="absolute z-10 overflow-hidden"
-          style={{
-  left: 25,
-  top: 195,
-  width: 343,
-  height: 18,
-  borderRadius: 20,
-  background: isAdvanceMode ? '#D95B48' : '#0F6095',
-  border: isAdvanceMode ? '1px solid #E92407' : '1px solid #1087C6',
-}}
-
+            style={{
+              left: 25,
+              top: 195,
+              width: 343,
+              height: 18,
+              borderRadius: 20,
+              background: isAdvanceMode ? '#D95B48' : '#0F6095',
+              border: isAdvanceMode ? '1px solid #E92407' : '1px solid #1087C6',
+            }}
           >
             <motion.div
               style={{ height: '100%', background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)' }}
@@ -1514,33 +1967,46 @@ const GamePage = () => {
             />
           </div>
 
-          {CHESTS.map((c, idx) => (
-            <img key={idx} src={c.src} alt="" className="absolute z-20 object-contain" style={{ left: c.left - 4, top: c.top - 444, width: c.width, height: c.height }} />
-          ))}
+          {/* ── Dynamic chests from API ── */}
+          {boxData.map((box, idx) => {
+            const totalBoxes = boxData.length;
+            const containerWidth = 310;
+            const boxWidth = 48;
+            const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
+            const xPos = 47 + idx * spacing;
+
+            return (
+              <div key={idx} className="absolute z-20 flex flex-col items-center" style={{ left: xPos, top: 180, width: boxWidth }}>
+                <img src={box.src} alt="" className="object-contain" style={{ width: boxWidth, height: boxWidth }} />
+              </div>
+            );
+          })}
 
           <div
-  className="absolute z-10"
-  style={{
-    left: 27,
-    top: 236,
-    width: 343,
-    height: 45,
-    borderRadius: 12,
-    background: isAdvanceMode ? '#D95B48' : '#0F6095',
-    border: isAdvanceMode ? '2px solid #E92407' : '2px solid #1087C6',
-    boxShadow: isAdvanceMode ? '0px 1px 0px 0px #A87C75' : '0px 1px 0px #4ABAF9',
-  }}
-/>
+            className="absolute z-10"
+            style={{
+              left: 27,
+              top: 236,
+              width: 343,
+              height: 45,
+              borderRadius: 12,
+              background: isAdvanceMode ? '#D95B48' : '#0F6095',
+              border: isAdvanceMode ? '2px solid #E92407' : '2px solid #1087C6',
+              boxShadow: isAdvanceMode ? '0px 1px 0px 0px #A87C75' : '0px 1px 0px #4ABAF9',
+            }}
+          />
 
 
           <div className="absolute z-20 flex items-center" style={{ left: 40, top: 250, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
             Result
           </div>
 
-          <div className="absolute z-20" style={{ left: 92.5, top: 246, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
-  ? 'linear-gradient(180deg, #D95B48 -6.25%, #FFFFFF 50%, #D95B48 106.25%)'
-  : 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)',
- borderImageSlice: 1 }} />
+          <div className="absolute z-20" style={{
+            left: 92.5, top: 246, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
+              ? 'linear-gradient(180deg, #D95B48 -6.25%, #FFFFFF 50%, #D95B48 106.25%)'
+              : 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)',
+            borderImageSlice: 1
+          }} />
 
           {RESULT_POSITIONS.map((pos, idx) => {
             const src = resultSrcs[idx] ?? INITIAL_RESULT_SRCS[idx];
@@ -1562,440 +2028,439 @@ const GamePage = () => {
         </AnimatePresence>
 
         <AnimatePresence>
-  {showPreDraw ? (
-    <motion.div
-      className="absolute inset-0 z-[160]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-    >
-      {/* background dim + blur */}
-      <div
-        className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(3px)' }}
-      />
+          {showPreDraw ? (
+            <motion.div
+              className="absolute inset-0 z-[160]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              {/* background dim + blur */}
+              <div
+                className="absolute inset-0"
+                style={{ background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(3px)' }}
+              />
 
-      {/* banner centered, NOT stretched */}
-      <motion.div
-        className="absolute left-0 right-0 flex justify-center"
-        style={{ top: 120 }}
-        initial={{ scale: 0.98, opacity: 0, y: 10 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.995, opacity: 0, y: -8 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-      >
-        <img
-          src="/image2/game_on.png"
-          alt="Game On"
-          style={{
-            width: ARTBOARD.width, // 402
-            height: 'auto',        // ✅ keeps ratio (no stretch)
-            display: 'block',
-          }}
-        />
-      </motion.div>
-    </motion.div>
-  ) : null}
-</AnimatePresence>
+              {/* banner centered, NOT stretched */}
+              <motion.div
+                className="absolute left-0 right-0 flex justify-center"
+                style={{ top: 120 }}
+                initial={{ scale: 0.98, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.995, opacity: 0, y: -8 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+              >
+                <img
+                  src="/image2/game_on.png"
+                  alt="Game On"
+                  style={{
+                    width: ARTBOARD.width, // 402
+                    height: 'auto',        // ✅ keeps ratio (no stretch)
+                    display: 'block',
+                  }}
+                />
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
 
 
         <AnimatePresence>
-  {showResultBoard && pendingWin ? (
-    <motion.div
-      className="absolute inset-0 z-[520]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
-
-      {/* ✅ WIN PANEL (match screenshot) */}
-      {resultKind === 'WIN' && winnerItem ? (
-        <div className="absolute" style={{ left: -6, top: 277, width: 414, height: 414 }}>
-          <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
-
-          {/* winner row like your WIN screenshot */}
-          <div className="absolute" style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}>
-            <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
-              <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
-              <div
-                style={{
-                  color: '#fff',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontWeight: 800,
-                  fontSize: 20,
-                  lineHeight: '20px',
-                  textTransform: 'lowercase',
-                }}
-              >
-                {winnerItem.id}
-              </div>
-            </div>
-
-            <div
-              className="absolute flex items-center justify-end"
-              style={{
-                right: 0,
-                top: 0,
-                height: 40,
-                gap: 8,
-                color: '#ffe56a',
-                fontFamily: 'Inria Serif, serif',
-                fontSize: 30,
-                fontWeight: 800,
-                textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-                whiteSpace: 'nowrap',
-              }}
+          {showResultBoard && pendingWin ? (
+            <motion.div
+              className="absolute inset-0 z-[520]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
             >
-              <BlumondIcon size={22} />
-              <span>{winAmountLabel}</span>
-            </div>
-          </div>
+              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
 
-          {/* leaderboard rows (same as your existing win panel) */}
-          {rankRows.slice(0, 3).map((row, idx) => (
-            <div
-              key={`${row.name}-${idx}`}
-              className="absolute"
-              style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
-            >
-              <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
-                <PodiumBadge index={idx} size={28} />
-              </div>
+              {/* ✅ WIN PANEL (match screenshot) */}
+              {resultKind === 'WIN' && winnerItem ? (
+                <div className="absolute" style={{ left: -6, top: 277, width: 414, height: 414 }}>
+                  <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 40,
-                  top: 12,
-                  width: 160,
-                  color: '#fff',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontWeight: 700,
-                  fontSize: 20,
-                  lineHeight: '20px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {row.name}
-              </div>
+                  {/* winner row like your WIN screenshot */}
+                  <div className="absolute" style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}>
+                    <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
+                      <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
+                      <div
+                        style={{
+                          color: '#fff',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 800,
+                          fontSize: 20,
+                          lineHeight: '20px',
+                          textTransform: 'lowercase',
+                        }}
+                      >
+                        {winnerItem.id}
+                      </div>
+                    </div>
 
-              <div
-                className="absolute flex items-center justify-end"
-                style={{
-                  right: 0,
-                  top: 12,
-                  width: 110,
-                  gap: 6,
-                  color: '#ffe9ff',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontWeight: 800,
-                  fontSize: 20,
-                  lineHeight: '20px',
-                  textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                }}
-              >
-                <BlumondIcon size={16} />
-                {formatK(row.diamonds)}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* ✅ NO BET + LOSE PANEL (match screenshot size/pos) */
-        <div className="absolute" style={{ left: 13, top: 340, width: 374, height: 374 }}>
-          <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+                    <div
+                      className="absolute flex items-center justify-end"
+                      style={{
+                        right: 0,
+                        top: 0,
+                        height: 40,
+                        gap: 8,
+                        color: '#ffe56a',
+                        fontFamily: 'Inria Serif, serif',
+                        fontSize: 30,
+                        fontWeight: 800,
+                        textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <img src="/image2/diamond.png" alt="" className="h-[22px] w-[22px] object-contain" />
+                      <span>{winAmountLabel}</span>
+                    </div>
+                  </div>
 
-          {/* NO BET header (keep like screenshot) */}
-          {resultKind === 'NOBET' ? (
-            <div className="absolute flex items-center" style={{ left: 36, top: 52, width: 302, height: 48, gap: 14 }}>
-              <img src={winnerItem ? winnerItem.src : '/image2/lemon.png'} alt="" className="h-[34px] w-[34px] object-contain" />
-              <div
-                style={{
-                  color: '#fff',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontSize: 20,
-                  fontWeight: 800,
-                  lineHeight: '20px',
-                }}
-              >
-                You did not bet in this round
-              </div>
-            </div>
-          ) : (
-            /* ✅ LOSE header: same “winner row style” as WIN, but diamonds 0 */
-            <div className="absolute" style={{ left: 34, top: 52, width: 306, height: 48, overflow: 'hidden' }}>
-              <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 48, gap: 10 }}>
-                <img src={winnerItem ? winnerItem.src : '/image2/lemon.png'} alt="" className="h-[34px] w-[34px] object-contain" />
-                <div
-                  style={{
-                    color: '#fff',
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 800,
-                    fontSize: 20,
-                    lineHeight: '20px',
-                    textTransform: 'lowercase',
-                  }}
-                >
-                  {winnerItem ? winnerItem.id : 'none'}
+                  {/* leaderboard rows (same as your existing win panel) */}
+                  {rankRows.slice(0, 3).map((row, idx) => (
+                    <div
+                      key={`${row.name}-${idx}`}
+                      className="absolute"
+                      style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
+                    >
+                      <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
+                        <img src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]} alt="" className="h-full w-full object-contain" />
+                      </div>
+
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 40,
+                          top: 12,
+                          width: 160,
+                          color: '#fff',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 700,
+                          fontSize: 20,
+                          lineHeight: '20px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {row.name}
+                      </div>
+
+                      <div
+                        className="absolute flex items-center justify-end"
+                        style={{
+                          right: 0,
+                          top: 12,
+                          width: 110,
+                          gap: 6,
+                          color: '#ffe9ff',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 800,
+                          fontSize: 20,
+                          lineHeight: '20px',
+                          textShadow: '0 1px 0 rgba(0,0,0,0.35)',
+                        }}
+                      >
+                        <img src="/image2/diamond.png" alt="" className="h-[16px] w-[16px] object-contain" />
+                        {formatK(row.diamonds)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                /* ✅ NO BET + LOSE PANEL */
+                <div className="absolute" style={{ left: 26, top: 320, width: 350, height: 300, overflow: 'hidden' }}>
+                  <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-              <div
-                className="absolute flex items-center justify-end"
-                style={{
-                  right: 0,
-                  top: 0,
-                  height: 48,
-                  gap: 8,
-                  color: '#ffe56a',
-                  fontFamily: 'Inria Serif, serif',
-                  fontSize: 28,
-                  fontWeight: 800,
-                  textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <BlumondIcon size={20} />
-                <span>0</span>
-              </div>
-            </div>
-          )}
+                  {/* ── Header: inside the rounded pill-shaped strip ── */}
+                  <div className="absolute flex items-center" style={{ left: 30, top: 14, width: 280, height: 56 }}>
+                    <div
+                      className="shrink-0 flex items-center justify-center rounded-full overflow-hidden"
+                      style={{ width: 44, height: 44, background: 'rgba(0,0,0,0.25)' }}
+                    >
+                      <img
+                        src={winnerItem ? winnerItem.src : '/image2/lemon.png'}
+                        alt=""
+                        className="h-[28px] w-[28px] object-contain"
+                      />
+                    </div>
 
-          {/* rows same as before */}
-          {NO_BET_ROWS.map((row, idx) => (
-            <div key={`${row.name}-${idx}`} className="absolute" style={{ left: 34, top: 140 + idx * 74, width: 306, height: 56, overflow: 'hidden' }}>
-              <div className="absolute" style={{ left: 0, top: 12, width: 30, height: 30 }}>
-                <PodiumBadge index={idx} size={30} />
-              </div>
+                    <div className="mx-3 shrink-0" style={{ width: 2, height: 28, background: 'rgba(255,255,255,0.25)' }} />
 
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 44,
-                  top: 16,
-                  width: 170,
-                  color: '#fff',
-                  fontFamily: 'Inria Serif, serif',
-                  fontSize: 24,
-                  lineHeight: '24px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {row.name}
-              </div>
+                    <div
+                      style={{
+                        color: '#fff',
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        lineHeight: '16px',
+                      }}
+                    >
+                      {resultKind === 'NOBET'
+                        ? 'You did not bet in this round'
+                        : 'Better luck next round'}
+                    </div>
+                  </div>
 
-              <div
-                className="absolute flex items-center justify-end"
-                style={{
-                  right: 0,
-                  top: 16,
-                  width: 120,
-                  gap: 8,
-                  color: '#ffe8a9',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontWeight: 800,
-                  fontSize: 22,
-                  lineHeight: '22px',
-                  textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                }}
-              >
-                <BlumondIcon size={18} />
-                {formatK(row.amount)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </motion.div>
-  ) : null}
-</AnimatePresence>
+                  {/* ── Leaderboard rows — inside body area below header strip ── */}
+                  {NO_BET_ROWS.map((row, idx) => (
+                    <div
+                      key={`${row.name}-${idx}`}
+                      className="absolute flex items-center"
+                      style={{ left: 30, top: 98 + idx * 62, width: 280, height: 52 }}
+                    >
+                      {/* Medal badge */}
+                      <div className="shrink-0" style={{ width: 44, height: 44 }}>
+                        <img
+                          src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+
+                      {/* Name */}
+                      <div
+                        style={{
+                          marginLeft: 8,
+                          flex: 1,
+                          minWidth: 0,
+                          color: '#fff',
+                          fontFamily: 'Inria Serif, serif',
+                          fontStyle: 'italic',
+                          fontSize: 20,
+                          lineHeight: '24px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {row.name}
+                      </div>
+
+                      {/* Diamond + amount */}
+                      <div
+                        className="ml-1 flex shrink-0 items-center"
+                        style={{
+                          gap: 4,
+                          color: '#ffe8a9',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 700,
+                          fontSize: 16,
+                          lineHeight: '18px',
+                          textShadow: '0 1px 0 rgba(0,0,0,0.35)',
+                        }}
+                      >
+                        <div className="shrink-0" style={{ width: 20, height: 20 }}>
+                          <img src="/image2/diamond.png" alt="" className="h-full w-full object-contain" />
+                        </div>
+                        {formatK(row.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
 
         <AnimatePresence>{showFireworks ? <FireworksOverlay key={`fireworks-${fireworksSeed}`} seed={fireworksSeed} /> : null}</AnimatePresence>
 
         <AnimatePresence>
-  {activeModal !== 'NONE' ? (
-    <motion.div
-      className="absolute inset-0 z-[700]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <button
-        type="button"
-        onClick={() => setActiveModal('NONE')}
-        className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(4px)' }}
-      />
-
-      <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-        style={{ width: 326, height: 430 }}
-      >
-        {activeModal === 'RULE' ? (
-          <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
-        ) : null}
-
-        {activeModal === 'RECORDS' ? (
-          <div className="relative h-full w-full">
-            <img src="/image2/popup_game_records.png" alt="" className="h-full w-full object-fill" />
-            <div className="absolute left-[28px] right-[30px] top-[90px] text-[13px] text-[#be6a31]">
-              {records.length > 0
-                ? `Round ${records[0].round} | Winner: ${records[0].winner} | Win: ${formatNum(records[0].win)}`
-                : 'Display game records of the last 7 days, with a maximum of 200 records.'}
-            </div>
-          </div>
-        ) : null}
-
-        {activeModal === 'PRIZE' ? (
-          <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-4 text-[#8f4f1f]">
-            <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">
-              Prize distribution
-            </div>
-            <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
-              1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
-            </div>
-          </div>
-        ) : null}
-
-        {activeModal === 'RANK' ? (
-          <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff4d4] to-[#ffe3b3] p-3">
-            <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
-              Game Rank
-            </div>
-
-            <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
+          {activeModal !== 'NONE' ? (
+            <motion.div
+              className="absolute inset-0 z-[700]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
               <button
                 type="button"
-                onClick={() => setRankTab('TODAY')}
-                className={`h-full w-1/2 rounded-[16px] text-[14px] ${
-                  rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                }`}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => setRankTab('YESTERDAY')}
-                className={`h-full w-1/2 rounded-[16px] text-[14px] ${
-                  rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                }`}
-              >
-                Yesterday
-              </button>
-            </div>
+                onClick={() => setActiveModal('NONE')}
+                className="absolute inset-0"
+                style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(4px)' }}
+              />
 
-            <div className="space-y-1">
-              {rankRows.slice(0, 7).map((row, idx) => (
-                <div key={`${row.name}-${idx}`} className="relative h-[42px]">
-                  <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
-                  <div className="absolute left-[14px] top-[8px] text-[20px] text-[#7b471d]">{idx + 1}</div>
-                  <div className="absolute left-[70px] top-[8px] text-[18px] text-[#7b471d]">{row.name}</div>
-                  <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
-                    {formatNum(row.diamonds)}
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                style={{ width: 326, height: 430 }}
+              >
+                {activeModal === 'RULE' ? (
+                  <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
+                ) : null}
+
+                {activeModal === 'RECORDS' ? (
+                  <div className="relative h-full w-full">
+                    <img src="/image2/popup_game_records.png" alt="" className="h-full w-full object-fill" />
+                    <div className="absolute left-[28px] right-[30px] top-[90px] text-[13px] text-[#be6a31]">
+                      {records.length > 0
+                        ? `Round ${records[0].round} | Winner: ${records[0].winner} | Win: ${formatNum(records[0].win)}`
+                        : 'Display game records of the last 7 days, with a maximum of 200 records.'}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+                ) : null}
 
-        {activeModal === 'ADVANCED' ? (
-          <div className="relative h-full w-full">
-            <img src="/image2/popup_small.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+                {activeModal === 'PRIZE' ? (
+                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-4 text-[#8f4f1f]">
+                    <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">
+                      Prize distribution
+                    </div>
+                    <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
+                      1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
+                    </div>
+                  </div>
+                ) : null}
 
-            <button
-              type="button"
-              onClick={() => setActiveModal('NONE')}
-              className="absolute"
-              style={{ right: 6, top: 10, width: 44, height: 44 }}
-              aria-label="Close"
-            >
-              <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
-            </button>
+                {activeModal === 'RANK' ? (
+                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff4d4] to-[#ffe3b3] p-3">
+                    <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
+                      Game Rank
+                    </div>
 
-            <div
-              className="absolute left-1/2 -translate-x-1/2 text-center"
-              style={{
-                top: 34,
-                width: 250,
-                fontFamily: 'Inria Serif, serif',
-                fontWeight: 800,
-                fontSize: 30,
-                color: '#7a3c08',
-                textShadow: '0 2px 0 rgba(0,0,0,0.15)',
-              }}
-            >
-              Advanced Mode
-            </div>
+                    <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
+                      <button
+                        type="button"
+                        onClick={() => setRankTab('TODAY')}
+                        className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                          }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRankTab('YESTERDAY')}
+                        className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                          }`}
+                      >
+                        Yesterday
+                      </button>
+                    </div>
 
-            <div
-              className="absolute"
-              style={{
-                left: 28,
-                right: 28,
-                top: 120,
-                fontFamily: 'Inter, system-ui, sans-serif',
-                fontWeight: 600,
-                fontSize: 18,
-                lineHeight: '26px',
-                color: '#be6a31',
-              }}
-            >
-              <div>Users who have placed bets exceeding 500,000 coins in the past 7 days can unlock the premium mode.</div>
+                    <div className="space-y-1">
+                      {rankRows.slice(0, 7).map((row, idx) => (
+                        <div key={`${row.name}-${idx}`} className="relative h-[42px]">
+                          <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
+                          <div className="absolute left-[14px] top-[8px] text-[20px] text-[#7b471d]">{idx + 1}</div>
+                          <div className="absolute left-[70px] top-[8px] text-[18px] text-[#7b471d]">{row.name}</div>
+                          <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
+                            {formatNum(row.diamonds)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
-              <div style={{ marginTop: 18 }}>
-                Keep going! Only{' '}
-                <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvance)}</span>{' '}
-                diamonds to unlock!
+                {activeModal === 'ADVANCED' ? (
+                  <div className="relative h-full w-full">
+                    {/* CSS-built popup background (no baked-in text) */}
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        borderRadius: 22,
+                        border: '5px solid #f09c16',
+                        background: 'linear-gradient(180deg, #fff3cc 0%, #ffdd9d 100%)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                      }}
+                    />
+                    {/* Header banner */}
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+                      style={{
+                        top: -6,
+                        width: 200,
+                        height: 44,
+                        borderRadius: 14,
+                        background: 'linear-gradient(180deg, #ffcb1d 0%, #f6a602 100%)',
+                        boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'Inria Serif, serif',
+                          fontWeight: 800,
+                          fontSize: 22,
+                          color: '#7a3c08',
+                        }}
+                      >
+                        Advanced Mode
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('NONE')}
+                      className="absolute"
+                      style={{ right: 6, top: 10, width: 44, height: 44 }}
+                      aria-label="Close"
+                    >
+                      <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
+                    </button>
+
+                    <div
+                      className="absolute"
+                      style={{
+                        left: 28,
+                        right: 28,
+                        top: 70,
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontWeight: 600,
+                        fontSize: 18,
+                        lineHeight: '26px',
+                        color: '#be6a31',
+                      }}
+                    >
+                      <div>Users who have placed bets exceeding 500,000 coins in the past 7 days can unlock the premium mode.</div>
+
+                      <div style={{ marginTop: 18 }}>
+                        Keep going! Only{' '}
+                        <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvance)}</span>{' '}
+                        diamonds to unlock!
+                      </div>
+                    </div>
+
+                    <img
+                      src="/image2/diamonds.png"
+                      alt=""
+                      className="absolute left-1/2 -translate-x-1/2 object-contain"
+                      style={{ top: 235, width: 210, height: 120 }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('ADVANCE');
+                        setActiveModal('NONE');
+                      }}
+                      className="absolute left-1/2 -translate-x-1/2"
+                      style={{
+                        bottom: 30,
+                        width: 240,
+                        height: 62,
+                        borderRadius: 999,
+                        background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                        border: '2px solid rgba(0,0,0,0.18)',
+                        boxShadow: '0 10px 18px rgba(0,0,0,0.22)',
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontWeight: 900,
+                        fontSize: 28,
+                        color: '#ffffff',
+                        textShadow: '0 2px 0 rgba(0,0,0,0.25)',
+                      }}
+                    >
+                      OK
+                    </button>
+                  </div>
+                ) : null}
               </div>
-            </div>
-
-            <img
-              src="/image2/diamonds.png"
-              alt=""
-              className="absolute left-1/2 -translate-x-1/2 object-contain"
-              style={{ top: 235, width: 210, height: 120 }}
-            />
-
-            <button
-              type="button"
-              onClick={() => {
-                setMode('ADVANCE');
-                setActiveModal('NONE');
-              }}
-              className="absolute left-1/2 -translate-x-1/2"
-              style={{
-                bottom: 30,
-                width: 240,
-                height: 62,
-                borderRadius: 999,
-                background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
-                border: '2px solid rgba(0,0,0,0.18)',
-                boxShadow: '0 10px 18px rgba(0,0,0,0.22)',
-                fontFamily: 'Inter, system-ui, sans-serif',
-                fontWeight: 900,
-                fontSize: 28,
-                color: '#ffffff',
-                textShadow: '0 2px 0 rgba(0,0,0,0.25)',
-              }}
-            >
-              OK
-            </button>
-          </div>
-        ) : null}
-      </div>
-    </motion.div>
-  ) : null}
-</AnimatePresence>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
       </div>
     </ScaledArtboard>
