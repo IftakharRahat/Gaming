@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const MAX_FRAME_WIDTH = 420;
 const DEBUG = false;
@@ -8,7 +8,7 @@ const ARTBOARD = { width: 402, height: 735 } as const;
 
 const BET_SECONDS = 20;
 const DRAW_SECONDS = 7;
-const SHOW_SECONDS = 3;
+const SHOW_SECONDS = 5;
 const PRE_DRAW_MS = 2000;
 
 const GAME_ON_MS = 1200;
@@ -208,16 +208,130 @@ type FloatingBetChip = {
   src: string;
 };
 
-type FireworkParticle = {
+type FireworkDot = {
   id: string;
-  originLeft: number;
-  originTop: number;
-  x: number;
-  y: number;
+  cx: number;
+  cy: number;
+  dx: number;
+  dy: number;
   size: number;
   delay: number;
-  color: string;
 };
+
+type FireworkGroup = {
+  id: string;
+  dots: FireworkDot[];
+  flashX: number;
+  flashY: number;
+  flashDelay: number;
+};
+
+const buildFireworkGroups = (): FireworkGroup[] => {
+  const origins = [
+    { x: 80, y: 120 },
+    { x: 320, y: 100 },
+    { x: 200, y: 80 },
+    { x: 60, y: 250 },
+    { x: 340, y: 240 },
+    { x: 150, y: 170 },
+    { x: 280, y: 180 },
+    { x: 100, y: 50 },
+    { x: 300, y: 60 },
+  ];
+
+  return origins.map((origin, gi) => {
+    const dotCount = 22 + Math.floor(Math.random() * 12);
+    const burstDelay = gi * 0.25;
+    const dots: FireworkDot[] = [];
+
+    for (let i = 0; i < dotCount; i++) {
+      const angle = (i / dotCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const dist = 35 + Math.random() * 65;
+      dots.push({
+        id: `fw-${gi}-${i}`,
+        cx: origin.x,
+        cy: origin.y,
+        dx: Math.cos(angle) * dist,
+        dy: Math.sin(angle) * dist,
+        size: 2.5 + Math.random() * 4,
+        delay: burstDelay + Math.random() * 0.08,
+      });
+    }
+
+    return {
+      id: `fwg-${gi}`,
+      dots,
+      flashX: origin.x,
+      flashY: origin.y,
+      flashDelay: burstDelay,
+    };
+  });
+};
+
+type FireworksOverlayProps = { seed: number };
+
+const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
+  const groups = useMemo(() => buildFireworkGroups(), [seed]);
+
+  return (
+    <motion.div
+      className="pointer-events-none absolute inset-0 z-[900]"
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {groups.map((group) => (
+        <React.Fragment key={group.id}>
+          {/* Bright center flash */}
+          <motion.div
+            className="absolute rounded-full"
+            style={{
+              left: group.flashX - 8,
+              top: group.flashY - 8,
+              width: 16,
+              height: 16,
+              background: '#fff',
+              boxShadow: '0 0 20px 10px rgba(255,255,255,0.9), 0 0 50px 20px rgba(255,255,255,0.5), 0 0 80px 35px rgba(220,200,255,0.3)',
+            }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: [0, 3, 0], opacity: [0, 1, 0] }}
+            transition={{ duration: 0.6, delay: group.flashDelay, ease: 'easeOut' }}
+          />
+
+          {/* Exploding dots */}
+          {group.dots.map((dot) => (
+            <motion.span
+              key={dot.id}
+              className="absolute rounded-full"
+              style={{
+                left: dot.cx,
+                top: dot.cy,
+                width: dot.size,
+                height: dot.size,
+                background: '#fff',
+                boxShadow: '0 0 6px 3px rgba(255,255,255,0.9), 0 0 14px 6px rgba(255,255,255,0.5), 0 0 24px 10px rgba(220,210,255,0.25)',
+              }}
+              initial={{ opacity: 0, x: 0, y: 0, scale: 0.3 }}
+              animate={{
+                opacity: [0, 1, 1, 0.6, 0],
+                x: [0, dot.dx * 0.4, dot.dx],
+                y: [0, dot.dy * 0.4, dot.dy + 15],
+                scale: [0.3, 1.3, 0.4],
+              }}
+              transition={{
+                duration: 1.1,
+                delay: dot.delay,
+                ease: [0.2, 0.8, 0.3, 1],
+              }}
+            />
+          ))}
+        </React.Fragment>
+      ))}
+    </motion.div>
+  );
+};
+
 
 const debugClass = (on: boolean) => (on ? 'outline outline-1 outline-fuchsia-500/55' : '');
 const formatNum = (n: number) => n.toLocaleString('en-US');
@@ -249,105 +363,6 @@ const buildEmptyBets = (): BetsState => ({
   cola: 0,
   water: 0,
 });
-
-const buildFireworkParticles = (): FireworkParticle[] => {
-  // ✅ Bursts placed at TOP area (above win banner)
-  // These coords are in your artboard coordinate space (402x735)
-  const burstAnchors = [
-    { left: 90, top: 260 },
-    { left: 200, top: 240 },
-    { left: 312, top: 260 },
-    { left: 150, top: 295 },
-    { left: 255, top: 295 },
-  ];
-
-
-  // ✅ More vibrant palette
-  const palette = [
-    '#FF2D55', // hot pink/red
-    '#FF9500', // orange
-    '#FFCC00', // yellow
-    '#34C759', // green
-    '#00C7FF', // cyan
-    '#007AFF', // blue
-    '#AF52DE', // purple
-    '#FFFFFF', // sparkle white
-  ];
-
-  const particles: FireworkParticle[] = [];
-
-  burstAnchors.forEach((anchor, burstIdx) => {
-    const count = 30 + Math.floor(Math.random() * 18);
-    // ✅ more particles
-    for (let i = 0; i < count; i += 1) {
-      const theta = Math.random() * Math.PI * 2;
-
-      // ✅ bigger burst radius
-      const distance = 52 + Math.random() * 88;
-
-      const color = palette[Math.floor(Math.random() * palette.length)];
-
-      particles.push({
-        id: `burst-${burstIdx}-${i}-${Math.round(Math.random() * 100000)}`,
-        originLeft: anchor.left + (Math.random() * 14 - 7),
-        originTop: anchor.top + (Math.random() * 14 - 7),
-        x: Math.cos(theta) * distance,
-        y: Math.sin(theta) * distance,
-        size: 3.5 + Math.random() * 7.5, // ✅ larger particles
-        delay: i * 0.009 + Math.random() * 0.05, // ✅ faster fill
-        color,
-      });
-    }
-  });
-
-  return particles;
-};
-
-
-type FireworksOverlayProps = {
-  seed: number;
-};
-
-const FireworksOverlay = ({ seed }: FireworksOverlayProps) => {
-  const particles = useMemo(() => buildFireworkParticles(), [seed]);
-
-  return (
-    <motion.div
-      className="pointer-events-none absolute inset-0 z-[900]"
-      initial={{ opacity: 1 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-    >
-      {particles.map((particle) => (
-        <motion.span
-          key={particle.id}
-          className="absolute rounded-full"
-          style={{
-            left: particle.originLeft,
-            top: particle.originTop,
-            width: particle.size,
-            height: particle.size,
-            background: particle.color,
-            // ✅ stronger glow (duller look comes from low glow + too-white palette)
-            boxShadow: `0 0 14px ${particle.color}, 0 0 26px ${particle.color}`,
-            filter: 'saturate(1.35) brightness(1.15)',
-          }}
-
-          initial={{ opacity: 0, scale: 0.2, x: 0, y: 0 }}
-          animate={{
-            opacity: [0, 1, 0.9, 0],
-            scale: [0.2, 1.2, 1, 0.2],
-            x: [0, particle.x],
-            y: [0, particle.y],
-          }}
-          transition={{ duration: 1.05, ease: 'easeOut', delay: particle.delay }}
-
-        />
-      ))}
-    </motion.div>
-  );
-};
 
 const ScaledArtboard = ({ width, height, metricsMode, children }: ScaledArtboardProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -652,6 +667,272 @@ const PodiumBadge = ({ index, size }: PodiumBadgeProps) => (
     }}
   />
 );
+
+/* ═══════════════════════════════════════════════════════════
+   Trophy Win Overlay — chips fly to trophy → trophy explodes → panel pops up
+   ═══════════════════════════════════════════════════════════ */
+type WinAnimStage = 'FLY_TO_TROPHY' | 'TROPHY_EXPLODE' | 'PANEL';
+
+type TrophyWinOverlayProps = {
+  chipSrc: string;
+  bets: BetsState;
+  winnerItem: ItemSpec;
+  winAmountLabel: string;
+  rankRows: { name: string; diamonds: number }[];
+};
+
+/* Trophy icon center in artboard coordinates */
+const TROPHY_CENTER = { left: 43, top: 78 } as const;
+
+/* Golden explosion particles for the trophy burst */
+type TrophyParticle = {
+  id: number;
+  angle: number;
+  dist: number;
+  size: number;
+  delay: number;
+};
+
+const buildTrophyExplosion = (): TrophyParticle[] => {
+  const particles: TrophyParticle[] = [];
+  const count = 28;
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      id: i,
+      angle: (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.3,
+      dist: 30 + Math.random() * 60,
+      size: 3 + Math.random() * 6,
+      delay: Math.random() * 0.1,
+    });
+  }
+  return particles;
+};
+
+const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows }: TrophyWinOverlayProps) => {
+  const [stage, setStage] = useState<WinAnimStage>('FLY_TO_TROPHY');
+  const explosionParticles = useMemo(() => buildTrophyExplosion(), []);
+
+  /* Collect items that have bets on them */
+  const betChips = useMemo(() => {
+    const chips: { id: ItemId; left: number; top: number }[] = [];
+    for (const item of ITEMS) {
+      if (bets[item.id] > 0) {
+        chips.push({
+          id: item.id,
+          left: item.left + item.width / 2 - 20,
+          top: item.top + item.height / 2 - 20,
+        });
+      }
+    }
+    return chips;
+  }, [bets]);
+
+  useEffect(() => {
+    /* Chips fly for 0.7s → trophy explodes for 0.6s → panel */
+    const t1 = window.setTimeout(() => setStage('TROPHY_EXPLODE'), 700);
+    const t2 = window.setTimeout(() => setStage('PANEL'), 1300);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return (
+    <>
+      {/* ── Stage 1: Chips fly from each bet position → trophy ── */}
+      {stage === 'FLY_TO_TROPHY' && betChips.map((chip, i) => (
+        <motion.div
+          key={chip.id}
+          className="absolute z-[530] pointer-events-none"
+          style={{ width: 40, height: 40 }}
+          initial={{ left: chip.left, top: chip.top, scale: 1, opacity: 1 }}
+          animate={{
+            left: TROPHY_CENTER.left - 20,
+            top: TROPHY_CENTER.top - 20,
+            scale: 0.5,
+            opacity: [1, 1, 0.8],
+          }}
+          transition={{
+            duration: 0.6,
+            delay: i * 0.06,
+            ease: [0.25, 0.1, 0.25, 1],
+          }}
+        >
+          <img src={chipSrc} alt="" className="h-full w-full object-contain" />
+          {/* Golden glow trail */}
+          <motion.div
+            className="absolute inset-0 rounded-full"
+            style={{
+              boxShadow: '0 0 16px 6px rgba(255,215,0,0.7), 0 0 32px 12px rgba(255,165,0,0.35)',
+            }}
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 0.2, repeat: 4 }}
+          />
+        </motion.div>
+      ))}
+
+      {/* ── Stage 2: Trophy golden explosion ── */}
+      {stage === 'TROPHY_EXPLODE' && (
+        <div className="absolute z-[530] pointer-events-none">
+          {/* Bright center flash at trophy */}
+          <motion.div
+            className="absolute rounded-full"
+            style={{
+              left: TROPHY_CENTER.left - 15,
+              top: TROPHY_CENTER.top - 15,
+              width: 30,
+              height: 30,
+              background: 'radial-gradient(circle, #FFD700 0%, rgba(255,165,0,0.8) 40%, transparent 70%)',
+              boxShadow: '0 0 40px 20px rgba(255,215,0,0.8), 0 0 80px 40px rgba(255,165,0,0.4)',
+            }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: [0, 3.5, 2, 0], opacity: [0, 1, 0.8, 0] }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          />
+
+          {/* Golden particles flying outward */}
+          {explosionParticles.map((p) => (
+            <motion.span
+              key={p.id}
+              className="absolute rounded-full"
+              style={{
+                left: TROPHY_CENTER.left,
+                top: TROPHY_CENTER.top,
+                width: p.size,
+                height: p.size,
+                background: `hsl(${40 + Math.random() * 20}, 100%, ${60 + Math.random() * 30}%)`,
+                boxShadow: '0 0 4px 2px rgba(255,215,0,0.8), 0 0 10px 4px rgba(255,165,0,0.4)',
+              }}
+              initial={{ opacity: 0, x: 0, y: 0, scale: 0.3 }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                x: [0, Math.cos(p.angle) * p.dist],
+                y: [0, Math.sin(p.angle) * p.dist],
+                scale: [0.3, 1.2, 0.3],
+              }}
+              transition={{
+                duration: 0.55,
+                delay: p.delay,
+                ease: 'easeOut',
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Stage 3: Win panel pops up with spring bounce ── */}
+      <AnimatePresence>
+        {stage === 'PANEL' && (
+          <motion.div
+            key="win-panel"
+            className="absolute z-[550]"
+            style={{ left: -6, top: 277, width: 414, height: 414 }}
+            initial={{ scale: 0, opacity: 0, y: 60 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+          >
+            <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
+
+            {/* Winner row */}
+            <motion.div
+              className="absolute"
+              style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.3 }}
+            >
+              <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
+                <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
+                <div
+                  style={{
+                    color: '#fff',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 800,
+                    fontSize: 20,
+                    lineHeight: '20px',
+                    textTransform: 'lowercase',
+                  }}
+                >
+                  {winnerItem.id}
+                </div>
+              </div>
+
+              <div
+                className="absolute flex items-center justify-end"
+                style={{
+                  right: 0,
+                  top: 0,
+                  height: 40,
+                  gap: 8,
+                  color: '#ffe56a',
+                  fontFamily: 'Inria Serif, serif',
+                  fontSize: 30,
+                  fontWeight: 800,
+                  textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <img src="/image2/diamond.png" alt="" className="h-[22px] w-[22px] object-contain" />
+                <span>{winAmountLabel}</span>
+              </div>
+            </motion.div>
+
+            {/* Leaderboard rows */}
+            {rankRows.slice(0, 3).map((row, idx) => (
+              <motion.div
+                key={`${row.name}-${idx}`}
+                className="absolute"
+                style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 + idx * 0.12, duration: 0.3 }}
+              >
+                <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
+                  <img src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]} alt="" className="h-full w-full object-contain" />
+                </div>
+
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 40,
+                    top: 12,
+                    width: 160,
+                    color: '#fff',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 700,
+                    fontSize: 20,
+                    lineHeight: '20px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {row.name}
+                </div>
+
+                <div
+                  className="absolute flex items-center justify-end"
+                  style={{
+                    right: 0,
+                    top: 12,
+                    width: 110,
+                    gap: 6,
+                    color: '#ffe9ff',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 800,
+                    fontSize: 20,
+                    lineHeight: '20px',
+                    textShadow: '0 1px 0 rgba(0,0,0,0.35)',
+                  }}
+                >
+                  <img src="/image2/diamond.png" alt="" className="h-[16px] w-[16px] object-contain" />
+                  {formatK(row.diamonds)}
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
 
 const GamePage = () => {
   const flags = useMemo(() => {
@@ -1137,12 +1418,12 @@ const GamePage = () => {
 
   return (
     <ScaledArtboard width={ARTBOARD.width} height={ARTBOARD.height} metricsMode={flags.metrics}>
-      <div className={`relative h-full w-full ${debugClass(DEBUG)}`} style={{ background: '#8DA6DE' }}>
+      <div className={`relative h-full w-full ${debugClass(DEBUG)}`} style={{ background: isAdvanceMode ? '#C46B5A' : '#8DA6DE' }}>
         <img
           src={isAdvanceMode ? '/image2/advance_bg.png' : '/image2/city_background.png'}
           alt=""
           className="absolute z-0 object-cover"
-          style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: 'overlay', opacity: 1 }}
+          style={{ left: 0, top: 0, width: 477, height: 735, mixBlendMode: isAdvanceMode ? 'normal' : 'overlay', opacity: 1 }}
         />
 
 
@@ -1290,8 +1571,8 @@ const GamePage = () => {
               onClick={iconBtn.onClick}
               className="relative flex items-center justify-center"
               style={{
-                width: 30,
-                height: 30,
+                width: 33,
+                height: 33,
                 border: 'none',
                 background: 'transparent',
                 cursor: canOpenSystemModal || iconBtn.key === 'close' ? 'pointer' : 'default',
@@ -1952,7 +2233,7 @@ const GamePage = () => {
             className="absolute z-10 overflow-hidden"
             style={{
               left: 25,
-              top: 195,
+              top: 203,
               width: 343,
               height: 18,
               borderRadius: 20,
@@ -1976,7 +2257,7 @@ const GamePage = () => {
             const xPos = 47 + idx * spacing;
 
             return (
-              <div key={idx} className="absolute z-20 flex flex-col items-center" style={{ left: xPos, top: 180, width: boxWidth }}>
+              <div key={idx} className="absolute z-20 flex flex-col items-center" style={{ left: xPos, top: 188, width: boxWidth }}>
                 <img src={box.src} alt="" className="object-contain" style={{ width: boxWidth, height: boxWidth }} />
               </div>
             );
@@ -1986,7 +2267,7 @@ const GamePage = () => {
             className="absolute z-10"
             style={{
               left: 27,
-              top: 236,
+              top: 244,
               width: 343,
               height: 45,
               borderRadius: 12,
@@ -1997,12 +2278,12 @@ const GamePage = () => {
           />
 
 
-          <div className="absolute z-20 flex items-center" style={{ left: 40, top: 250, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+          <div className="absolute z-20 flex items-center" style={{ left: 40, top: 258, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
             Result
           </div>
 
           <div className="absolute z-20" style={{
-            left: 92.5, top: 246, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
+            left: 92.5, top: 254, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
               ? 'linear-gradient(180deg, #D95B48 -6.25%, #FFFFFF 50%, #D95B48 106.25%)'
               : 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)',
             borderImageSlice: 1
@@ -2011,7 +2292,7 @@ const GamePage = () => {
           {RESULT_POSITIONS.map((pos, idx) => {
             const src = resultSrcs[idx] ?? INITIAL_RESULT_SRCS[idx];
             return (
-              <img key={`${src}-${idx}`} src={src} alt="" className="absolute z-20 object-contain" style={{ left: pos.left - 4, top: pos.top - 444, width: pos.width, height: pos.height, transform: pos.rotate ? `rotate(${pos.rotate}deg)` : undefined, transformOrigin: 'center' }} />
+              <img key={`${src}-${idx}`} src={src} alt="" className="absolute z-20 object-contain" style={{ left: pos.left - 4, top: pos.top - 436, width: pos.width, height: pos.height, transform: pos.rotate ? `rotate(${pos.rotate}deg)` : undefined, transformOrigin: 'center' }} />
             );
           })}
         </div>
@@ -2078,100 +2359,15 @@ const GamePage = () => {
             >
               <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
 
-              {/* ✅ WIN PANEL (match screenshot) */}
+              {/* ✅ WIN PANEL — Trophy animation */}
               {resultKind === 'WIN' && winnerItem ? (
-                <div className="absolute" style={{ left: -6, top: 277, width: 414, height: 414 }}>
-                  <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
-
-                  {/* winner row like your WIN screenshot */}
-                  <div className="absolute" style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}>
-                    <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
-                      <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
-                      <div
-                        style={{
-                          color: '#fff',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 800,
-                          fontSize: 20,
-                          lineHeight: '20px',
-                          textTransform: 'lowercase',
-                        }}
-                      >
-                        {winnerItem.id}
-                      </div>
-                    </div>
-
-                    <div
-                      className="absolute flex items-center justify-end"
-                      style={{
-                        right: 0,
-                        top: 0,
-                        height: 40,
-                        gap: 8,
-                        color: '#ffe56a',
-                        fontFamily: 'Inria Serif, serif',
-                        fontSize: 30,
-                        fontWeight: 800,
-                        textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <img src="/image2/diamond.png" alt="" className="h-[22px] w-[22px] object-contain" />
-                      <span>{winAmountLabel}</span>
-                    </div>
-                  </div>
-
-                  {/* leaderboard rows (same as your existing win panel) */}
-                  {rankRows.slice(0, 3).map((row, idx) => (
-                    <div
-                      key={`${row.name}-${idx}`}
-                      className="absolute"
-                      style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
-                    >
-                      <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
-                        <img src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]} alt="" className="h-full w-full object-contain" />
-                      </div>
-
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: 40,
-                          top: 12,
-                          width: 160,
-                          color: '#fff',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 700,
-                          fontSize: 20,
-                          lineHeight: '20px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {row.name}
-                      </div>
-
-                      <div
-                        className="absolute flex items-center justify-end"
-                        style={{
-                          right: 0,
-                          top: 12,
-                          width: 110,
-                          gap: 6,
-                          color: '#ffe9ff',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 800,
-                          fontSize: 20,
-                          lineHeight: '20px',
-                          textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                        }}
-                      >
-                        <img src="/image2/diamond.png" alt="" className="h-[16px] w-[16px] object-contain" />
-                        {formatK(row.diamonds)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TrophyWinOverlay
+                  chipSrc={CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png'}
+                  bets={bets}
+                  winnerItem={winnerItem}
+                  winAmountLabel={winAmountLabel}
+                  rankRows={rankRows}
+                />
               ) : (
                 /* ✅ NO BET + LOSE PANEL */
                 <div className="absolute" style={{ left: 26, top: 320, width: 350, height: 300, overflow: 'hidden' }}>
