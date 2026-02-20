@@ -8,7 +8,7 @@ const ARTBOARD = { width: 402, height: 735 } as const;
 
 const BET_SECONDS = 20;
 const DRAW_SECONDS = 7;
-const SHOW_SECONDS = 5;
+const SHOW_SECONDS = 12;
 const PRE_DRAW_MS = 2000;
 
 const GAME_ON_MS = 1200;
@@ -242,33 +242,41 @@ const buildFireworkGroups = (): FireworkGroup[] => {
     { x: 300, y: 60 },
   ];
 
-  return origins.map((origin, gi) => {
-    const dotCount = 22 + Math.floor(Math.random() * 12);
-    const burstDelay = gi * 0.25;
-    const dots: FireworkDot[] = [];
+  const groups: FireworkGroup[] = [];
+  const waves = 3;
 
-    for (let i = 0; i < dotCount; i++) {
-      const angle = (i / dotCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-      const dist = 35 + Math.random() * 65;
-      dots.push({
-        id: `fw-${gi}-${i}`,
-        cx: origin.x,
-        cy: origin.y,
-        dx: Math.cos(angle) * dist,
-        dy: Math.sin(angle) * dist,
-        size: 2.5 + Math.random() * 4,
-        delay: burstDelay + Math.random() * 0.08,
+  for (let wave = 0; wave < waves; wave++) {
+    const waveDelay = wave * 2.2;
+    origins.forEach((origin, gi) => {
+      const dotCount = 22 + Math.floor(Math.random() * 12);
+      const burstDelay = waveDelay + gi * 0.25;
+      const dots: FireworkDot[] = [];
+
+      for (let i = 0; i < dotCount; i++) {
+        const angle = (i / dotCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const dist = 35 + Math.random() * 65;
+        dots.push({
+          id: `fw-${wave}-${gi}-${i}`,
+          cx: origin.x + (Math.random() - 0.5) * 30 * wave,
+          cy: origin.y + (Math.random() - 0.5) * 30 * wave,
+          dx: Math.cos(angle) * dist,
+          dy: Math.sin(angle) * dist,
+          size: 2.5 + Math.random() * 4,
+          delay: burstDelay + Math.random() * 0.08,
+        });
+      }
+
+      groups.push({
+        id: `fwg-${wave}-${gi}`,
+        dots,
+        flashX: origin.x + (Math.random() - 0.5) * 30 * wave,
+        flashY: origin.y + (Math.random() - 0.5) * 30 * wave,
+        flashDelay: burstDelay,
       });
-    }
+    });
+  }
 
-    return {
-      id: `fwg-${gi}`,
-      dots,
-      flashX: origin.x,
-      flashY: origin.y,
-      flashDelay: burstDelay,
-    };
-  });
+  return groups;
 };
 
 type FireworksOverlayProps = { seed: number };
@@ -685,6 +693,7 @@ type TrophyWinOverlayProps = {
   winnerItem: ItemSpec;
   winAmountLabel: string;
   rankRows: { name: string; diamonds: number }[];
+  onComplete?: () => void;
 };
 
 /* Trophy icon center in artboard coordinates */
@@ -701,21 +710,26 @@ type TrophyParticle = {
 
 const buildTrophyExplosion = (): TrophyParticle[] => {
   const particles: TrophyParticle[] = [];
-  const count = 28;
-  for (let i = 0; i < count; i++) {
-    particles.push({
-      id: i,
-      angle: (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.3,
-      dist: 30 + Math.random() * 60,
-      size: 3 + Math.random() * 6,
-      delay: Math.random() * 0.1,
-    });
+  const waves = 3;
+  const perWave = 20;
+  let id = 0;
+  for (let w = 0; w < waves; w++) {
+    for (let i = 0; i < perWave; i++) {
+      particles.push({
+        id: id++,
+        angle: (i / perWave) * Math.PI * 2 + (Math.random() - 0.5) * 0.4,
+        dist: 25 + Math.random() * 55,
+        size: 3 + Math.random() * 5,
+        delay: w * 0.8 + Math.random() * 0.15,
+      });
+    }
   }
   return particles;
 };
 
-const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows }: TrophyWinOverlayProps) => {
+const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows, onComplete }: TrophyWinOverlayProps) => {
   const [stage, setStage] = useState<WinAnimStage>('FLY_TO_TROPHY');
+  const [showCoins, setShowCoins] = useState(false);
   const explosionParticles = useMemo(() => buildTrophyExplosion(), []);
 
   /* Collect items that have bets on them */
@@ -733,11 +747,23 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows 
     return chips;
   }, [bets]);
 
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
-    /* Chips fly for 0.7s → trophy explodes for 0.6s → panel */
-    const t1 = window.setTimeout(() => setStage('TROPHY_EXPLODE'), 700);
-    const t2 = window.setTimeout(() => setStage('PANEL'), 1300);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    /*
+      Timeline (from start):
+      0.0s  — chips fly to trophy
+      0.7s  — coin explosion + fireworks start
+      2.7s  — leaderboard panel appears (coins + fireworks still going)
+      4.7s  — coin explosion stops (fireworks + panel continue)
+      7.7s  — everything stops (onComplete fires)
+    */
+    const t1 = window.setTimeout(() => { setStage('TROPHY_EXPLODE'); setShowCoins(true); }, 700);
+    const t2 = window.setTimeout(() => setStage('PANEL'), 2700);
+    const t3 = window.setTimeout(() => setShowCoins(false), 4700);
+    const t4 = window.setTimeout(() => { onCompleteRef.current?.(); }, 7700);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, []);
 
   return (
@@ -774,54 +800,61 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows 
         </motion.div>
       ))}
 
-      {/* ── Stage 2: Trophy golden explosion ── */}
-      {stage === 'TROPHY_EXPLODE' && (
+      {/* ── Coins bursting upward from trophy (independent of stage) ── */}
+      {showCoins && (
         <div className="absolute z-[530] pointer-events-none">
-          {/* Bright center flash at trophy */}
+          {/* Tiny flash — trophy stays visible */}
           <motion.div
             className="absolute rounded-full"
             style={{
-              left: TROPHY_CENTER.left - 15,
-              top: TROPHY_CENTER.top - 15,
-              width: 30,
-              height: 30,
-              background: 'radial-gradient(circle, #FFD700 0%, rgba(255,165,0,0.8) 40%, transparent 70%)',
-              boxShadow: '0 0 40px 20px rgba(255,215,0,0.8), 0 0 80px 40px rgba(255,165,0,0.4)',
+              left: TROPHY_CENTER.left - 6,
+              top: TROPHY_CENTER.top - 6,
+              width: 12,
+              height: 12,
+              background: 'radial-gradient(circle, rgba(255,255,200,0.8) 0%, rgba(255,215,0,0.3) 60%, transparent 100%)',
             }}
             initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: [0, 3.5, 2, 0], opacity: [0, 1, 0.8, 0] }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
+            animate={{ scale: [0, 2, 0], opacity: [0, 0.8, 0] }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
           />
 
-          {/* Golden particles flying outward */}
-          {explosionParticles.map((p) => (
-            <motion.span
-              key={p.id}
-              className="absolute rounded-full"
-              style={{
-                left: TROPHY_CENTER.left,
-                top: TROPHY_CENTER.top,
-                width: p.size,
-                height: p.size,
-                background: `hsl(${40 + Math.random() * 20}, 100%, ${60 + Math.random() * 30}%)`,
-                boxShadow: '0 0 4px 2px rgba(255,215,0,0.8), 0 0 10px 4px rgba(255,165,0,0.4)',
-              }}
-              initial={{ opacity: 0, x: 0, y: 0, scale: 0.3 }}
-              animate={{
-                opacity: [0, 1, 1, 0],
-                x: [0, Math.cos(p.angle) * p.dist],
-                y: [0, Math.sin(p.angle) * p.dist],
-                scale: [0.3, 1.2, 0.3],
-              }}
-              transition={{
-                duration: 0.55,
-                delay: p.delay,
-                ease: 'easeOut',
-              }}
-            />
-          ))}
+          {/* Coins fountain: up then arc down */}
+          {explosionParticles.map((p) => {
+            const spreadX = Math.cos(p.angle) * p.dist * 0.8;
+            const peakY = -(45 + p.dist * 0.9);
+            const fallY = 40 + p.dist * 0.6;
+            const coinSize = 3 + Math.random() * 4;
+            return (
+              <motion.div
+                key={p.id}
+                className="absolute rounded-full"
+                style={{
+                  left: TROPHY_CENTER.left,
+                  top: TROPHY_CENTER.top,
+                  width: coinSize,
+                  height: coinSize,
+                  background: `radial-gradient(circle at 35% 35%, #FFE066, #FFB800, #E8960C)`,
+                  boxShadow: '0 0 3px rgba(255,200,50,0.7)',
+                  border: '0.5px solid rgba(255,230,150,0.5)',
+                }}
+                initial={{ opacity: 0, x: 0, y: 0, scale: 0.3 }}
+                animate={{
+                  opacity: [0, 1, 1, 0.8, 0],
+                  x: [0, spreadX * 0.3, spreadX * 0.6, spreadX],
+                  y: [0, peakY, peakY * 0.3, fallY],
+                  scale: [0.3, 1, 0.9, 0.4],
+                }}
+                transition={{
+                  duration: 1.2 + Math.random() * 0.4,
+                  delay: p.delay,
+                  ease: [0.22, 0.68, 0.36, 1],
+                }}
+              />
+            );
+          })}
         </div>
       )}
+
 
       {/* ── Stage 3: Win panel pops up with spring bounce ── */}
       <AnimatePresence>
@@ -838,45 +871,45 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows 
 
             {/* Winner row */}
             <motion.div
-              className="absolute"
-              style={{ left: 40, top: 166, width: 334, height: 40, overflow: 'hidden' }}
+              className="absolute flex items-center"
+              style={{ left: 70, top: 166, width: 270, height: 44, overflow: 'hidden' }}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.3 }}
             >
-              <div className="absolute flex items-center" style={{ left: 0, top: 0, height: 40, gap: 10 }}>
-                <img src={winnerItem.src} alt="" className="h-[34px] w-[34px] object-contain" />
-                <div
-                  style={{
-                    color: '#fff',
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 800,
-                    fontSize: 20,
-                    lineHeight: '20px',
-                    textTransform: 'lowercase',
-                  }}
-                >
-                  {winnerItem.id}
-                </div>
-              </div>
-
+              <img src={winnerItem.src} alt="" style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0 }} />
               <div
-                className="absolute flex items-center justify-end"
                 style={{
-                  right: 0,
-                  top: 0,
-                  height: 40,
-                  gap: 8,
-                  color: '#ffe56a',
-                  fontFamily: 'Inria Serif, serif',
-                  fontSize: 30,
+                  marginLeft: 10,
+                  width: 120,
+                  color: '#fff',
+                  fontFamily: 'Inter, system-ui, sans-serif',
                   fontWeight: 800,
-                  textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                  fontSize: 24,
+                  lineHeight: '24px',
+                  textTransform: 'lowercase',
                   whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
-                <img src="/image2/diamond.png" alt="" className="h-[22px] w-[22px] object-contain" />
-                <span>{winAmountLabel}</span>
+                {winnerItem.id}
+              </div>
+
+              <div className="flex items-center" style={{ gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
+                <img src="/image2/diamond.png" alt="" style={{ width: 22, height: 22, flexShrink: 0 }} />
+                <span
+                  style={{
+                    color: '#ffe56a',
+                    fontFamily: 'Inria Serif, serif',
+                    fontSize: 28,
+                    fontWeight: 800,
+                    textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {winAmountLabel}
+                </span>
               </div>
             </motion.div>
 
@@ -884,52 +917,51 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItem, winAmountLabel, rankRows 
             {rankRows.slice(0, 3).map((row, idx) => (
               <motion.div
                 key={`${row.name}-${idx}`}
-                className="absolute"
-                style={{ left: 56, top: 238 + idx * 52, width: 300, height: 44, overflow: 'hidden' }}
+                className="absolute flex items-center"
+                style={{ left: 70, top: 238 + idx * 56, width: 270, height: 48, overflow: 'hidden' }}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 + idx * 0.12, duration: 0.3 }}
               >
-                <div className="absolute" style={{ left: 0, top: 8, width: 28, height: 28 }}>
-                  <img src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]} alt="" className="h-full w-full object-contain" />
-                </div>
-
+                <img
+                  src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
+                  alt=""
+                  style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
+                />
                 <div
                   style={{
-                    position: 'absolute',
-                    left: 40,
-                    top: 12,
-                    width: 160,
+                    marginLeft: 10,
+                    width: 120,
                     color: '#fff',
-                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontFamily: 'Inria Serif, serif',
+                    fontStyle: 'italic',
                     fontWeight: 700,
-                    fontSize: 20,
-                    lineHeight: '20px',
+                    fontSize: 22,
+                    lineHeight: '24px',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                   }}
                 >
                   {row.name}
                 </div>
 
-                <div
-                  className="absolute flex items-center justify-end"
-                  style={{
-                    right: 0,
-                    top: 12,
-                    width: 110,
-                    gap: 6,
-                    color: '#ffe9ff',
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 800,
-                    fontSize: 20,
-                    lineHeight: '20px',
-                    textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                  }}
-                >
-                  <img src="/image2/diamond.png" alt="" className="h-[16px] w-[16px] object-contain" />
-                  {formatK(row.diamonds)}
+                <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 85 }}>
+                  <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                  <span
+                    style={{
+                      color: '#ffe8a9',
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      fontWeight: 700,
+                      fontSize: 18,
+                      lineHeight: '18px',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {formatK(row.diamonds)}
+                  </span>
                 </div>
               </motion.div>
             ))}
@@ -1070,7 +1102,7 @@ const GamePage = () => {
   const [mode, setMode] = useState<Mode>('BASIC');
   const isAdvanceMode = mode === 'ADVANCE';
   const [phase, setPhase] = useState<Phase>('BETTING');
-  const [timeLeft, setTimeLeft] = useState(0); 
+  const [timeLeft, setTimeLeft] = useState(0);
   const [showGameOn, setShowGameOn] = useState(true);
 
   const [showPreDraw, setShowPreDraw] = useState(false);
@@ -1088,7 +1120,7 @@ const GamePage = () => {
   const [resultSrcs, setResultSrcs] = useState<string[]>(INITIAL_RESULT_SRCS);
   const [resultKind, setResultKind] = useState<ResultKind>('LOSE');
 
-  
+
 
   const [showResultBoard, setShowResultBoard] = useState(false);
 
@@ -1108,7 +1140,42 @@ const GamePage = () => {
   const [drawHighlightIndex, setDrawHighlightIndex] = useState(0);
   const [showFireworks, setShowFireworks] = useState(false);
   const [fireworksSeed, setFireworksSeed] = useState(0);
+  const [trophyCoins, setTrophyCoins] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
+  const trophyCoinIdRef = useRef(0);
 
+  /* Continuous trophy coin explosion during BETTING */
+  useEffect(() => {
+    if (phase !== 'BETTING') {
+      setTrophyCoins([]);
+      return;
+    }
+
+    const spawnBurst = () => {
+      const count = 5 + Math.floor(Math.random() * 4);
+      const newCoins = Array.from({ length: count }, (_, i) => {
+        const id = trophyCoinIdRef.current + i + 1;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 18 + Math.random() * 30;
+        return {
+          id,
+          x: Math.cos(angle) * dist,
+          y: Math.sin(angle) * dist - 10,
+          size: 5 + Math.random() * 6,
+          delay: Math.random() * 0.08,
+        };
+      });
+      trophyCoinIdRef.current += count;
+      setTrophyCoins((prev) => [...prev, ...newCoins]);
+      const coinIds = newCoins.map((c) => c.id);
+      window.setTimeout(() => {
+        setTrophyCoins((prev) => prev.filter((c) => !coinIds.includes(c.id)));
+      }, 700);
+    };
+
+    spawnBurst();
+    const interval = window.setInterval(spawnBurst, 800);
+    return () => window.clearInterval(interval);
+  }, [phase]);
 
   const floatingChipIdRef = useRef(0);
   const floatingChipTimeoutsRef = useRef<number[]>([]);
@@ -1116,35 +1183,35 @@ const GamePage = () => {
   const totalBet = useMemo(() => Object.values(bets).reduce((sum, val) => sum + val, 0), [bets]);
 
   /* Progress bar reaches each chest box at its threshold value */
-  
+
   // thresholds in order (must match visual order)
   const BOX_THRESHOLDS = [10000, 50000, 100000, 500000, 1000000] as const;
 
-// closed -> open chest image mapping (from your folder screenshot)
-const CHEST_OPEN_SRC_BY_THRESHOLD: Record<number, string> = {
-  10000: '/image2/chest_10k_open.png',
-  50000: '/image2/chest_50k_open.png',
-  100000: '/image2/chest_100k_open.png',
-  500000: '/image2/chest_500k_open.png',
-  1000000: '/image2/chest_1m_open.png',
-};
-const [openedChests, setOpenedChests] = useState<Record<number, boolean>>({
-  10000: false,
-  50000: false,
-  100000: false,
-  500000: false,
-  1000000: false,
-});
-// IMPORTANT: set your real reward amounts here (example values).
-// The popup in your screenshot shows 500, so adjust as needed per chest.
-const CHEST_REWARD_AMOUNT_BY_THRESHOLD: Record<number, number> = {
-  10000: 100,
-  50000: 200,
-  100000: 300,
-  500000: 400,
-  1000000: 500,
-};
-const isChestReady = (threshold: number) => todayWin >= threshold && !openedChests[threshold];
+  // closed -> open chest image mapping (from your folder screenshot)
+  const CHEST_OPEN_SRC_BY_THRESHOLD: Record<number, string> = {
+    10000: '/image2/chest_10k_open.png',
+    50000: '/image2/chest_50k_open.png',
+    100000: '/image2/chest_100k_open.png',
+    500000: '/image2/chest_500k_open.png',
+    1000000: '/image2/chest_1m_open.png',
+  };
+  const [openedChests, setOpenedChests] = useState<Record<number, boolean>>({
+    10000: false,
+    50000: false,
+    100000: false,
+    500000: false,
+    1000000: false,
+  });
+  // IMPORTANT: set your real reward amounts here (example values).
+  // The popup in your screenshot shows 500, so adjust as needed per chest.
+  const CHEST_REWARD_AMOUNT_BY_THRESHOLD: Record<number, number> = {
+    10000: 100,
+    50000: 200,
+    100000: 300,
+    500000: 400,
+    1000000: 500,
+  };
+  const isChestReady = (threshold: number) => todayWin >= threshold && !openedChests[threshold];
   const progressRatio = useMemo(() => {
     if (todayWin <= 0) return 0;
     const segmentWidth = 1 / BOX_THRESHOLDS.length; // each box = 20%
@@ -1158,17 +1225,17 @@ const isChestReady = (threshold: number) => todayWin >= threshold && !openedChes
     }
     return 1; // exceeded all thresholds
   }, [todayWin]);
-const openChest = (threshold: number) => {
-  // can ONLY open if it's ready (met threshold + currently not opened)
-  if (!isChestReady(threshold)) return;
+  const openChest = (threshold: number) => {
+    // can ONLY open if it's ready (met threshold + currently not opened)
+    if (!isChestReady(threshold)) return;
 
-  // mark opened
-  setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
+    // mark opened
+    setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
 
-  // show popup
-  const amount = CHEST_REWARD_AMOUNT_BY_THRESHOLD[threshold] ?? 0;
-  setChestPopup({ threshold, amount });
-};
+    // show popup
+    const amount = CHEST_REWARD_AMOUNT_BY_THRESHOLD[threshold] ?? 0;
+    setChestPopup({ threshold, amount });
+  };
   // FIXED: Pointer stops now correctly point to the center of each item
   const pointerStops = useMemo(() => {
     return POINTER_TOUR_ORDER.map((id) => {
@@ -1194,97 +1261,97 @@ const openChest = (threshold: number) => {
   }, [chipValues]);
 
   const beginRound = () => {
-  setPhase('BETTING');
-  setTimeLeft(BET_SECONDS);     // set now, countdown is paused while showPreDraw=true
-  setShowPreDraw(true);         // ✅ show game_on.png BEFORE betting
-};
+    setPhase('BETTING');
+    setTimeLeft(BET_SECONDS);     // set now, countdown is paused while showPreDraw=true
+    setShowPreDraw(true);         // ✅ show game_on.png BEFORE betting
+  };
 
 
-const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
-const placeGroupBet = (group: ItemId[]) => {
-  if (!canBet) return;
+  const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
+  const placeGroupBet = (group: ItemId[]) => {
+    if (!canBet) return;
 
-  // Unique + valid ids only
-  const ids = Array.from(new Set(group));
+    // Unique + valid ids only
+    const ids = Array.from(new Set(group));
 
-  const totalCost = selectedChip * ids.length;
-  if (balance < totalCost) return; // require enough balance to bet on ALL items
+    const totalCost = selectedChip * ids.length;
+    if (balance < totalCost) return; // require enough balance to bet on ALL items
 
-  // 1) Update local UI state in one shot
-  setBalance((prev) => prev - totalCost);
-  setLifetimeBet((prev) => prev + totalCost);
+    // 1) Update local UI state in one shot
+    setBalance((prev) => prev - totalCost);
+    setLifetimeBet((prev) => prev + totalCost);
 
-  setBets((prev) => {
-    const next = { ...prev };
-    for (const id of ids) next[id] = (next[id] ?? 0) + selectedChip;
-    return next;
-  });
+    setBets((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = (next[id] ?? 0) + selectedChip;
+      return next;
+    });
 
-  // 2) Pulse each item quickly (nice feedback)
-  ids.forEach((id, idx) => {
-    window.setTimeout(() => {
-      setItemPulse((prev) => ({ id, key: prev.key + 1 }));
-    }, idx * 70);
-  });
+    // 2) Pulse each item quickly (nice feedback)
+    ids.forEach((id, idx) => {
+      window.setTimeout(() => {
+        setItemPulse((prev) => ({ id, key: prev.key + 1 }));
+      }, idx * 70);
+    });
 
-  // 3) Optional: small floating chips (same rules as single bet)
-  // 3) Floating chips: ALWAYS during BETTING, from selected chip -> each item
-if (phase === 'BETTING') {
-  const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
-  const start = getSelectedChipStartPosition();
+    // 3) Optional: small floating chips (same rules as single bet)
+    // 3) Floating chips: ALWAYS during BETTING, from selected chip -> each item
+    if (phase === 'BETTING') {
+      const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
+      const start = getSelectedChipStartPosition();
 
-  ids.forEach((id, idx) => {
-    const item = itemMap[id];
-    if (!item) return;
+      ids.forEach((id, idx) => {
+        const item = itemMap[id];
+        if (!item) return;
 
-    window.setTimeout(() => {
-      const chipId = floatingChipIdRef.current + 1;
-      floatingChipIdRef.current = chipId;
+        window.setTimeout(() => {
+          const chipId = floatingChipIdRef.current + 1;
+          floatingChipIdRef.current = chipId;
 
-      const endLeft = item.left + item.width / 2 - 22;
-      const endTop = item.top + item.height / 2 - 22;
+          const endLeft = item.left + item.width / 2 - 22;
+          const endTop = item.top + item.height / 2 - 22;
 
-      setFloatingBetChips((prev) => [
-        ...prev,
-        { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
-      ]);
+          setFloatingBetChips((prev) => [
+            ...prev,
+            { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
+          ]);
 
-      const removeId = window.setTimeout(() => {
-        setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
-        floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
-      }, 700);
+          const removeId = window.setTimeout(() => {
+            setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
+            floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
+          }, 700);
 
-      floatingChipTimeoutsRef.current.push(removeId);
-    }, idx * 60);
-  });
-  }
+          floatingChipTimeoutsRef.current.push(removeId);
+        }, idx * 60);
+      });
+    }
 
-  // 4) Submit bets to API in sequence with a running balance
-  let runningBalance = balance;
-  ids.forEach((itemId) => {
-    runningBalance -= selectedChip;
+    // 4) Submit bets to API in sequence with a running balance
+    let runningBalance = balance;
+    ids.forEach((itemId) => {
+      runningBalance -= selectedChip;
 
-    const elementId = elementApiIds[itemId] || 0;
-    fetch('/game/player/gaming/participants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        player_id: PLAYER_ID,
-        balance: runningBalance,
-        bet: selectedChip,
-        element: elementId,
-      }),
-    })
-      .then((res) => {
-        if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
+      const elementId = elementApiIds[itemId] || 0;
+      fetch('/game/player/gaming/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_id: PLAYER_ID,
+          balance: runningBalance,
+          bet: selectedChip,
+          element: elementId,
+        }),
       })
-      .catch((err) => console.warn('[API] Bet submit error:', err));
-  });
-};
+        .then((res) => {
+          if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
+        })
+        .catch((err) => console.warn('[API] Bet submit error:', err));
+    });
+  };
 
 
   const hasBlockingOverlay =
-  activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard || chestPopup !== null;
+    activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard || chestPopup !== null;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
   const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
 
@@ -1294,16 +1361,16 @@ if (phase === 'BETTING') {
     };
   }, []);
   useEffect(() => {
-  beginRound();
-  
-}, []);
+    beginRound();
+
+  }, []);
 
 
   useEffect(() => {
-  if (!showGameOn) return;
-  const id = window.setTimeout(() => setShowGameOn(false), GAME_ON_MS);
-  return () => window.clearTimeout(id);
-}, [showGameOn]);
+    if (!showGameOn) return;
+    const id = window.setTimeout(() => setShowGameOn(false), GAME_ON_MS);
+    return () => window.clearTimeout(id);
+  }, [showGameOn]);
 
 
 
@@ -1377,18 +1444,18 @@ if (phase === 'BETTING') {
     []
   );
   useEffect(() => {
-  if (!showPreDraw) return;
+    if (!showPreDraw) return;
 
-  if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
-
-  preDrawTimeoutRef.current = window.setTimeout(() => {
-    setShowPreDraw(false); // ✅ after this, BET countdown starts automatically
-  }, PRE_DRAW_MS);
-
-  return () => {
     if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
-  };
-}, [showPreDraw]);
+
+    preDrawTimeoutRef.current = window.setTimeout(() => {
+      setShowPreDraw(false); // ✅ after this, BET countdown starts automatically
+    }, PRE_DRAW_MS);
+
+    return () => {
+      if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
+    };
+  }, [showPreDraw]);
 
 
   useEffect(() => {
@@ -1400,10 +1467,10 @@ if (phase === 'BETTING') {
       winnerRef.current = picked;
       setWinnerId(picked);
 
-      
+
       setPhase('DRAWING');
-setTimeLeft(DRAW_SECONDS);
-return;
+      setTimeLeft(DRAW_SECONDS);
+      return;
 
     }
 
@@ -1484,7 +1551,7 @@ return;
 
       beginRound();
 
-      
+
     }
   }, [
     activeModal,
@@ -1531,32 +1598,32 @@ return;
       })
       .catch((err) => console.warn('[API] Bet submit error:', err));
 
-    
-      if (phase === 'BETTING') {
-  const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
-  const item = itemMap[itemId];
-  if (!chipSrc || !item) return;
 
-  const chipId = floatingChipIdRef.current + 1;
-  floatingChipIdRef.current = chipId;
+    if (phase === 'BETTING') {
+      const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
+      const item = itemMap[itemId];
+      if (!chipSrc || !item) return;
 
-  const start = getSelectedChipStartPosition();
+      const chipId = floatingChipIdRef.current + 1;
+      floatingChipIdRef.current = chipId;
 
-  const endLeft = item.left + item.width / 2 - 22;
-  const endTop = item.top + item.height / 2 - 22;
+      const start = getSelectedChipStartPosition();
 
-  setFloatingBetChips((prev) => [
-    ...prev,
-    { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
-  ]);
+      const endLeft = item.left + item.width / 2 - 22;
+      const endTop = item.top + item.height / 2 - 22;
 
-  const removeId = window.setTimeout(() => {
-    setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
-    floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
-  }, 700);
+      setFloatingBetChips((prev) => [
+        ...prev,
+        { id: chipId, left: start.left, top: start.top, endLeft, endTop, src: chipSrc },
+      ]);
 
-  floatingChipTimeoutsRef.current.push(removeId);
-}
+      const removeId = window.setTimeout(() => {
+        setFloatingBetChips((prev) => prev.filter((entry) => entry.id !== chipId));
+        floatingChipTimeoutsRef.current = floatingChipTimeoutsRef.current.filter((t) => t !== removeId);
+      }, 700);
+
+      floatingChipTimeoutsRef.current.push(removeId);
+    }
   };
 
   const handleAdvanceClick = () => {
@@ -1565,37 +1632,40 @@ return;
   };
 
   const getSelectedChipStartPosition = (value = selectedChip) => {
-  const index = chipValues.indexOf(value);
-  if (index === -1) return { left: 200, top: 520 };
+    const index = chipValues.indexOf(value);
+    if (index === -1) return { left: 200, top: 520 };
 
-  // Matches your slider container exactly:
-  // <div style={{ left: 30, top: 88, width: 340, height: 80 }} ... />
-  const containerLeft = 30;
-  const containerTop = 88;
-  const containerWidth = 340;
-  const containerHeight = 80;
+    // Matches your slider container exactly:
+    // Parent: <div style={{ left: 4, top: 444, ... }}>
+    //   Child: <div style={{ left: 30, top: 88, width: 340, height: 80 }} ... />
+    const parentLeft = 4;
+    const parentTop = 444;
+    const containerLeft = parentLeft + 30;
+    const containerTop = parentTop + 88;
+    const containerWidth = 340;
+    const containerHeight = 80;
 
-  const n = chipValues.length;
+    const n = chipValues.length;
 
-  // Must match the sizing logic in your render
-  const baseSize = n > 5 ? 48 : 54;
-  const activeSize = baseSize + 12;
+    // Must match the sizing logic in your render
+    const baseSize = n > 5 ? 48 : 54;
+    const activeSize = baseSize + 12;
 
-  // Build the exact widths array (because active chip is bigger)
-  const widths = chipValues.map((v) => (v === value ? activeSize : baseSize));
-  const totalW = widths.reduce((s, w) => s + w, 0);
+    // Build the exact widths array (because active chip is bigger)
+    const widths = chipValues.map((v) => (v === value ? activeSize : baseSize));
+    const totalW = widths.reduce((s, w) => s + w, 0);
 
-  // justify-evenly => (n + 1) equal gaps
-  const gap = (containerWidth - totalW) / (n + 1);
+    // justify-evenly => (n + 1) equal gaps
+    const gap = (containerWidth - totalW) / (n + 1);
 
-  // X position = left + gap + widths before + half current width
-  const beforeW = widths.slice(0, index).reduce((s, w) => s + w, 0);
-  const centerX = containerLeft + gap * (index + 1) + beforeW + widths[index] / 2;
-  const centerY = containerTop + containerHeight / 2;
+    // X position = left + gap + widths before + half current width
+    const beforeW = widths.slice(0, index).reduce((s, w) => s + w, 0);
+    const centerX = containerLeft + gap * (index + 1) + beforeW + widths[index] / 2;
+    const centerY = containerTop + containerHeight / 2;
 
-  // flying chip rendered 44x44 => offset by 22
-  return { left: centerX - 22, top: centerY - 22 };
-};
+    // flying chip rendered 44x44 => offset by 22
+    return { left: centerX - 22, top: centerY - 22 };
+  };
 
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
@@ -1644,25 +1714,25 @@ return;
         />
 
         <motion.img
-  src="/image2/flare_circular.png"
-  alt=""
-  aria-hidden="true"
-  className="pointer-events-none absolute z-10 object-contain"
-  style={{
-    left: 276,
-    top: 5,
-    width: 149,
-    height: 149,
-    transformOrigin: '50% 50%',
-  }}
-  animate={{ rotate: 360 }}
-  transition={{
-    repeat: Infinity,
-    repeatType: "loop",
-    duration: 1,   // 🔥 much faster
-    ease: "linear"
-  }}
-/>
+          src="/image2/flare_circular.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute z-10 object-contain"
+          style={{
+            left: 276,
+            top: 5,
+            width: 149,
+            height: 149,
+            transformOrigin: '50% 50%',
+          }}
+          animate={{ rotate: 360 }}
+          transition={{
+            repeat: Infinity,
+            repeatType: "loop",
+            duration: 1,   // 🔥 much faster
+            ease: "linear"
+          }}
+        />
 
 
 
@@ -1737,7 +1807,7 @@ return;
 
 
         {/* Top action icon buttons */}
-        <div className="absolute z-50 flex items-center" style={{ left: 258, top: 9, gap: 3 }}>
+        <div className="absolute z-50 flex items-center" style={{ left: 243, top: 9, gap: 3 }}>
           {[
             {
               key: 'music',
@@ -1775,8 +1845,8 @@ return;
               onClick={iconBtn.onClick}
               className="relative flex items-center justify-center"
               style={{
-                width: 33,
-                height: 33,
+                width: 36,
+                height: 36,
                 border: 'none',
                 background: 'transparent',
                 cursor: canOpenSystemModal || iconBtn.key === 'close' ? 'pointer' : 'default',
@@ -1795,7 +1865,7 @@ return;
                   src={iconBtn.icon}
                   alt=""
                   className="relative object-contain"
-                  style={{ width: 16, height: 16 }}
+                  style={{ width: 18, height: 18 }}
                 />
               ) : (
                 <span
@@ -1823,15 +1893,43 @@ return;
           className="absolute z-40 overflow-hidden"
           style={{ left: 18, top: 53, width: 51, height: 50, borderRadius: 19.5 }}
         >
-            <motion.img
-    src={trophySrc}
-    alt=""
-    className="h-full w-full object-contain"
-    animate={{ y: [0, -2.2, 0] }}
-    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-  />
+          <motion.img
+            src={trophySrc}
+            alt=""
+            className="h-full w-full object-contain"
+            animate={{ y: [0, -2.2, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          />
 
         </button>
+
+        {/* Trophy coin explosion particles */}
+        <AnimatePresence>
+          {trophyCoins.map((coin) => (
+            <motion.div
+              key={coin.id}
+              className="pointer-events-none absolute z-[60] rounded-full"
+              style={{
+                left: 43,
+                top: 78,
+                width: coin.size,
+                height: coin.size,
+                background: `radial-gradient(circle at 35% 35%, #FFE066, #FFB800, #E8960C)`,
+                boxShadow: '0 0 4px rgba(255,200,50,0.8), 0 0 8px rgba(255,165,0,0.4)',
+                border: '0.5px solid rgba(255,230,150,0.6)',
+              }}
+              initial={{ opacity: 1, scale: 0.3, x: 0, y: 0 }}
+              animate={{
+                x: coin.x,
+                y: coin.y,
+                scale: [0.3, 1.1, 0.6],
+                opacity: [1, 1, 0],
+              }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.55, ease: 'easeOut', delay: coin.delay }}
+            />
+          ))}
+        </AnimatePresence>
 
         <div className="absolute z-50" style={{ left: 29, top: 98, height: 16 }}>
           <svg height="16">
@@ -2207,12 +2305,13 @@ return;
                 <div
                   className="pointer-events-none absolute z-40 flex items-center rounded-full"
                   style={{
-                    left: Number(it.betLabel.left) - Number(it.left),
-                    top: Number(it.betLabel.top) - Number(it.top),
-                    height: 16,
-                    paddingLeft: 5,
+                    left: '50%',
+                    bottom: -18,
+                    transform: 'translateX(-50%)',
+                    height: 18,
+                    paddingLeft: 6,
                     paddingRight: 6,
-                    gap: 2,
+                    gap: 3,
                     background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
                     border: '1px solid rgba(0,0,0,0.25)',
                     boxShadow: '0 1px 4px rgba(0,0,0,0.35)',
@@ -2223,20 +2322,20 @@ return;
                       color: '#0b2a12',
                       fontFamily: 'Inter, system-ui, sans-serif',
                       fontWeight: 800,
-                      fontSize: 10.5,
-                      lineHeight: '10px',
+                      fontSize: 11,
+                      lineHeight: '18px',
                     }}
                   >
                     Bet
                   </span>
-                  <img src="/image2/blumond.png" alt="" className="h-[10px] w-[10px] rounded-full object-cover" />
+                  <img src="/image2/blumond.png" alt="" style={{ width: 11, height: 11, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                   <span
                     style={{
                       color: '#0b2a12',
                       fontFamily: 'Inter, system-ui, sans-serif',
                       fontWeight: 800,
-                      fontSize: 10.5,
-                      lineHeight: '10px',
+                      fontSize: 11,
+                      lineHeight: '18px',
                     }}
                   >
                     {formatNum(betAmt)}
@@ -2250,24 +2349,23 @@ return;
         <AnimatePresence initial={false}>
           {floatingBetChips.map((chip) => (
             <motion.img
-  key={chip.id}
-  src={chip.src}
-  alt=""
-  className="pointer-events-none absolute z-[130] object-contain"
-  style={{ left: chip.left, top: chip.top, width: 44, height: 44 }}
-  initial={{ scale: 1, x: 0, y: 0, opacity: 1 }}
-  animate={{
-    x: chip.endLeft - chip.left,
-    y: chip.endTop - chip.top,
-    scale: [1, 1.1, 0.95],
-  }}
-  exit={{ opacity: 0 }}
-  transition={{
-    duration: 0.55,
-    ease: [0.22, 1, 0.36, 1], // smooth arc feeling
-  }}
-/>
-
+              key={chip.id}
+              src={chip.src}
+              alt=""
+              className="pointer-events-none absolute z-[130] object-contain"
+              style={{ left: chip.left, top: chip.top, width: 44, height: 44 }}
+              initial={{ scale: 1, x: 0, y: 0, opacity: 1 }}
+              animate={{
+                x: chip.endLeft - chip.left,
+                y: chip.endTop - chip.top,
+                scale: [1, 1.1, 0.95],
+              }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.55,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            />
           ))}
         </AnimatePresence>
 
@@ -2294,48 +2392,48 @@ return;
 
           {/* tabs (stay above flare) */}
           <button
-  type="button"
-  onClick={() => placeGroupBet(VEG_ITEMS)}
-  disabled={!canBet}
-  className="absolute z-10 p-0 border-none bg-transparent"
-  style={{
-    left: 0,
-    top: 0,
-    width: 75,
-    height: 72,
-    cursor: canBet ? 'pointer' : 'default',
-    opacity: canBet ? 1 : 0.6,
-  }}
->
-  <img
-    src="/image2/tab_vegetables.png"
-    alt="Vegetables"
-    className="h-full w-full object-contain"
-    draggable={false}
-  />
-</button>
+            type="button"
+            onClick={() => placeGroupBet(VEG_ITEMS)}
+            disabled={!canBet}
+            className="absolute z-10 p-0 border-none bg-transparent"
+            style={{
+              left: 0,
+              top: 0,
+              width: 75,
+              height: 72,
+              cursor: canBet ? 'pointer' : 'default',
+              opacity: canBet ? 1 : 0.6,
+            }}
+          >
+            <img
+              src="/image2/tab_vegetables.png"
+              alt="Vegetables"
+              className="h-full w-full object-contain"
+              draggable={false}
+            />
+          </button>
 
-<button
-  type="button"
-  onClick={() => placeGroupBet(DRINK_ITEMS)}
-  disabled={!canBet}
-  className="absolute z-10 p-0 border-none bg-transparent"
-  style={{
-    left: 315,
-    top: 1,
-    width: 79,
-    height: 68,
-    cursor: canBet ? 'pointer' : 'default',
-    opacity: canBet ? 1 : 0.6,
-  }}
->
-  <img
-    src="/image2/tab_drinks.png"
-    alt="Drinks"
-    className="h-full w-full object-contain"
-    draggable={false}
-  />
-</button>
+          <button
+            type="button"
+            onClick={() => placeGroupBet(DRINK_ITEMS)}
+            disabled={!canBet}
+            className="absolute z-10 p-0 border-none bg-transparent"
+            style={{
+              left: 315,
+              top: 1,
+              width: 79,
+              height: 68,
+              cursor: canBet ? 'pointer' : 'default',
+              opacity: canBet ? 1 : 0.6,
+            }}
+          >
+            <img
+              src="/image2/tab_drinks.png"
+              alt="Drinks"
+              className="h-full w-full object-contain"
+              draggable={false}
+            />
+          </button>
 
 
           <div
@@ -2500,85 +2598,85 @@ return;
 
           {/* ── Dynamic chests from API ── */}
           {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
-{boxData.map((box, idx) => {
-  const totalBoxes = boxData.length;
-  const containerWidth = 310;
-  const boxWidth = 48;
-  const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
-  const xPos = 47 + idx * spacing;
+          {boxData.map((box, idx) => {
+            const totalBoxes = boxData.length;
+            const containerWidth = 310;
+            const boxWidth = 48;
+            const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
+            const xPos = 47 + idx * spacing;
 
-  const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
-  const opened = !!openedChests[threshold];
-  const ready = isChestReady(threshold);
+            const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
+            const opened = !!openedChests[threshold];
+            const ready = isChestReady(threshold);
 
-  const closedSrc = box.src;
-  const openSrc = CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
-  const chestSrc = opened ? openSrc : closedSrc;
+            const closedSrc = box.src;
+            const openSrc = CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
+            const chestSrc = opened ? openSrc : closedSrc;
 
-  const flareSize = boxWidth + 60; // ✅ moved here
+            const flareSize = boxWidth + 60; // ✅ moved here
 
-  return (
-    <button
-      key={`${threshold}-${idx}`}
-      type="button"
-      onClick={() => openChest(threshold)}
-      className="absolute z-20 p-0 border-none bg-transparent"
-      style={{
-        left: xPos,
-        top: 188,
-        width: boxWidth,
-        height: boxWidth,
-        cursor: ready ? 'pointer' : 'default',
-        pointerEvents: ready ? 'auto' : 'none',
-      }}
-      aria-label={`Chest ${threshold}`}
-    >
-      <AnimatePresence>
-        {ready ? (
-  <div
-    className="pointer-events-none absolute"
-    style={{
-      left: '50%',
-      top: '40%',
-      width: flareSize,
-      height: flareSize,
-      transform: 'translate(-50%, -50%)', // ✅ stays stable (NOT animated)
-      zIndex: 0,
-    }}
-  >
-    <motion.img
-      src="/image2/flare_circular.png"
-      alt=""
-      aria-hidden="true"
-      className="h-full w-full object-contain"
-      initial={{ opacity: 0, scale: 0.9, rotate: 0 }}
-      animate={{ opacity: 0.95, scale: 1, rotate: 360 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{
-        opacity: { duration: 0.2 },
-        scale: { duration: 0.2 },
-        rotate: { duration: 1.0, ease: 'linear', repeat: Infinity },
-      }}
-    />
-  </div>
-) : null}
-      </AnimatePresence>
+            return (
+              <button
+                key={`${threshold}-${idx}`}
+                type="button"
+                onClick={() => openChest(threshold)}
+                className="absolute z-20 p-0 border-none bg-transparent"
+                style={{
+                  left: xPos,
+                  top: 188,
+                  width: boxWidth,
+                  height: boxWidth,
+                  cursor: ready ? 'pointer' : 'default',
+                  pointerEvents: ready ? 'auto' : 'none',
+                }}
+                aria-label={`Chest ${threshold}`}
+              >
+                <AnimatePresence>
+                  {ready ? (
+                    <div
+                      className="pointer-events-none absolute"
+                      style={{
+                        left: '50%',
+                        top: '40%',
+                        width: flareSize,
+                        height: flareSize,
+                        transform: 'translate(-50%, -50%)', // ✅ stays stable (NOT animated)
+                        zIndex: 0,
+                      }}
+                    >
+                      <motion.img
+                        src="/image2/flare_circular.png"
+                        alt=""
+                        aria-hidden="true"
+                        className="h-full w-full object-contain"
+                        initial={{ opacity: 0, scale: 0.9, rotate: 0 }}
+                        animate={{ opacity: 0.95, scale: 1, rotate: 360 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{
+                          opacity: { duration: 0.2 },
+                          scale: { duration: 0.2 },
+                          rotate: { duration: 1.0, ease: 'linear', repeat: Infinity },
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </AnimatePresence>
 
-      <motion.img
-        src={chestSrc}
-        alt=""
-        className="absolute object-contain"
-        style={{ left: 0, top: 0, width: boxWidth, height: boxWidth, zIndex: 1 }}
-        animate={
-          ready
-            ? { x: [0, -2, 2, -2, 2, 0], rotate: [0, -2, 2, -2, 2, 0], scale: [1, 1.03, 1] }
-            : { x: 0, rotate: 0, scale: 1 }
-        }
-        transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
-      />
-    </button>
-  );
-})}
+                <motion.img
+                  src={chestSrc}
+                  alt=""
+                  className="absolute object-contain"
+                  style={{ left: 0, top: 0, width: boxWidth, height: boxWidth, zIndex: 1 }}
+                  animate={
+                    ready
+                      ? { x: [0, -2, 2, -2, 2, 0], rotate: [0, -2, 2, -2, 2, 0], scale: [1, 1.03, 1] }
+                      : { x: 0, rotate: 0, scale: 1 }
+                  }
+                  transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+                />
+              </button>
+            );
+          })}
 
           <div
             className="absolute z-10"
@@ -2674,7 +2772,7 @@ return;
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
+              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.15)' }} />
 
               {/* ✅ WIN PANEL — Trophy animation */}
               {resultKind === 'WIN' && winnerItem ? (
@@ -2684,34 +2782,40 @@ return;
                   winnerItem={winnerItem}
                   winAmountLabel={winAmountLabel}
                   rankRows={rankRows}
+                  onComplete={() => {
+                    setShowResultBoard(false);
+                    setShowFireworks(false);
+                  }}
                 />
               ) : (
                 /* ✅ NO BET + LOSE PANEL */
-                <div className="absolute" style={{ left: 26, top: 320, width: 350, height: 300, overflow: 'hidden' }}>
+                <div className="absolute" style={{ left: 26, top: 300, width: 350, height: 340, overflow: 'hidden' }}>
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
                   {/* ── Header: inside the rounded pill-shaped strip ── */}
-                  <div className="absolute flex items-center" style={{ left: 30, top: 14, width: 280, height: 56 }}>
+                  <div className="absolute flex items-center" style={{ left: 28, top: 65, width: 294, height: 42 }}>
                     <div
-                      className="shrink-0 flex items-center justify-center rounded-full overflow-hidden"
-                      style={{ width: 44, height: 44, background: 'rgba(0,0,0,0.25)' }}
+                      className="shrink-0 flex items-center justify-center"
+                      style={{ width: 44, height: 44 }}
                     >
                       <img
                         src={winnerItem ? winnerItem.src : '/image2/lemon.png'}
                         alt=""
-                        className="h-[28px] w-[28px] object-contain"
+                        className="h-[34px] w-[34px] object-contain drop-shadow-md"
                       />
                     </div>
 
-                    <div className="mx-3 shrink-0" style={{ width: 2, height: 28, background: 'rgba(255,255,255,0.25)' }} />
+                    <div className="mx-2 shrink-0" style={{ width: 2, height: 24, background: 'rgba(255,255,255,0.3)' }} />
 
                     <div
+                      className="flex-1 flex justify-start pl-2"
                       style={{
                         color: '#fff',
                         fontFamily: 'Inter, system-ui, sans-serif',
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: 700,
-                        lineHeight: '16px',
+                        lineHeight: '18px',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                       }}
                     >
                       {resultKind === 'NOBET'
@@ -2725,53 +2829,49 @@ return;
                     <div
                       key={`${row.name}-${idx}`}
                       className="absolute flex items-center"
-                      style={{ left: 30, top: 98 + idx * 62, width: 280, height: 52 }}
+                      style={{ left: 48, top: 140 + idx * 58, width: 254, height: 50 }}
                     >
-                      {/* Medal badge */}
-                      <div className="shrink-0" style={{ width: 44, height: 44 }}>
-                        <img
-                          src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-
-                      {/* Name */}
+                      <img
+                        src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
+                        alt=""
+                        style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
+                      />
                       <div
                         style={{
-                          marginLeft: 8,
-                          flex: 1,
-                          minWidth: 0,
+                          marginLeft: 10,
+                          width: 120,
                           color: '#fff',
                           fontFamily: 'Inria Serif, serif',
                           fontStyle: 'italic',
-                          fontSize: 20,
+                          fontSize: 22,
+                          fontWeight: 700,
                           lineHeight: '24px',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                         }}
                       >
                         {row.name}
                       </div>
 
-                      {/* Diamond + amount */}
-                      <div
-                        className="ml-1 flex shrink-0 items-center"
-                        style={{
-                          gap: 4,
-                          color: '#ffe8a9',
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontWeight: 700,
-                          fontSize: 16,
-                          lineHeight: '18px',
-                          textShadow: '0 1px 0 rgba(0,0,0,0.35)',
-                        }}
-                      >
-                        <div className="shrink-0" style={{ width: 20, height: 20 }}>
-                          <img src="/image2/diamond.png" alt="" className="h-full w-full object-contain" />
-                        </div>
-                        {formatK(row.amount)}
+                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 85 }}>
+                        <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                        <span
+                          style={{
+                            color: '#ffe8a9',
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 700,
+                            fontSize: 18,
+                            lineHeight: '18px',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                            whiteSpace: 'nowrap',
+                            width: 60,
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatK(row.amount)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -2781,83 +2881,83 @@ return;
           ) : null}
         </AnimatePresence>
 
-<AnimatePresence>
-  {chestPopup ? (
-    <motion.div
-      className="absolute inset-0 z-[800]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-    >
-      {/* dim + blur */}
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} />
+        <AnimatePresence>
+          {chestPopup ? (
+            <motion.div
+              className="absolute inset-0 z-[800]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+            >
+              {/* dim + blur */}
+              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }} />
 
-      {/* popup content */}
-      <motion.div
-        className="absolute left-1/2 -translate-x-1/2"
-        style={{ top: 120, width: 340, height: 520 }}
-        initial={{ scale: 0.92, y: 18, opacity: 0 }}
-        animate={{ scale: 1, y: 0, opacity: 1 }}
-        exit={{ scale: 0.95, y: 10, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 22 }}
-      >
-        {/* Congratulations image */}
-        <img
-  src="/image2/congratulations.png"
-  alt="Congratulations"
-  className="absolute left-1/2 -translate-x-1/2 object-contain"
-  style={{
-    top: -10,
-    width: 340,     // bigger
-    height: 'auto', // keep ratio (no stretch)
-  }}
-/>
+              {/* popup content */}
+              <motion.div
+                className="absolute left-1/2 -translate-x-1/2"
+                style={{ top: 120, width: 340, height: 520 }}
+                initial={{ scale: 0.92, y: 18, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 10, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+              >
+                {/* Congratulations image */}
+                <img
+                  src="/image2/congratulations.png"
+                  alt="Congratulations"
+                  className="absolute left-1/2 -translate-x-1/2 object-contain"
+                  style={{
+                    top: -10,
+                    width: 340,     // bigger
+                    height: 'auto', // keep ratio (no stretch)
+                  }}
+                />
 
-        {/* Diamonds pile */}
-        <img
-          src="/image2/diamonds.png"
-          alt=""
-          className="absolute left-1/2 -translate-x-1/2 object-contain"
-          style={{ top: 92, width: 260, height: 200 }}
-        />
+                {/* Diamonds pile */}
+                <img
+                  src="/image2/diamonds.png"
+                  alt=""
+                  className="absolute left-1/2 -translate-x-1/2 object-contain"
+                  style={{ top: 92, width: 260, height: 200 }}
+                />
 
-        {/* Blumond + amount (matches your typography requirements) */}
-        <div
-          className="absolute left-1/2 -translate-x-1/2 flex items-center"
-          style={{ top: 305, gap: 10 }}
-        >
-          <img src="/image2/blumond.png" alt="" className="object-contain" style={{ width: 34, height: 34 }} />
-          <span
-            style={{
-              fontFamily: 'Inria Serif, serif',
-              fontWeight: 700,
-              fontStyle: 'normal',
-              fontSize: 26,
-              lineHeight: '100%',
-              letterSpacing: '0%',
-              color: '#FFFFFF',
-              textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-            }}
-          >
-            {formatNum(chestPopup.amount)}
-          </span>
-        </div>
+                {/* Blumond + amount (matches your typography requirements) */}
+                <div
+                  className="absolute left-1/2 -translate-x-1/2 flex items-center"
+                  style={{ top: 305, gap: 10 }}
+                >
+                  <img src="/image2/blumond.png" alt="" className="object-contain" style={{ width: 34, height: 34 }} />
+                  <span
+                    style={{
+                      fontFamily: 'Inria Serif, serif',
+                      fontWeight: 700,
+                      fontStyle: 'normal',
+                      fontSize: 26,
+                      lineHeight: '100%',
+                      letterSpacing: '0%',
+                      color: '#FFFFFF',
+                      textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                    }}
+                  >
+                    {formatNum(chestPopup.amount)}
+                  </span>
+                </div>
 
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={() => setChestPopup(null)}
-          className="absolute left-1/2 -translate-x-1/2"
-          style={{ top: 360, width: 54, height: 54 }}
-          aria-label="Close chest reward"
-        >
-          <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
-        </button>
-      </motion.div>
-    </motion.div>
-  ) : null}
-</AnimatePresence>
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={() => setChestPopup(null)}
+                  className="absolute left-1/2 -translate-x-1/2"
+                  style={{ top: 360, width: 54, height: 54 }}
+                  aria-label="Close chest reward"
+                >
+                  <img src="/image2/close.png" alt="" className="h-full w-full object-contain" />
+                </button>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
         <AnimatePresence>{showFireworks ? <FireworksOverlay key={`fireworks-${fireworksSeed}`} seed={fireworksSeed} /> : null}</AnimatePresence>
 
         <AnimatePresence>
