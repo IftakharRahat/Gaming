@@ -1117,7 +1117,6 @@ const GamePage = () => {
           apiFetch<ApiElement[]>('/game/game/elements'),
           apiFetch<ApiButton[]>('/game/sorce/buttons'),
           apiFetch<ApiBox[]>('/game/magic/boxs'),
-          apiFetch<{ max_players: number }>('/game/maximum/fruits/per/turn'),
           apiFetch<ApiTrophy>('/game/game/trophy'),
           apiFetch<ApiWinElement[]>('/game/win/elements/list'),
         ]);
@@ -1127,9 +1126,8 @@ const GamePage = () => {
         const elements = results[0].status === 'fulfilled' ? results[0].value : null;
         const buttons = results[1].status === 'fulfilled' ? results[1].value : null;
         const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
-        const maxFruits = results[3].status === 'fulfilled' ? results[3].value : null;
-        const trophy = results[4].status === 'fulfilled' ? results[4].value : null;
-        const winHistory = results[5].status === 'fulfilled' ? results[5].value : null;
+        const trophy = results[3].status === 'fulfilled' ? results[3].value : null;
+        const winHistory = results[4].status === 'fulfilled' ? results[4].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1182,11 +1180,7 @@ const GamePage = () => {
           console.log('[API] Boxes loaded:', bd);
         }
 
-        /* Max players */
-        if (maxFruits?.max_players) {
-          setMaxPlayers(maxFruits.max_players);
-          console.log('[API] Max players:', maxFruits.max_players);
-        }
+
 
         /* Trophy image */
         if (trophy?.icon) {
