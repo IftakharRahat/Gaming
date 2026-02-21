@@ -75,6 +75,11 @@ type ApiTrophy = {
   icon: string;
 };
 
+type ApiWinElement = {
+  element__element_name: string;
+  element__element_icon: string;
+};
+
 /* Map API element_name → local ItemId */
 const API_NAME_TO_ID: Record<string, ItemId> = {
   Honey: 'honey',
@@ -1107,6 +1112,7 @@ const GamePage = () => {
           apiFetch<ApiBox[]>('/game/magic/boxs'),
           apiFetch<{ max_players: number }>('/game/maximum/fruits/per/turn'),
           apiFetch<ApiTrophy>('/game/game/trophy'),
+          apiFetch<ApiWinElement[]>('/game/win/elements/list'),
         ]);
 
         if (cancelled) return;
@@ -1116,6 +1122,7 @@ const GamePage = () => {
         const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
         const maxFruits = results[3].status === 'fulfilled' ? results[3].value : null;
         const trophy = results[4].status === 'fulfilled' ? results[4].value : null;
+        const winHistory = results[5].status === 'fulfilled' ? results[5].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1179,6 +1186,29 @@ const GamePage = () => {
           const imgUrl = `https://gameadmin.nanovisionltd.com${trophy.icon}`;
           setTrophySrc(imgUrl);
           console.log('[API] Trophy loaded:', imgUrl);
+        }
+
+        /* Win history → result strip */
+        if (winHistory && Array.isArray(winHistory) && winHistory.length > 0) {
+          const itemSrcMap: Record<string, string> = {};
+          for (const item of ITEMS) {
+            const apiName = ID_TO_API_NAME[item.id];
+            if (apiName) itemSrcMap[apiName] = item.src;
+          }
+
+          const srcs = winHistory
+            .map((w) => itemSrcMap[w.element__element_name])
+            .filter(Boolean) as string[];
+
+          if (srcs.length > 0) {
+            // Pad to fill RESULT_POSITIONS.length slots (last N wins, newest on the right)
+            const slotCount = RESULT_POSITIONS.length;
+            const padded = srcs.length >= slotCount
+              ? srcs.slice(-slotCount)
+              : [...INITIAL_RESULT_SRCS.slice(0, slotCount - srcs.length), ...srcs];
+            setResultSrcs(padded);
+            console.log('[API] Win history loaded:', srcs.length, 'results');
+          }
         }
 
         setApiLoaded(true);
@@ -2995,31 +3025,33 @@ const GamePage = () => {
                 />
               ) : (
                 /* ✅ NO BET + LOSE PANEL */
-                <div className="absolute" style={{ left: 26, top: 320, width: 350, height: 300, overflow: 'hidden' }}>
+                <div className="absolute" style={{ left: 26, top: 300, width: 350, height: 340, overflow: 'hidden' }}>
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
                   {/* ── Header: inside the rounded pill-shaped strip ── */}
-                  <div className="absolute flex items-center" style={{ left: 45, top: 14, width: 280, height: 140 }}>
+                  <div className="absolute flex items-center" style={{ left: 28, top: 65, width: 294, height: 42 }}>
                     <div
-                      className="shrink-0 flex items-center justify-center rounded-full overflow-hidden"
-                      style={{ width: 44, height: 44, background: 'rgba(0,0,0,0.25)' }}
+                      className="shrink-0 flex items-center justify-center"
+                      style={{ width: 44, height: 44 }}
                     >
                       <img
                         src={winnerItem ? winnerItem.src : '/image2/lemon.png'}
                         alt=""
-                        className="h-[28px] w-[28px] object-contain"
+                        className="h-[34px] w-[34px] object-contain drop-shadow-md"
                       />
                     </div>
 
-                    <div className="mx-3 shrink-0" style={{ width: 2, height: 28, background: 'rgba(255,255,255,0.25)' }} />
+                    <div className="mx-2 shrink-0" style={{ width: 2, height: 24, background: 'rgba(255,255,255,0.3)' }} />
 
                     <div
+                      className="flex-1 flex justify-start pl-2"
                       style={{
                         color: '#fff',
                         fontFamily: 'Inter, system-ui, sans-serif',
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: 700,
-                        lineHeight: '16px',
+                        lineHeight: '18px',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                       }}
                     >
                       {resultKind === 'NOBET'
@@ -3033,7 +3065,7 @@ const GamePage = () => {
                     <div
                       key={`${row.name}-${idx}`}
                       className="absolute flex items-center"
-                      style={{ left: 48, top: 98 + idx * 58, width: 254, height: 50 }}
+                      style={{ left: 48, top: 140 + idx * 58, width: 254, height: 50 }}
                     >
                       <img
                         src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
