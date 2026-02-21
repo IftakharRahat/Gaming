@@ -1201,12 +1201,12 @@ const GamePage = () => {
             .filter(Boolean) as string[];
 
           if (srcs.length > 0) {
-            // Pad to fill RESULT_POSITIONS.length slots (last N wins, newest on the right)
+            // Fill rightmost slots with API data, leave leftmost empty
             const slotCount = RESULT_POSITIONS.length;
-            const padded = srcs.length >= slotCount
+            const filled = srcs.length >= slotCount
               ? srcs.slice(-slotCount)
-              : [...INITIAL_RESULT_SRCS.slice(0, slotCount - srcs.length), ...srcs];
-            setResultSrcs(padded);
+              : [...Array(slotCount - srcs.length).fill(''), ...srcs];
+            setResultSrcs(filled);
             console.log('[API] Win history loaded:', srcs.length, 'results');
           }
         }
@@ -2945,7 +2945,8 @@ const GamePage = () => {
           }} />
 
           {RESULT_POSITIONS.map((pos, idx) => {
-            const src = resultSrcs[idx] ?? INITIAL_RESULT_SRCS[idx];
+            const src = resultSrcs[idx];
+            if (!src) return null;
             return (
               <img key={`${src}-${idx}`} src={src} alt="" className="absolute z-20 object-contain" style={{ left: pos.left - 4, top: pos.top - 436, width: pos.width, height: pos.height, transform: pos.rotate ? `rotate(${pos.rotate}deg)` : undefined, transformOrigin: 'center' }} />
             );
