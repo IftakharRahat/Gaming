@@ -80,6 +80,13 @@ type ApiWinElement = {
   element__element_icon: string;
 };
 
+type ApiCoin = { icon: string };
+type ApiGameIcon = { icon: string };
+type ApiTodayWin = { today_win: { total_balance: number | null } };
+type ApiJackpot = { Jackpot: number };
+type ApiSessionTime = { started_at: string; next_run_time: string };
+type ApiTopWinner = { name?: string; amount?: number };
+
 /* Map API element_name → local ItemId */
 const API_NAME_TO_ID: Record<string, ItemId> = {
   Honey: 'honey',
@@ -1106,6 +1113,10 @@ const GamePage = () => {
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
+  const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
+  const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
+  const [jackpotAmount, setJackpotAmount] = useState(JACKPOT_BONUS_AMOUNT);
+  const [sessionEndTime, setSessionEndTime] = useState<string | null>(null);
 
   /* Fetch API data on mount */
   useEffect(() => {
@@ -1119,6 +1130,11 @@ const GamePage = () => {
           apiFetch<ApiBox[]>('/game/magic/boxs'),
           apiFetch<ApiTrophy>('/game/game/trophy'),
           apiFetch<ApiWinElement[]>('/game/win/elements/list'),
+          apiFetch<ApiCoin>('/game/game/coin'),
+          apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
+          apiFetch<ApiTodayWin>('/game/today/win'),
+          apiFetch<ApiJackpot>('/game/jackpot'),
+          apiFetch<ApiSessionTime>('/game/game/session/end/time'),
         ]);
 
         if (cancelled) return;
@@ -1128,6 +1144,11 @@ const GamePage = () => {
         const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
         const trophy = results[3].status === 'fulfilled' ? results[3].value : null;
         const winHistory = results[4].status === 'fulfilled' ? results[4].value : null;
+        const coin = results[5].status === 'fulfilled' ? results[5].value : null;
+        const gameIcon = results[6].status === 'fulfilled' ? results[6].value : null;
+        const todayWinApi = results[7].status === 'fulfilled' ? results[7].value : null;
+        const jackpotApi = results[8].status === 'fulfilled' ? results[8].value : null;
+        const sessionTime = results[9].status === 'fulfilled' ? results[9].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1210,6 +1231,38 @@ const GamePage = () => {
             setResultSrcs(filled);
             console.log('[API] Win history loaded:', srcs.length, 'results');
           }
+        }
+
+        /* Coin icon */
+        if (coin?.icon) {
+          const imgUrl = `https://gameadmin.nanovisionltd.com${coin.icon}`;
+          setCoinIconSrc(imgUrl);
+          console.log('[API] Coin icon loaded:', imgUrl);
+        }
+
+        /* Game logo icon */
+        if (gameIcon?.icon) {
+          const imgUrl = `https://gameadmin.nanovisionltd.com${gameIcon.icon}`;
+          setGameLogoSrc(imgUrl);
+          console.log('[API] Game logo loaded:', imgUrl);
+        }
+
+        /* Today's win */
+        if (todayWinApi?.today_win?.total_balance != null) {
+          setTodayWin(todayWinApi.today_win.total_balance);
+          console.log('[API] Today win loaded:', todayWinApi.today_win.total_balance);
+        }
+
+        /* Jackpot */
+        if (jackpotApi?.Jackpot != null) {
+          setJackpotAmount(jackpotApi.Jackpot);
+          console.log('[API] Jackpot loaded:', jackpotApi.Jackpot);
+        }
+
+        /* Session end time → timer */
+        if (sessionTime?.next_run_time) {
+          setSessionEndTime(sessionTime.next_run_time);
+          console.log('[API] Session end time:', sessionTime.next_run_time);
         }
 
         setApiLoaded(true);
@@ -1921,7 +1974,7 @@ const GamePage = () => {
 
             {/* Diamond icon — overlapping left edge */}
             <img
-              src="/image2/diamond.png"
+              src={coinIconSrc}
               alt=""
               className="absolute object-contain"
               style={{ left: -8, top: -3, width: 32, height: 32 }}
@@ -2131,6 +2184,17 @@ const GamePage = () => {
             animate={{ y: [0, -2.2, 0] }}
             transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
           />
+          <div
+            className="absolute"
+            style={{
+              bottom: 3, left: '50%', transform: 'translateX(-50%)',
+              fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: 9,
+              color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.7)',
+              whiteSpace: 'nowrap', letterSpacing: '0.04em',
+            }}
+          >
+            {formatNum(jackpotAmount)}
+          </div>
         </button>
 
         <div
@@ -2288,7 +2352,7 @@ const GamePage = () => {
         })()}
 
         <motion.img
-          src="/image2/greedy_sign_board.png"
+          src={gameLogoSrc}
           alt=""
           className="absolute z-30 object-contain"
           style={{
