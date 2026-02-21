@@ -86,6 +86,18 @@ type ApiTodayWin = { today_win: { total_balance: number | null } };
 type ApiJackpot = { Jackpot: number };
 type ApiSessionTime = { started_at: string; next_run_time: string };
 type ApiTopWinner = { name?: string; amount?: number };
+type ApiPrizeRank = { rank: string; prize: number };
+type ApiPrizeDistribution = {
+  general: { title: string; ranks: ApiPrizeRank[] };
+  advance: { title: string; ranks: ApiPrizeRank[] };
+};
+type ApiGameMode = { advance: boolean; remanning_values: number };
+type ApiRankRow = {
+  mrs__player_id__player_name: string;
+  mrs__player_id__player_pic?: string;
+  last_balance: number;
+};
+type ApiRankToday = { data: ApiRankRow[]; time?: string };
 
 /* Map API element_name → local ItemId */
 const API_NAME_TO_ID: Record<string, ItemId> = {
@@ -1117,6 +1129,9 @@ const GamePage = () => {
   const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
   const [jackpotAmount, setJackpotAmount] = useState(JACKPOT_BONUS_AMOUNT);
   const [sessionEndTime, setSessionEndTime] = useState<string | null>(null);
+  const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
+  const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
+  const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number }[]>(RANK_ROWS_TODAY);
 
   /* Fetch API data on mount */
   useEffect(() => {
@@ -1135,6 +1150,9 @@ const GamePage = () => {
           apiFetch<ApiTodayWin>('/game/today/win'),
           apiFetch<ApiJackpot>('/game/jackpot'),
           apiFetch<ApiSessionTime>('/game/game/session/end/time'),
+          apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
+          apiFetch<ApiGameMode>('/game/game/mode'),
+          apiFetch<ApiRankToday>('/game/game/rank/today'),
         ]);
 
         if (cancelled) return;
@@ -1149,6 +1167,9 @@ const GamePage = () => {
         const todayWinApi = results[7].status === 'fulfilled' ? results[7].value : null;
         const jackpotApi = results[8].status === 'fulfilled' ? results[8].value : null;
         const sessionTime = results[9].status === 'fulfilled' ? results[9].value : null;
+        const prizeDistrib = results[10].status === 'fulfilled' ? results[10].value : null;
+        const gameMode = results[11].status === 'fulfilled' ? results[11].value : null;
+        const rankToday = results[12].status === 'fulfilled' ? results[12].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1257,6 +1278,28 @@ const GamePage = () => {
         if (jackpotApi?.Jackpot != null) {
           setJackpotAmount(jackpotApi.Jackpot);
           console.log('[API] Jackpot loaded:', jackpotApi.Jackpot);
+        }
+
+        /* Prize distribution */
+        if (prizeDistrib) {
+          setPrizeData(prizeDistrib);
+          console.log('[API] Prize distribution loaded');
+        }
+
+        /* Game mode */
+        if (gameMode) {
+          setAdvanceModeApi(gameMode);
+          console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
+        }
+
+        /* Rank today */
+        if (rankToday?.data?.length) {
+          const mapped = rankToday.data.map((r) => ({
+            name: r.mrs__player_id__player_name,
+            diamonds: r.last_balance,
+          }));
+          setRankRowsToday(mapped);
+          console.log('[API] Rank today loaded:', mapped.length, 'rows');
         }
 
         /* Session end time → timer */
@@ -1880,7 +1923,8 @@ const GamePage = () => {
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
   const winnerItem = pendingWin ? itemMap[pendingWin.itemId] : null;
-  const rankRows = rankTab === 'TODAY' ? RANK_ROWS_TODAY : RANK_ROWS_YESTERDAY;
+  const rankRows = rankTab === 'TODAY' ? rankRowsToday : RANK_ROWS_YESTERDAY;
+  const remainingForAdvanceApi = advanceModeApi ? advanceModeApi.remanning_values : remainingForAdvance;
   const winAmountLabel = pendingWin ? formatNum(pendingWin.amount) : '0';
   const winAmountFontSize = winAmountLabel.length >= 8 ? 18 : winAmountLabel.length >= 6 ? 21 : 24;
   const activePointerStop = pointerStops[pointerStopIndex] ?? POINTER_BASE_POSITION;
@@ -3301,9 +3345,24 @@ const GamePage = () => {
                     <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">
                       Prize distribution
                     </div>
-                    <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
-                      1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
-                    </div>
+                    {(prizeData ? (isAdvanceMode ? prizeData.advance : prizeData.general) : null)?.ranks ? (
+                      <div className="rounded-[10px] bg-[#e9b273] p-2 text-[15px]">
+                        <div className="mb-1 flex items-center justify-between border-b border-[#d4994a] pb-1 text-[13px] font-bold text-[#6d3712]">
+                          <span style={{ width: 60 }}>Rank</span>
+                          <span>Prize</span>
+                        </div>
+                        {(isAdvanceMode ? prizeData!.advance : prizeData!.general).ranks.map((r) => (
+                          <div key={r.rank} className="flex items-center justify-between py-[2px] text-[#7b471d]">
+                            <span style={{ width: 60, fontWeight: 700 }}>{r.rank}</span>
+                            <span>{formatNum(r.prize)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
+                        1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -3410,7 +3469,7 @@ const GamePage = () => {
 
                       <div style={{ marginTop: 18 }}>
                         Keep going! Only{' '}
-                        <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvance)}</span>{' '}
+                        <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvanceApi)}</span>{' '}
                         diamonds to unlock!
                       </div>
                     </div>
