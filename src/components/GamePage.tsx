@@ -68,7 +68,10 @@ type ApiButton = {
 
 type ApiBox = {
   box_image: string;
+  box_image_close: string;
+  box_image_open: string;
   box_source: number;
+  box_win_weights?: number;
 };
 
 type ApiTrophy = {
@@ -1119,8 +1122,8 @@ const GamePage = () => {
   const [winWeights, setWinWeights] = useState<Record<ItemId, number>>(DEFAULT_WIN_WEIGHTS);
   const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
   const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
-  const [boxData, setBoxData] = useState<{ src: string; label: string }[]>(
-    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, label: BOX_LABELS[Number(val)] || '' }))
+  const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
+    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: CHEST_OPEN_SRC_BY_THRESHOLD[Number(val)] || src, label: BOX_LABELS[Number(val)] || '' }))
   );
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
@@ -1215,7 +1218,12 @@ const GamePage = () => {
         /* Build box/chest data from boxes API */
         if (boxes && boxes.length > 0) {
           const bd = boxes.map((b) => ({
-            src: BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png',
+            src: b.box_image_close
+              ? `https://gameadmin.nanovisionltd.com/${b.box_image_close}`
+              : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
+            openSrc: b.box_image_open
+              ? `https://gameadmin.nanovisionltd.com/${b.box_image_open}`
+              : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
           setBoxData(bd);
@@ -2218,11 +2226,11 @@ const GamePage = () => {
             if (!canOpenSystemModal) return;
             setActiveModal('PRIZE');
           }}
-          className="absolute z-40 object-contain"
-          style={{ left: 309, top: 46, width: 77, height: 57 }}
+          className="absolute z-40"
+          style={{ left: 295, top: 38, width: 100, height: 72 }}
         >
           <motion.img
-            src="/image2/jackpot.png"
+            src="/image2/jackpot2.png"
             alt=""
             className="h-full w-full object-contain"
             animate={{ y: [0, -2.2, 0] }}
@@ -2231,10 +2239,12 @@ const GamePage = () => {
           <div
             className="absolute"
             style={{
-              bottom: 3, left: '50%', transform: 'translateX(-50%)',
-              fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 800, fontSize: 9,
-              color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.7)',
-              whiteSpace: 'nowrap', letterSpacing: '0.04em',
+              bottom: 10, left: '50%', transform: 'translateX(-50%)',
+              fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: 11,
+              color: '#FFD700',
+              WebkitTextStroke: '0.5px #4a1a00',
+              textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(255,180,0,0.4)',
+              whiteSpace: 'nowrap', letterSpacing: '0.05em',
             }}
           >
             {formatNum(jackpotAmount)}
@@ -2961,7 +2971,7 @@ const GamePage = () => {
             const ready = isChestReady(threshold);
 
             const closedSrc = box.src;
-            const openSrc = CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
+            const openSrc = box.openSrc || CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
             const chestSrc = opened ? openSrc : closedSrc;
 
             const flareSize = boxWidth + 60;
