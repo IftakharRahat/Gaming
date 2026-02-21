@@ -106,14 +106,21 @@ const ID_TO_API_NAME: Record<ItemId, string> = {
 
 const PLAYER_ID = 1065465; // TODO: make dynamic per user
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: API_BODY,
-  });
-  if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
-  return res.json();
+async function apiFetch<T>(path: string, retries = 2): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: API_BODY,
+    });
+    if (res.ok) return res.json();
+    if (attempt < retries) {
+      await new Promise((r) => setTimeout(r, 300));
+      continue;
+    }
+    throw new Error(`API ${path} failed: ${res.status}`);
+  }
+  throw new Error(`API ${path} failed after retries`);
 }
 
 /* Weighted random pick */
