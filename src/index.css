@@ -56,3 +56,21 @@ body {
     height: auto;
   }
 }
+
+/* Result strip slider */
+@keyframes slideInResult {
+  from {
+    transform: translateX(-100%) scale(0.7);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Hide scrollbar for result strip */
+.result-strip-scroll::-webkit-scrollbar {
+  display: none;
+}

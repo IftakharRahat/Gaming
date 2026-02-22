@@ -79,8 +79,10 @@ type ApiTrophy = {
 };
 
 type ApiWinElement = {
-  element__element_name: string;
+  id: number;
+  element__element_name: string | null;
   element__element_icon: string;
+  jackport_element_name?: string[];
 };
 
 type ApiCoin = { icon: string };
@@ -88,22 +90,21 @@ type ApiGameIcon = { icon: string };
 type ApiTodayWin = { today_win: { total_balance: number | null } };
 type ApiJackpot = { Jackpot: number };
 type ApiSessionTime = { started_at: string; next_run_time: string };
-type ApiTopWinner = { name?: string; amount?: number };
 type ApiTopWinnerResponse = { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }[];
-type ApiMaxFruits = { max_fruits?: number;[key: string]: unknown };
+type ApiMaxPlayers = { max_players: number };
 type ApiPrizeRank = { rank: string; prize: number };
 type ApiPrizeDistribution = {
   general: { title: string; ranks: ApiPrizeRank[] };
   advance: { title: string; ranks: ApiPrizeRank[] };
 };
 type ApiGameMode = { advance: boolean; remanning_values: number };
-type ApiRankRow = {
-  mrs__player_id__player_name: string;
-  mrs__player_id__player_pic?: string;
-  last_balance: number;
+/* Rank endpoints return columnar format: each field is an array of values */
+type ApiRankColumnar = {
+  mrs__player_id__player_name: string[];
+  mrs__player_id__player_pic: (string | null)[];
+  last_balance: number[];
+  time?: string;
 };
-type ApiRankToday = { data: ApiRankRow[]; time?: string };
-type ApiRankYesterday = { data: ApiRankRow[]; time?: string };
 type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
 type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
 type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
@@ -644,26 +645,16 @@ const DEFAULT_WIN_WEIGHTS: Record<ItemId, number> = {
   zucchini: 2,
 };
 
-const RESULT_POSITIONS: ResultPos[] = [
-  { left: 105, top: 691, width: 26, height: 25 },
-  { left: 139, top: 687, width: 22, height: 32 },
-  { left: 169, top: 687, width: 27, height: 31 },
-  { left: 204, top: 690, width: 26, height: 26 },
-  { left: 238, top: 690, width: 26, height: 26 },
-  { left: 272, top: 686.34, width: 17.926160604443528, height: 32.193923576762074, rotate: 11.79 },
-  { left: 304.13, top: 691, width: 26, height: 25 },
-  { left: 338.13, top: 690, width: 26, height: 26 },
-];
 
 const INITIAL_RESULT_SRCS = [
+  '/image2/pumpkin.png',
   '/image2/tomato.png',
-  '/image2/cola_can.png',
-  '/image2/honey_jar.png',
-  '/image2/pumpkin.png',
-  '/image2/pumpkin.png',
   '/image2/zucchini.png',
-  '/image2/tomato.png',
   '/image2/pumpkin.png',
+  '/image2/pumpkin.png',
+  '/image2/honey_jar.png',
+  '/image2/cola_can.png',
+  '/image2/tomato.png',
 ];
 
 const CHIPS: ChipSpec[] = [
@@ -1220,10 +1211,10 @@ const GamePage = () => {
           apiFetch<ApiSessionTime>('/game/game/session/end/time'),
           apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           apiFetch<ApiGameMode>('/game/game/mode'),
-          apiFetch<ApiRankToday>('/game/game/rank/today'),
+          apiFetch<ApiRankColumnar>('/game/game/rank/today'),
           apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
-          apiFetch<ApiMaxFruits>('/game/maximum/fruits/per/turn', 2, JSON.stringify({ regisation: 3 })),
-          apiFetch<ApiRankYesterday>('/game/game/rank/yesterday'),
+          apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn', 2, JSON.stringify({ regisation: 3 })),
+          apiFetch<ApiRankColumnar>('/game/game/rank/yesterday'),
           apiFetch<ApiGameRule>('/game/game/rule'),
           apiFetch<ApiJackpotDetails>('/game/jackpot/details'),
           apiFetch<ApiGameMetadata>('/game/game/icon/'),
@@ -1325,16 +1316,12 @@ const GamePage = () => {
           }
 
           const srcs = winHistory
-            .map((w) => itemSrcMap[w.element__element_name])
+            .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
             .filter(Boolean) as string[];
 
           if (srcs.length > 0) {
-            // Fill rightmost slots with API data, leave leftmost empty
-            const slotCount = RESULT_POSITIONS.length;
-            const filled = srcs.length >= slotCount
-              ? srcs.slice(-slotCount)
-              : [...Array(slotCount - srcs.length).fill(''), ...srcs];
-            setResultSrcs(filled);
+            // Reverse so newest is first (leftmost)
+            setResultSrcs(srcs.reverse());
             console.log('[API] Win history loaded:', srcs.length, 'results');
           }
         }
@@ -1394,24 +1381,27 @@ const GamePage = () => {
           console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
         }
 
-        /* Rank today */
+        /* Rank today — columnar format: {field: [], field: [], ...} */
         console.log('[API] Rank today RAW:', JSON.stringify(rankToday));
-        /* Handle both { data: [...] } and direct array responses */
-        const rankTodayArr: ApiRankRow[] | null =
-          rankToday?.data?.length ? rankToday.data
-            : Array.isArray(rankToday) && rankToday.length ? rankToday
-              : null;
+        type RankParsedRow = { name: string; diamonds: number; pic?: string };
 
-        let parsedRankRows: { name: string; diamonds: number; pic?: string }[] | null = null;
-        if (rankTodayArr) {
-          console.log('[API] Rank today entries:', rankTodayArr.length);
-          parsedRankRows = rankTodayArr.map((r) => ({
-            name: r.mrs__player_id__player_name,
-            diamonds: r.last_balance,
-            pic: r.mrs__player_id__player_pic
-              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic.startsWith('media/') ? '' : 'media/'}${r.mrs__player_id__player_pic}`
+        /** Convert columnar rank response into rows */
+        const parseRankColumnar = (data: ApiRankColumnar | null): RankParsedRow[] => {
+          if (!data || !Array.isArray(data.mrs__player_id__player_name) || data.mrs__player_id__player_name.length === 0) return [];
+          const names = data.mrs__player_id__player_name;
+          const pics = data.mrs__player_id__player_pic || [];
+          const balances = data.last_balance || [];
+          return names.map((name, i) => ({
+            name,
+            diamonds: balances[i] ?? 0,
+            pic: pics[i]
+              ? `https://gameadmin.nanovisionltd.com/${String(pics[i]).startsWith('media/') ? '' : 'media/'}${pics[i]}`
               : undefined,
           }));
+        };
+
+        const parsedRankRows = parseRankColumnar(rankToday as ApiRankColumnar | null);
+        if (parsedRankRows.length > 0) {
           setRankRowsToday(parsedRankRows);
           console.log('[API] Rank today loaded:', parsedRankRows.length, 'rows, pics:', parsedRankRows.slice(0, 3).map(r => r.pic));
         }
@@ -1433,7 +1423,7 @@ const GamePage = () => {
         }
 
         // Fallback: use rank today data (which includes profile pics)
-        if (!topWinnersMapped && parsedRankRows && parsedRankRows.length > 0) {
+        if (!topWinnersMapped && parsedRankRows.length > 0) {
           topWinnersMapped = parsedRankRows.slice(0, 3).map((r) => ({
             name: r.name,
             amount: r.diamonds,
@@ -1447,29 +1437,17 @@ const GamePage = () => {
           console.log('[API] Top Winners SET:', topWinnersMapped.map(r => ({ name: r.name, pic: r.pic })));
         }
 
-        /* Max Fruits Per Turn → max bets per round */
-        if (maxFruits) {
-          const mf = maxFruits as Record<string, unknown>;
-          const limit = typeof mf.max_fruits === 'number' ? mf.max_fruits
-            : typeof mf.max_players === 'number' ? mf.max_players
-              : null;
-          if (limit != null) {
-            setMaxPlayers(limit);
-            console.log('[API] Max bets per turn loaded:', limit);
-          }
+        /* Max players per turn */
+        if (maxFruits && typeof (maxFruits as ApiMaxPlayers).max_players === 'number') {
+          setMaxPlayers((maxFruits as ApiMaxPlayers).max_players);
+          console.log('[API] Max bets per turn loaded:', (maxFruits as ApiMaxPlayers).max_players);
         }
 
-        /* Rank yesterday */
-        if (rankYesterday?.data?.length) {
-          const mapped = rankYesterday.data.map((r) => ({
-            name: r.mrs__player_id__player_name,
-            diamonds: r.last_balance,
-            pic: r.mrs__player_id__player_pic
-              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic.startsWith('media/') ? '' : 'media/'}${r.mrs__player_id__player_pic}`
-              : undefined,
-          }));
-          setRankRowsYesterday(mapped);
-          console.log('[API] Rank yesterday loaded:', mapped.length, 'rows');
+        /* Rank yesterday — same columnar format */
+        const parsedRankYesterday = parseRankColumnar(rankYesterday as ApiRankColumnar | null);
+        if (parsedRankYesterday.length > 0) {
+          setRankRowsYesterday(parsedRankYesterday);
+          console.log('[API] Rank yesterday loaded:', parsedRankYesterday.length, 'rows');
         }
 
         /* Session end time → timer */
@@ -1973,15 +1951,15 @@ const GamePage = () => {
       setResultKind(!hadAnyBet ? 'NOBET' : winAmount > 0 ? 'WIN' : 'LOSE');
 
       setResultSrcs((prev) => {
-        const next = prev.slice(1);
-        /* For jackpot rounds, show the bucket icon (vegetables/drinks) instead of single item */
+        /* Prepend newest result at index 0 (leftmost) */
+        let newSrc: string;
         if (roundType === 'JACKPOT') {
           const isVeg = VEG_ITEMS.includes(primaryId);
-          next.push(isVeg ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png');
+          newSrc = isVeg ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png';
         } else {
-          next.push(itemMap[primaryId].src);
+          newSrc = itemMap[primaryId].src;
         }
-        return next;
+        return [newSrc, ...prev];
       });
 
       setPhase('SHOWTIME');
@@ -3325,13 +3303,51 @@ const GamePage = () => {
             borderImageSlice: 1
           }} />
 
-          {RESULT_POSITIONS.map((pos, idx) => {
-            const src = resultSrcs[idx];
-            if (!src) return null;
-            return (
-              <img key={`${src}-${idx}`} src={src} alt="" className="absolute z-20 object-contain" style={{ left: pos.left - 4, top: pos.top - 436, width: pos.width, height: pos.height, transform: pos.rotate ? `rotate(${pos.rotate}deg)` : undefined, transformOrigin: 'center' }} />
-            );
-          })}
+          {/* Scrollable result strip — newest at left */}
+          <div
+            className="absolute z-20"
+            style={{
+              left: 100,
+              top: 250,
+              width: 260,
+              height: 35,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              className="result-strip-scroll"
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                height: '100%',
+                paddingLeft: 4,
+                paddingRight: 4,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
+            >
+              {resultSrcs.map((src, idx) => {
+                if (!src) return null;
+                return (
+                  <img
+                    key={`result-${idx}-${src}`}
+                    src={src}
+                    alt=""
+                    style={{
+                      width: 26,
+                      height: 26,
+                      minWidth: 26,
+                      objectFit: 'contain',
+                      animation: idx === 0 ? 'slideInResult 0.3s ease-out' : undefined,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <AnimatePresence>
