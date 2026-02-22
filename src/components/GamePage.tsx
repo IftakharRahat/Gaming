@@ -98,12 +98,11 @@ type ApiPrizeDistribution = {
   advance: { title: string; ranks: ApiPrizeRank[] };
 };
 type ApiGameMode = { advance: boolean; remanning_values: number };
-/* Rank endpoints return columnar format: each field is an array of values */
-type ApiRankColumnar = {
-  mrs__player_id__player_name: string[];
-  mrs__player_id__player_pic: (string | null)[];
-  last_balance: number[];
-  time?: string;
+/* Rank endpoints return row-based array */
+type ApiRankRow = {
+  mrs_player_id_player_name: string;
+  mrs_player_id_player_pic: string | null;
+  last_balance: number;
 };
 type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
 type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
@@ -140,7 +139,7 @@ async function apiFetch<T>(path: string, retries = 2, customBody?: string): Prom
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'application/json' },
       body: customBody ?? API_BODY,
     });
     if (res.ok) return res.json();
@@ -673,25 +672,6 @@ const CHESTS = [
   { src: '/image2/chest_1m.png', left: 335, top: 628, width: 48, height: 48 },
 ];
 
-const RANK_ROWS_TODAY: { name: string; diamonds: number; pic?: string }[] = [
-  { name: 'Faruk', diamonds: 30000 },
-  { name: 'Roy', diamonds: 10000 },
-  { name: 'Ad Girl', diamonds: 7500 },
-  { name: 'Apu', diamonds: 5200 },
-  { name: 'Samee', diamonds: 5100 },
-  { name: 'Kha', diamonds: 4500 },
-  { name: 'Rambo', diamonds: 4300 },
-];
-
-const RANK_ROWS_YESTERDAY: { name: string; diamonds: number; pic?: string }[] = [
-  { name: 'Apu', diamonds: 29000 },
-  { name: 'Roy', diamonds: 12500 },
-  { name: 'Faruk', diamonds: 8900 },
-  { name: 'Nim', diamonds: 6400 },
-  { name: 'Sha', diamonds: 5300 },
-  { name: 'Mia', diamonds: 4700 },
-  { name: 'Rambo', diamonds: 3900 },
-];
 
 const NO_BET_ROWS: ResultBoardRow[] = [
   { name: 'Miller', amount: 129400 },
@@ -1186,8 +1166,8 @@ const GamePage = () => {
   const [sessionEndTime, setSessionEndTime] = useState<string | null>(null);
   const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
   const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
-  const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>(RANK_ROWS_TODAY);
-  const [rankRowsYesterday, setRankRowsYesterday] = useState<{ name: string; diamonds: number; pic?: string }[]>(RANK_ROWS_YESTERDAY);
+  const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
+  const [rankRowsYesterday, setRankRowsYesterday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
   const [topWinnersRows, setTopWinnersRows] = useState<ResultBoardRow[]>(NO_BET_ROWS);
 
   /* Fetch API data on mount */
@@ -1211,10 +1191,10 @@ const GamePage = () => {
           apiFetch<ApiSessionTime>('/game/game/session/end/time'),
           apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           apiFetch<ApiGameMode>('/game/game/mode'),
-          apiFetch<ApiRankColumnar>('/game/game/rank/today'),
+          apiFetch<ApiRankRow[]>('/game/game/rank/today'),
           apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
           apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn', 2, JSON.stringify({ regisation: 3 })),
-          apiFetch<ApiRankColumnar>('/game/game/rank/yesterday'),
+          apiFetch<ApiRankRow[]>('/game/game/rank/yesterday'),
           apiFetch<ApiGameRule>('/game/game/rule'),
           apiFetch<ApiJackpotDetails>('/game/jackpot/details'),
           apiFetch<ApiGameMetadata>('/game/game/icon/'),
@@ -1381,26 +1361,43 @@ const GamePage = () => {
           console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
         }
 
-        /* Rank today — columnar format: {field: [], field: [], ...} */
+        /* Rank today — row-based array: [{mrs_player_id_player_name, mrs_player_id_player_pic, last_balance}] */
         console.log('[API] Rank today RAW:', JSON.stringify(rankToday));
         type RankParsedRow = { name: string; diamonds: number; pic?: string };
 
-        /** Convert columnar rank response into rows */
-        const parseRankColumnar = (data: ApiRankColumnar | null): RankParsedRow[] => {
-          if (!data || !Array.isArray(data.mrs__player_id__player_name) || data.mrs__player_id__player_name.length === 0) return [];
-          const names = data.mrs__player_id__player_name;
-          const pics = data.mrs__player_id__player_pic || [];
-          const balances = data.last_balance || [];
-          return names.map((name, i) => ({
-            name,
-            diamonds: balances[i] ?? 0,
-            pic: pics[i]
-              ? `https://gameadmin.nanovisionltd.com/${String(pics[i]).startsWith('media/') ? '' : 'media/'}${pics[i]}`
-              : undefined,
-          }));
+        /** Convert row-based rank response into display rows */
+        const parseRankRows = (data: unknown): RankParsedRow[] => {
+          // Handle both {data: [...]} wrapper and direct array
+          const rows = Array.isArray(data) ? data
+            : (data && typeof data === 'object' && 'data' in data && Array.isArray((data as { data: unknown }).data))
+              ? (data as { data: unknown[] }).data
+              : null;
+          if (!rows || rows.length === 0) return [];
+          // Log actual keys for debugging
+          if (rows[0]) console.log('[API] Rank row keys:', Object.keys(rows[0]));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return rows.map((row: any) => {
+            // Try multiple field name patterns (single/double underscores)
+            const name = row.mrs_player_id_player_name
+              ?? row.mrs__player_id__player_name
+              ?? row.player_name
+              ?? row.name
+              ?? 'Unknown';
+            const pic = row.mrs_player_id_player_pic
+              ?? row.mrs__player_id__player_pic
+              ?? row.player_pic
+              ?? row.pic
+              ?? null;
+            const balance = row.last_balance ?? row.balance ?? 0;
+            return {
+              name,
+              diamonds: balance,
+              pic: pic ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${pic}`) : undefined,
+            };
+          });
         };
 
-        const parsedRankRows = parseRankColumnar(rankToday as ApiRankColumnar | null);
+        const parsedRankRows = parseRankRows(rankToday);
         if (parsedRankRows.length > 0) {
           setRankRowsToday(parsedRankRows);
           console.log('[API] Rank today loaded:', parsedRankRows.length, 'rows, pics:', parsedRankRows.slice(0, 3).map(r => r.pic));
@@ -1412,11 +1409,11 @@ const GamePage = () => {
 
         // Try top winners API first
         if (topWinners && Array.isArray(topWinners) && topWinners.length > 0) {
-          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }) => ({
-            name: r.mrs__player_id__player_name,
+          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs_player_id_player_name: string; mrs_player_id_player_pic?: string; last_balance: number }) => ({
+            name: r.mrs_player_id_player_name,
             amount: r.last_balance,
-            pic: r.mrs__player_id__player_pic
-              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic}`
+            pic: r.mrs_player_id_player_pic
+              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
               : undefined,
           }));
           console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
@@ -1443,8 +1440,8 @@ const GamePage = () => {
           console.log('[API] Max bets per turn loaded:', (maxFruits as ApiMaxPlayers).max_players);
         }
 
-        /* Rank yesterday — same columnar format */
-        const parsedRankYesterday = parseRankColumnar(rankYesterday as ApiRankColumnar | null);
+        /* Rank yesterday — same row-based format */
+        const parsedRankYesterday = parseRankRows(rankYesterday);
         if (parsedRankYesterday.length > 0) {
           setRankRowsYesterday(parsedRankYesterday);
           console.log('[API] Rank yesterday loaded:', parsedRankYesterday.length, 'rows');
@@ -1773,7 +1770,7 @@ const GamePage = () => {
       const elementId = elementApiIds[itemId] || 0;
       fetch('/game/player/gaming/participants', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           player_id: PLAYER_ID,
           balance: runningBalance,
@@ -2023,16 +2020,18 @@ const GamePage = () => {
 
       setBets(buildEmptyBets());
       setPendingWin(null);
-      setWinnerIds(null);
-      winnerRef.current = null;
       setDrawHighlightIndex(0);
 
       setShowResultBoard(false);
       setShowFireworks(false);
 
-      beginRound();
+      /* Clear winner highlight first so elements smoothly return to scale 1
+         before the next round begins (prevents visible "bump") */
+      setWinnerIds(null);
+      winnerRef.current = null;
 
-
+      /* Small delay to let elements settle at scale 1 before starting next round */
+      setTimeout(() => beginRound(), 150);
     }
   }, [
     activeModal,
@@ -2069,7 +2068,7 @@ const GamePage = () => {
     const elementId = elementApiIds[itemId] || 0;
     fetch('/game/player/gaming/participants', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         player_id: PLAYER_ID,
         balance: balance - selectedChip,
@@ -2747,7 +2746,7 @@ const GamePage = () => {
                     ? { duration: 0.14, ease: 'easeOut' }
                     : justPulsed
                       ? { duration: 0.28, ease: 'easeOut' }
-                      : { duration: 0.2 }
+                      : { duration: 0.3, ease: 'easeOut' }
               }
               disabled={!canBet}
             >
@@ -3710,75 +3709,82 @@ const GamePage = () => {
                 ) : null}
 
                 {activeModal === 'RANK' ? (
-                  <div className="relative" style={{ width: 323, height: 546, borderRadius: 17, background: '#FFE9BD', margin: '0 auto', overflow: 'visible', paddingTop: 35, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
-                    {/* Ribbon header — overlaps top of modal */}
-                    <div className="absolute left-1/2" style={{ width: 242, height: 161, top: -75, transform: 'translateX(-50%)', zIndex: 10 }}>
-                      <img
-                        src="/image2/ribbon.png"
-                        alt=""
-                        className="w-full h-full"
-                        style={{ objectFit: 'contain' }}
-                      />
-                      <div
-                        className="absolute inset-0 flex items-center justify-center"
-                        style={{
-                          fontFamily: 'Inter, system-ui, sans-serif',
-                          fontSize: 22,
-                          fontWeight: 800,
-                          color: '#ffd64f',
-                          textShadow: '0 2px 4px rgba(0,0,0,0.4)',
-                          paddingBottom: 20,
-                        }}
-                      >
-                        Game Rank
+                  <div className="relative" style={{ width: 323, height: 546, margin: '0 auto', overflow: 'visible' }}>
+                    {/* Gameboard background image */}
+                    <img
+                      src="/image2/gameboard.png"
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      style={{ objectFit: 'fill', borderRadius: 17 }}
+                    />
+
+                    {/* "Game Rank" text on the built-in ribbon */}
+                    <div
+                      className="absolute left-1/2 flex items-center justify-center"
+                      style={{
+                        top: 8,
+                        transform: 'translateX(-50%)',
+                        width: 200,
+                        height: 50,
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontSize: 22,
+                        fontWeight: 800,
+                        color: '#ffd64f',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                        zIndex: 10,
+                      }}
+                    >
+                      Game Rank
+                    </div>
+
+                    {/* Content area — positioned inside the gameboard frame */}
+                    <div className="relative" style={{ paddingTop: 70, paddingLeft: 20, paddingRight: 20, paddingBottom: 16 }}>
+                      <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
+                        <button
+                          type="button"
+                          onClick={() => setRankTab('TODAY')}
+                          className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                            }`}
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRankTab('YESTERDAY')}
+                          className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
+                            }`}
+                        >
+                          Yesterday
+                        </button>
                       </div>
-                    </div>
 
-                    <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
-                      <button
-                        type="button"
-                        onClick={() => setRankTab('TODAY')}
-                        className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                          }`}
-                      >
-                        Today
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRankTab('YESTERDAY')}
-                        className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                          }`}
-                      >
-                        Yesterday
-                      </button>
-                    </div>
+                      {/* Column headers */}
+                      <div className="flex items-center mx-auto mb-1" style={{ width: 280, height: 28, fontSize: 13, fontWeight: 700, color: '#7b471d' }}>
+                        <span style={{ width: 50, textAlign: 'center' }}>Rank</span>
+                        <span style={{ flex: 1, textAlign: 'center' }}>Name</span>
+                        <span style={{ width: 100, textAlign: 'center' }}>Diamonds Play</span>
+                      </div>
 
-                    {/* Column headers */}
-                    <div className="flex items-center mx-auto mb-1" style={{ width: 292, height: 28, fontSize: 13, fontWeight: 700, color: '#7b471d' }}>
-                      <span style={{ width: 50, textAlign: 'center' }}>Rank</span>
-                      <span style={{ flex: 1, textAlign: 'center' }}>Name</span>
-                      <span style={{ width: 100, textAlign: 'center' }}>Diamonds Play</span>
-                    </div>
-
-                    <div className="space-y-1 overflow-y-auto overflow-x-hidden" style={{ maxHeight: 400 }}>
-                      {rankRows.map((row, idx) => (
-                        <div key={`${row.name}-${idx}`} className="relative" style={{ width: 292, height: 47, margin: '0 auto' }}>
-                          <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
-                          {row.pic && (
-                            <img
-                              src={row.pic}
-                              alt=""
-                              className="absolute"
-                              style={{ left: 38, top: 5, width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(123,71,29,0.4)' }}
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          )}
-                          <div className="absolute top-[8px] text-[18px] text-[#7b471d]" style={{ left: row.pic ? 72 : 70 }}>{row.name}</div>
-                          <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
-                            {formatNum(row.diamonds)}
+                      <div className="space-y-1 overflow-y-auto overflow-x-hidden" style={{ maxHeight: 380 }}>
+                        {rankRows.map((row, idx) => (
+                          <div key={`${row.name}-${idx}`} className="relative" style={{ width: 280, height: 47, margin: '0 auto' }}>
+                            <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
+                            {row.pic && (
+                              <img
+                                src={row.pic}
+                                alt=""
+                                className="absolute"
+                                style={{ left: 38, top: 5, width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(123,71,29,0.4)' }}
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
+                            <div className="absolute top-[8px] text-[18px] text-[#7b471d]" style={{ left: row.pic ? 72 : 70 }}>{row.name}</div>
+                            <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
+                              {formatNum(row.diamonds)}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : null}

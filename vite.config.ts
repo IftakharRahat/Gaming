@@ -28,7 +28,7 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
       path: req.url,
       method,
       headers: {
-        'Content-Type': req.headers['content-type'] || 'text/plain',
+        'Content-Type': req.headers['content-type'] || 'application/json',
         'Content-Length': body.length.toString(),
       },
     }
