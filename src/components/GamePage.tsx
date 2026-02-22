@@ -89,6 +89,8 @@ type ApiTodayWin = { today_win: { total_balance: number | null } };
 type ApiJackpot = { Jackpot: number };
 type ApiSessionTime = { started_at: string; next_run_time: string };
 type ApiTopWinner = { name?: string; amount?: number };
+type ApiTopWinnerResponse = { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }[];
+type ApiMaxFruits = { max_fruits?: number;[key: string]: unknown };
 type ApiPrizeRank = { rank: string; prize: number };
 type ApiPrizeDistribution = {
   general: { title: string; ranks: ApiPrizeRank[] };
@@ -101,6 +103,11 @@ type ApiRankRow = {
   last_balance: number;
 };
 type ApiRankToday = { data: ApiRankRow[]; time?: string };
+type ApiRankYesterday = { data: ApiRankRow[]; time?: string };
+type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
+type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
+type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
+type ApiPlayerRecords = { data: { round?: number; element__element_name?: string; bet?: number; win?: number; time?: string }[] };
 
 /* Map API element_name → local ItemId */
 const API_NAME_TO_ID: Record<string, ItemId> = {
@@ -128,12 +135,12 @@ const ID_TO_API_NAME: Record<ItemId, string> = {
 
 const PLAYER_ID = 1065465; // TODO: make dynamic per user
 
-async function apiFetch<T>(path: string, retries = 2): Promise<T> {
+async function apiFetch<T>(path: string, retries = 2, customBody?: string): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: API_BODY,
+      body: customBody ?? API_BODY,
     });
     if (res.ok) return res.json();
     if (attempt < retries) {
@@ -164,8 +171,9 @@ function computeJackpotWin(params: {
   jackpotItems: ItemId[];
   bets: BetsState;
   itemMultiplier: Record<ItemId, number>;
+  jackpotBonus: number;
 }) {
-  const { jackpotItems, bets, itemMultiplier } = params;
+  const { jackpotItems, bets, itemMultiplier, jackpotBonus } = params;
 
   const matchedItems = jackpotItems.filter((id) => (bets[id] ?? 0) > 0);
   const matchedCount = matchedItems.length;
@@ -182,7 +190,7 @@ function computeJackpotWin(params: {
   );
   const isExact4 = hasAll4 && !hasOutsideBet;
 
-  const bonus = isExact4 ? JACKPOT_BONUS_AMOUNT : Math.round(JACKPOT_BONUS_AMOUNT * (matchedCount / 4));
+  const bonus = isExact4 ? jackpotBonus : Math.round(jackpotBonus * (matchedCount / 4));
   const totalWin = matchedCount > 0 ? baseWin + bonus : 0;
 
   return { totalWin, matchedItems, matchedCount, isExact4, bonus, baseWin };
@@ -269,6 +277,7 @@ type GameRecord = {
 type ResultBoardRow = {
   name: string;
   amount: number;
+  pic?: string;
 };
 
 type FloatingBetChip = {
@@ -453,7 +462,11 @@ const ScaledArtboard = ({ width, height, metricsMode, children }: ScaledArtboard
     const node = hostRef.current;
     if (!node) return;
 
-    const update = () => setViewport({ width: node.clientWidth, height: node.clientHeight });
+    const update = () => {
+      const w = node.clientWidth || window.innerWidth;
+      const h = Math.min(node.clientHeight || window.innerHeight, window.innerHeight);
+      setViewport({ width: w, height: h });
+    };
 
     update();
     const ro = new ResizeObserver(update);
@@ -471,16 +484,27 @@ const ScaledArtboard = ({ width, height, metricsMode, children }: ScaledArtboard
       return { scale: 1, scaledWidth: width, scaledHeight: height };
     }
 
-    const availableWidth = Math.min(MAX_FRAME_WIDTH, Math.max(0, viewport.width - 16));
-    const availableHeight = Math.max(0, viewport.height - 16);
+    const isMobile = viewport.width <= 480;
+    const pad = isMobile ? 0 : 16;
+    const maxW = isMobile ? viewport.width : MAX_FRAME_WIDTH;
+    const availableWidth = Math.min(maxW, Math.max(0, viewport.width - pad));
+    const availableHeight = Math.max(0, viewport.height - pad);
     const s = Math.min(availableWidth / width, availableHeight / height);
 
     return { scale: s, scaledWidth: width * s, scaledHeight: height * s };
   }, [viewport.width, viewport.height, width, height]);
 
   return (
-    <div ref={hostRef} className="h-full w-full overflow-hidden bg-[#0f172a]">
-      <div className="flex min-h-full w-full items-center justify-center py-2">
+    <div ref={hostRef} className="h-full w-full overflow-hidden bg-[#0f172a]" style={{ minHeight: '100dvh', height: '100dvh' }}>
+      <div
+        className="flex w-full justify-center"
+        style={{
+          padding: viewport.width <= 480 ? 0 : '8px',
+          alignItems: viewport.width <= 480 ? 'flex-start' : 'center',
+          minHeight: '100%',
+          height: '100%',
+        }}
+      >
         <div style={{ width: scaledWidth, height: scaledHeight }} className="relative shrink-0">
           <div
             style={{
@@ -489,7 +513,7 @@ const ScaledArtboard = ({ width, height, metricsMode, children }: ScaledArtboard
               transform: `scale(${scale})`,
               transformOrigin: 'top left',
             }}
-            className={`absolute left-0 top-0 overflow-hidden rounded-[26px] border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.45)] ${debugClass(
+            className={`absolute left-0 top-0 overflow-hidden ${viewport.width <= 480 ? '' : 'rounded-[26px]'} border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.45)] ${debugClass(
               DEBUG
             )}`}
           >
@@ -658,7 +682,7 @@ const CHESTS = [
   { src: '/image2/chest_1m.png', left: 335, top: 628, width: 48, height: 48 },
 ];
 
-const RANK_ROWS_TODAY = [
+const RANK_ROWS_TODAY: { name: string; diamonds: number; pic?: string }[] = [
   { name: 'Faruk', diamonds: 30000 },
   { name: 'Roy', diamonds: 10000 },
   { name: 'Ad Girl', diamonds: 7500 },
@@ -668,7 +692,7 @@ const RANK_ROWS_TODAY = [
   { name: 'Rambo', diamonds: 4300 },
 ];
 
-const RANK_ROWS_YESTERDAY = [
+const RANK_ROWS_YESTERDAY: { name: string; diamonds: number; pic?: string }[] = [
   { name: 'Apu', diamonds: 29000 },
   { name: 'Roy', diamonds: 12500 },
   { name: 'Faruk', diamonds: 8900 },
@@ -831,7 +855,9 @@ type TrophyWinOverlayProps = {
   bets: BetsState;
   winnerItems: ItemSpec[];   // <-- instead of winnerItem
   winAmountLabel: string;
-  rankRows: { name: string; diamonds: number }[];
+  rankRows: { name: string; diamonds: number; pic?: string }[];
+  roundType: 'NORMAL' | 'JACKPOT';
+  winnerIds: ItemId[];
 };
 
 /* Trophy icon center in artboard coordinates */
@@ -865,7 +891,7 @@ const buildTrophyExplosion = (): TrophyParticle[] => {
   return particles;
 };
 
-const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows }: TrophyWinOverlayProps) => {
+const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows, roundType, winnerIds }: TrophyWinOverlayProps) => {
   const [stage, setStage] = useState<WinAnimStage>('FLY_TO_TROPHY');
   const [showCoins, setShowCoins] = useState(false);
   const explosionParticles = useMemo(() => buildTrophyExplosion(), []);
@@ -982,115 +1008,150 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
           <motion.div
             key="win-panel"
             className="absolute z-[550]"
-            style={{ left: -6, top: 277, width: 414, height: 414 }}
+            style={{ left: 0, top: 260, width: 402, height: 430 }}
             initial={{ scale: 0, opacity: 0, y: 60 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 18 }}
           >
             <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-            {/* Winner row */}
-            <motion.div
-              className="absolute flex items-center"
-              style={{ left: 70, top: 166, width: 270, height: 44, overflow: 'hidden' }}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.3 }}
-            >
-              {/* Item icon(s): show up to 4 for jackpot, 1 for normal */}
-              <div className="flex items-center" style={{ gap: 2, flexShrink: 0 }}>
-                {winnerItems.slice(0, 4).map((w) => (
-                  <img key={w.id} src={w.src} alt="" style={{ width: winnerItems.length > 1 ? 28 : 40, height: winnerItems.length > 1 ? 28 : 40, objectFit: 'contain' }} />
-                ))}
-              </div>
+            {/* ── Content container with consistent padding ── */}
+            {(() => {
+              const PX = 28;           // horizontal padding
+              const CONTENT_W = 402 - PX * 2; // 346px
+              const SPACING = 18;      // equal spacing between sections
+              const REWARD_TOP = 158;  // reward bar Y
+              const REWARD_H = 48;     // reward bar height
+              const LB_TOP = REWARD_TOP + REWARD_H + SPACING; // leaderboard Y start (equal gap)
+              const ROW_H = 50;        // leaderboard row height
+              const ROW_GAP = 10;      // gap between rows
 
-              <div
-                style={{
-                  marginLeft: 8,
-                  width: 90,
-                  color: '#fff',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  fontWeight: 800,
-                  fontSize: winnerItems.length > 1 ? 16 : 24,
-                  lineHeight: '24px',
-                  textTransform: winnerItems.length > 1 ? 'uppercase' : 'lowercase',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {winnerItems.length === 4 ? 'JACKPOT' : winnerItems[0].id}
-              </div>
-
-              <div className="flex items-center" style={{ gap: 6, marginLeft: 'auto', flexShrink: 0 }}>
-                <img src="/image2/diamond.png" alt="" style={{ width: 22, height: 22, flexShrink: 0 }} />
-                <span
-                  style={{
-                    color: '#ffe56a',
-                    fontFamily: 'Inria Serif, serif',
-                    fontSize: 28,
-                    fontWeight: 800,
-                    textShadow: '0 2px 0 rgba(0,0,0,0.35)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {winAmountLabel}
-                </span>
-              </div>
-            </motion.div>
-
-            {/* Leaderboard rows */}
-            {rankRows.slice(0, 3).map((row, idx) => (
-              <motion.div
-                key={`${row.name}-${idx}`}
-                className="absolute flex items-center"
-                style={{ left: 70, top: 238 + idx * 56, width: 270, height: 48, overflow: 'hidden' }}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + idx * 0.12, duration: 0.3 }}
-              >
-                <img
-                  src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
-                  alt=""
-                  style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
-                />
-                <div
-                  style={{
-                    marginLeft: 10,
-                    width: 120,
-                    color: '#fff',
-                    fontFamily: 'Inria Serif, serif',
-                    fontStyle: 'italic',
-                    fontWeight: 700,
-                    fontSize: 22,
-                    lineHeight: '24px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                  }}
-                >
-                  {row.name}
-                </div>
-
-                <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 85 }}>
-                  <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
-                  <span
+              return (
+                <>
+                  {/* ── Reward Bar ── */}
+                  <motion.div
+                    className="absolute flex items-center justify-center"
                     style={{
-                      color: '#ffe8a9',
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      fontWeight: 700,
-                      fontSize: 18,
-                      lineHeight: '18px',
-                      textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-                      whiteSpace: 'nowrap',
+                      left: PX,
+                      top: REWARD_TOP,
+                      width: CONTENT_W,
+                      height: REWARD_H,
+                      paddingLeft: 16,
+                      paddingRight: 16,
+                      boxSizing: 'border-box',
                     }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.3 }}
                   >
-                    {formatK(row.diamonds)}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
+                    {/* Centered group: icon + divider + diamond value */}
+                    <div className="flex items-center" style={{ gap: 14 }}>
+                      {/* Item / bucket icon */}
+                      <div className="flex items-center justify-center" style={{ flexShrink: 0, width: 40, height: 40 }}>
+                        {roundType === 'JACKPOT' ? (
+                          <img
+                            src={winnerIds.every(id => VEG_ITEMS.includes(id)) ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png'}
+                            alt=""
+                            style={{ width: 40, height: 40, objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <img src={winnerItems[0]?.src} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+                        )}
+                      </div>
+
+                      {/* Vertical divider */}
+                      <div style={{ width: 1.5, height: 26, background: 'rgba(255,255,255,0.35)', flexShrink: 0, borderRadius: 1 }} />
+
+                      {/* Diamond + amount */}
+                      <div className="flex items-center" style={{ gap: 6 }}>
+                        <img src="/image2/diamond.png" alt="" style={{ width: 24, height: 24, flexShrink: 0 }} />
+                        <span
+                          style={{
+                            color: '#ffe56a',
+                            fontFamily: 'Inria Serif, serif',
+                            fontSize: 26,
+                            fontWeight: 800,
+                            textShadow: '0 2px 0 rgba(0,0,0,0.35)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {winAmountLabel}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* ── Leaderboard rows (matching no-bet panel alignment) ── */}
+                  {rankRows.slice(0, 3).map((row, idx) => (
+                    <motion.div
+                      key={`${row.name}-${idx}`}
+                      className="absolute flex items-center"
+                      style={{
+                        left: PX + 30,
+                        top: LB_TOP + idx * (ROW_H + ROW_GAP),
+                        width: CONTENT_W - 60,
+                        height: ROW_H,
+                      }}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.4 + idx * 0.12, duration: 0.3 }}
+                    >
+                      <img
+                        src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
+                        alt=""
+                        style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
+                      />
+                      {row.pic && (
+                        <img
+                          src={row.pic}
+                          alt=""
+                          style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginLeft: 4, border: '2px solid rgba(255,255,255,0.5)' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      )}
+                      <div
+                        style={{
+                          marginLeft: 10,
+                          width: 100,
+                          flexShrink: 0,
+                          color: '#fff',
+                          fontFamily: 'Inria Serif, serif',
+                          fontStyle: 'italic',
+                          fontWeight: 700,
+                          fontSize: 22,
+                          lineHeight: '24px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                        }}
+                      >
+                        {row.name}
+                      </div>
+
+                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 75, paddingLeft: 4 }}>
+                        <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                        <span
+                          style={{
+                            color: '#ffe8a9',
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 700,
+                            fontSize: 18,
+                            lineHeight: '18px',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                            whiteSpace: 'nowrap',
+                            width: 65,
+                            textAlign: 'right',
+                          }}
+                        >
+                          {formatK(row.diamonds)}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1123,7 +1184,7 @@ const GamePage = () => {
   const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
   const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
   const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
-    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: CHEST_OPEN_SRC_BY_THRESHOLD[Number(val)] || src, label: BOX_LABELS[Number(val)] || '' }))
+    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: src.replace('.png', '_open.png'), label: BOX_LABELS[Number(val)] || '' }))
   );
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
@@ -1134,11 +1195,15 @@ const GamePage = () => {
   const [sessionEndTime, setSessionEndTime] = useState<string | null>(null);
   const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
   const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
-  const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number }[]>(RANK_ROWS_TODAY);
+  const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>(RANK_ROWS_TODAY);
+  const [rankRowsYesterday, setRankRowsYesterday] = useState<{ name: string; diamonds: number; pic?: string }[]>(RANK_ROWS_YESTERDAY);
+  const [topWinnersRows, setTopWinnersRows] = useState<ResultBoardRow[]>(NO_BET_ROWS);
 
   /* Fetch API data on mount */
+  const apiCalledRef = useRef(false);
   useEffect(() => {
-    let cancelled = false;
+    if (apiCalledRef.current) return;
+    apiCalledRef.current = true;
 
     (async () => {
       try {
@@ -1156,9 +1221,14 @@ const GamePage = () => {
           apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           apiFetch<ApiGameMode>('/game/game/mode'),
           apiFetch<ApiRankToday>('/game/game/rank/today'),
+          apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
+          apiFetch<ApiMaxFruits>('/game/maximum/fruits/per/turn', 2, JSON.stringify({ regisation: 3 })),
+          apiFetch<ApiRankYesterday>('/game/game/rank/yesterday'),
+          apiFetch<ApiGameRule>('/game/game/rule'),
+          apiFetch<ApiJackpotDetails>('/game/jackpot/details'),
+          apiFetch<ApiGameMetadata>('/game/game/icon/'),
+          apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
         ]);
-
-        if (cancelled) return;
 
         const elements = results[0].status === 'fulfilled' ? results[0].value : null;
         const buttons = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -1173,6 +1243,13 @@ const GamePage = () => {
         const prizeDistrib = results[10].status === 'fulfilled' ? results[10].value : null;
         const gameMode = results[11].status === 'fulfilled' ? results[11].value : null;
         const rankToday = results[12].status === 'fulfilled' ? results[12].value : null;
+        const topWinners = results[13].status === 'fulfilled' ? results[13].value : null;
+        const maxFruits = results[14].status === 'fulfilled' ? results[14].value : null;
+        const rankYesterday = results[15].status === 'fulfilled' ? results[15].value : null;
+        const gameRules = results[16].status === 'fulfilled' ? results[16].value : null;
+        const jackpotDetails = results[17].status === 'fulfilled' ? results[17].value : null;
+        const gameMetadata = results[18].status === 'fulfilled' ? results[18].value : null;
+        const playerRecords = results[19].status === 'fulfilled' ? results[19].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1283,9 +1360,22 @@ const GamePage = () => {
         }
 
         /* Jackpot */
+        console.log('[API] Jackpot RAW response:', JSON.stringify(jackpotApi));
         if (jackpotApi?.Jackpot != null) {
           setJackpotAmount(jackpotApi.Jackpot);
           console.log('[API] Jackpot loaded:', jackpotApi.Jackpot);
+        } else if (jackpotApi && typeof jackpotApi === 'object') {
+          // Try to find the jackpot value from any key
+          const keys = Object.keys(jackpotApi);
+          console.log('[API] Jackpot keys:', keys);
+          for (const key of keys) {
+            const val = (jackpotApi as Record<string, unknown>)[key];
+            if (typeof val === 'number' && val > 0) {
+              setJackpotAmount(val);
+              console.log('[API] Jackpot loaded from key', key, ':', val);
+              break;
+            }
+          }
         }
 
         /* Prize distribution */
@@ -1294,26 +1384,136 @@ const GamePage = () => {
           console.log('[API] Prize distribution loaded');
         }
 
-        /* Game mode */
+        /* Game mode — auto-enable advance if API says so */
         if (gameMode) {
           setAdvanceModeApi(gameMode);
+          if (gameMode.advance === true) {
+            setMode('ADVANCE');
+            console.log('[API] Advance mode ENABLED by server');
+          }
           console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
         }
 
         /* Rank today */
-        if (rankToday?.data?.length) {
-          const mapped = rankToday.data.map((r) => ({
+        console.log('[API] Rank today RAW:', JSON.stringify(rankToday));
+        /* Handle both { data: [...] } and direct array responses */
+        const rankTodayArr: ApiRankRow[] | null =
+          rankToday?.data?.length ? rankToday.data
+            : Array.isArray(rankToday) && rankToday.length ? rankToday
+              : null;
+
+        let parsedRankRows: { name: string; diamonds: number; pic?: string }[] | null = null;
+        if (rankTodayArr) {
+          console.log('[API] Rank today entries:', rankTodayArr.length);
+          parsedRankRows = rankTodayArr.map((r) => ({
             name: r.mrs__player_id__player_name,
             diamonds: r.last_balance,
+            pic: r.mrs__player_id__player_pic
+              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic.startsWith('media/') ? '' : 'media/'}${r.mrs__player_id__player_pic}`
+              : undefined,
           }));
-          setRankRowsToday(mapped);
-          console.log('[API] Rank today loaded:', mapped.length, 'rows');
+          setRankRowsToday(parsedRankRows);
+          console.log('[API] Rank today loaded:', parsedRankRows.length, 'rows, pics:', parsedRankRows.slice(0, 3).map(r => r.pic));
+        }
+
+        /* Top Winners — use API data, fallback to rank today for profile pics */
+        console.log('[API] Top Winners RAW:', JSON.stringify(topWinners));
+        let topWinnersMapped: ResultBoardRow[] | null = null;
+
+        // Try top winners API first
+        if (topWinners && Array.isArray(topWinners) && topWinners.length > 0) {
+          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }) => ({
+            name: r.mrs__player_id__player_name,
+            amount: r.last_balance,
+            pic: r.mrs__player_id__player_pic
+              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic}`
+              : undefined,
+          }));
+          console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
+        }
+
+        // Fallback: use rank today data (which includes profile pics)
+        if (!topWinnersMapped && parsedRankRows && parsedRankRows.length > 0) {
+          topWinnersMapped = parsedRankRows.slice(0, 3).map((r) => ({
+            name: r.name,
+            amount: r.diamonds,
+            pic: r.pic,
+          }));
+          console.log('[API] Top Winners fallback from rank today:', topWinnersMapped.length, 'rows');
+        }
+
+        if (topWinnersMapped) {
+          setTopWinnersRows(topWinnersMapped);
+          console.log('[API] Top Winners SET:', topWinnersMapped.map(r => ({ name: r.name, pic: r.pic })));
+        }
+
+        /* Max Fruits Per Turn → max bets per round */
+        if (maxFruits) {
+          const mf = maxFruits as Record<string, unknown>;
+          const limit = typeof mf.max_fruits === 'number' ? mf.max_fruits
+            : typeof mf.max_players === 'number' ? mf.max_players
+              : null;
+          if (limit != null) {
+            setMaxPlayers(limit);
+            console.log('[API] Max bets per turn loaded:', limit);
+          }
+        }
+
+        /* Rank yesterday */
+        if (rankYesterday?.data?.length) {
+          const mapped = rankYesterday.data.map((r) => ({
+            name: r.mrs__player_id__player_name,
+            diamonds: r.last_balance,
+            pic: r.mrs__player_id__player_pic
+              ? `https://gameadmin.nanovisionltd.com/${r.mrs__player_id__player_pic.startsWith('media/') ? '' : 'media/'}${r.mrs__player_id__player_pic}`
+              : undefined,
+          }));
+          setRankRowsYesterday(mapped);
+          console.log('[API] Rank yesterday loaded:', mapped.length, 'rows');
         }
 
         /* Session end time → timer */
         if (sessionTime?.next_run_time) {
           setSessionEndTime(sessionTime.next_run_time);
           console.log('[API] Session end time:', sessionTime.next_run_time);
+        }
+
+        /* Game Rules */
+        if (gameRules?.general?.rules?.length) {
+          setApiRules(gameRules.general.rules);
+          setApiRulesVersion(gameRules.general.version || '');
+          console.log('[API] Rules loaded:', gameRules.general.rules.length, 'rules, version:', gameRules.general.version);
+        }
+
+        /* Jackpot Details */
+        if (jackpotDetails?.awards?.length) {
+          setJackpotAwards(jackpotDetails.awards);
+          console.log('[API] Jackpot details loaded:', jackpotDetails.awards.length, 'awards, total:', jackpotDetails.jackpot_total);
+        }
+        /* Use jackpot_total from details as fallback when main jackpot endpoint returns 0 */
+        if (jackpotDetails?.jackpot_total && jackpotDetails.jackpot_total > 0 && (jackpotApi?.Jackpot == null || jackpotApi.Jackpot === 0)) {
+          setJackpotAmount(jackpotDetails.jackpot_total);
+          console.log('[API] Jackpot amount set from details total:', jackpotDetails.jackpot_total);
+        }
+
+        /* Game Metadata */
+        if (gameMetadata && Array.isArray(gameMetadata) && gameMetadata.length > 0) {
+          if (gameMetadata[0].game__name) {
+            setGameName(gameMetadata[0].game__name);
+            console.log('[API] Game name:', gameMetadata[0].game__name);
+          }
+        }
+
+        /* Player Records */
+        if (playerRecords?.data?.length) {
+          setApiPlayerRecords(playerRecords.data.map(r => ({
+            round: r.round,
+            element: r.element__element_name,
+            bet: r.bet,
+            win: r.win,
+            time: r.time,
+          })));
+          console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
         }
 
         setApiLoaded(true);
@@ -1323,7 +1523,7 @@ const GamePage = () => {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { /* cleanup */ };
   }, []);
 
   const [mode, setMode] = useState<Mode>('BASIC');
@@ -1359,6 +1559,11 @@ const GamePage = () => {
   const [musicOn, setMusicOn] = useState(true);
 
   const [records, setRecords] = useState<GameRecord[]>([]);
+  const [apiRules, setApiRules] = useState<string[]>([]);
+  const [apiRulesVersion, setApiRulesVersion] = useState('');
+  const [jackpotAwards, setJackpotAwards] = useState<{ round: number; win: number; time: string }[]>([]);
+  const [gameName, setGameName] = useState('Gready Market');
+  const [apiPlayerRecords, setApiPlayerRecords] = useState<{ round?: number; element?: string; bet?: number; win?: number; time?: string }[]>([]);
   const roundRef = useRef(74612);
 
   const [itemPulse, setItemPulse] = useState<{ id: ItemId | null; key: number }>({ id: null, key: 0 });
@@ -1370,6 +1575,8 @@ const GamePage = () => {
   const [trophyCoins, setTrophyCoins] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
   const trophyCoinIdRef = useRef(0);
 
+  /* Set document title from API game name */
+  useEffect(() => { document.title = gameName; }, [gameName]);
   /* Continuous trophy coin explosion during BETTING */
   useEffect(() => {
     if (phase !== 'BETTING') {
@@ -1497,7 +1704,21 @@ const GamePage = () => {
     setRoundType(isJackpotNext ? 'JACKPOT' : 'NORMAL');
 
     setPhase('BETTING');
-    setTimeLeft(BET_SECONDS);
+
+    /* Sync timer with server session end time when available */
+    let betSeconds = BET_SECONDS;
+    if (sessionEndTime) {
+      const serverEnd = new Date(sessionEndTime).getTime();
+      const now = Date.now();
+      const remaining = Math.max(1, Math.round((serverEnd - now) / 1000));
+      if (remaining > 0 && remaining < 300) { // sanity: max 5 minutes
+        betSeconds = remaining;
+        console.log('[TIMER] Synced with server:', remaining, 'seconds remaining');
+      }
+      /* Clear after first use so subsequent rounds use default BET_SECONDS */
+      setSessionEndTime(null);
+    }
+    setTimeLeft(betSeconds);
     setShowPreDraw(true);
   };
 
@@ -1505,6 +1726,11 @@ const GamePage = () => {
   const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
   const placeGroupBet = (group: ItemId[]) => {
     if (!canBet) return;
+
+    /* Enforce max bets per turn from API */
+    const currentBettedCount = (Object.values(bets) as number[]).filter(v => v > 0).length;
+    const newItems = group.filter(id => (bets[id] ?? 0) === 0);
+    if (currentBettedCount + newItems.length > maxPlayers) return;
 
     // Unique + valid ids only
     const ids = Array.from(new Set(group));
@@ -1569,7 +1795,7 @@ const GamePage = () => {
       const elementId = elementApiIds[itemId] || 0;
       fetch('/game/player/gaming/participants', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           player_id: PLAYER_ID,
           balance: runningBalance,
@@ -1578,9 +1804,9 @@ const GamePage = () => {
         }),
       })
         .then((res) => {
-          if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
+          if (!res.ok && res.status !== 500) console.warn('[API] Bet submit failed:', res.status);
         })
-        .catch((err) => console.warn('[API] Bet submit error:', err));
+        .catch(() => { /* silently ignore bet errors */ });
     });
   };
 
@@ -1730,7 +1956,7 @@ const GamePage = () => {
 
       if (roundType === 'JACKPOT') {
         const jackpotItems = winners; // exactly 4 items from one bucket
-        const j = computeJackpotWin({ jackpotItems, bets, itemMultiplier });
+        const j = computeJackpotWin({ jackpotItems, bets, itemMultiplier, jackpotBonus: jackpotAmount });
         winAmount = j.totalWin;
 
         // optional: choose a better “primaryId” for header/icon
@@ -1748,12 +1974,19 @@ const GamePage = () => {
 
       setResultSrcs((prev) => {
         const next = prev.slice(1);
-        next.push(itemMap[primaryId].src);
+        /* For jackpot rounds, show the bucket icon (vegetables/drinks) instead of single item */
+        if (roundType === 'JACKPOT') {
+          const isVeg = VEG_ITEMS.includes(primaryId);
+          next.push(isVeg ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png');
+        } else {
+          next.push(itemMap[primaryId].src);
+        }
         return next;
       });
 
       setPhase('SHOWTIME');
-      setTimeLeft(SHOW_SECONDS);
+      /* Jackpot needs extra time: 2.5s highlight + full trophy animation */
+      setTimeLeft(roundType === 'JACKPOT' ? 10 : SHOW_SECONDS);
 
       if (winAmount > 0) {
         setShowFireworks(true);
@@ -1762,7 +1995,13 @@ const GamePage = () => {
         setShowFireworks(false);
       }
 
-      setShowResultBoard(true);
+      /* For jackpot rounds, keep the 4 highlighted cells visible for 2.5s
+         before showing the result board (chips → trophy). Normal rounds show immediately. */
+      if (roundType === 'JACKPOT') {
+        setTimeout(() => setShowResultBoard(true), 2500);
+      } else {
+        setShowResultBoard(true);
+      }
       return;
     }
 
@@ -1834,6 +2073,10 @@ const GamePage = () => {
     if (!canBet) return;
     if (balance < selectedChip) return;
 
+    /* Enforce max bets per turn from API */
+    const bettedItemCount = (Object.values(bets) as number[]).filter(v => v > 0).length;
+    if (bets[itemId] === 0 && bettedItemCount >= maxPlayers) return;
+
     setBalance((prev) => prev - selectedChip);
     setLifetimeBet((prev) => prev + selectedChip);
 
@@ -1848,7 +2091,7 @@ const GamePage = () => {
     const elementId = elementApiIds[itemId] || 0;
     fetch('/game/player/gaming/participants', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         player_id: PLAYER_ID,
         balance: balance - selectedChip,
@@ -1857,10 +2100,9 @@ const GamePage = () => {
       }),
     })
       .then((res) => {
-        if (!res.ok) console.warn('[API] Bet submit failed:', res.status);
-        else console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
+        if (res.ok) console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
       })
-      .catch((err) => console.warn('[API] Bet submit error:', err));
+      .catch(() => { /* silently ignore bet errors */ });
 
 
     if (phase === 'BETTING') {
@@ -1899,10 +2141,13 @@ const GamePage = () => {
     const index = chipValues.indexOf(value);
     if (index === -1) return { left: 200, top: 520 };
 
-    // Matches your slider container exactly:
-    // <div style={{ left: 30, top: 88, width: 340, height: 80 }} ... />
-    const containerLeft = 30;
-    const containerTop = 88;
+    // Matches your chip container hierarchy:
+    // Parent: <div style={{ left: 4, top: 444 }}>
+    //   Child:  <div style={{ left: 30, top: 88 }}>
+    const parentLeft = 4;
+    const parentTop = 444;
+    const containerLeft = 30 + parentLeft;
+    const containerTop = 88 + parentTop;
     const containerWidth = 340;
     const containerHeight = 80;
 
@@ -1931,7 +2176,7 @@ const GamePage = () => {
   const remainingForAdvance = Math.max(0, ADVANCE_UNLOCK_BET - lifetimeBet);
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
   const winnerItem = pendingWin ? itemMap[pendingWin.itemId] : null;
-  const rankRows = rankTab === 'TODAY' ? rankRowsToday : RANK_ROWS_YESTERDAY;
+  const rankRows = rankTab === 'TODAY' ? rankRowsToday : rankRowsYesterday;
   const remainingForAdvanceApi = advanceModeApi ? advanceModeApi.remanning_values : remainingForAdvance;
   const winAmountLabel = pendingWin ? formatNum(pendingWin.amount) : '0';
   const winAmountFontSize = winAmountLabel.length >= 8 ? 18 : winAmountLabel.length >= 6 ? 21 : 24;
@@ -2076,7 +2321,7 @@ const GamePage = () => {
 
 
         {/* Top action icon buttons */}
-        <div className="absolute z-50 flex items-center" style={{ left: 258, top: 9, gap: 3 }}>
+        <div className="absolute z-50 flex items-center" style={{ left: 228, top: 9, gap: 2 }}>
           {[
             {
               key: 'music',
@@ -2114,8 +2359,8 @@ const GamePage = () => {
               onClick={iconBtn.onClick}
               className="relative flex items-center justify-center"
               style={{
-                width: 33,
-                height: 33,
+                width: 40,
+                height: 40,
                 border: 'none',
                 background: 'transparent',
                 cursor: canOpenSystemModal || iconBtn.key === 'close' ? 'pointer' : 'default',
@@ -2129,26 +2374,12 @@ const GamePage = () => {
                 alt=""
                 className="absolute inset-0 h-full w-full object-contain"
               />
-              {'icon' in iconBtn && iconBtn.icon ? (
-                <img
-                  src={iconBtn.icon}
-                  alt=""
-                  className="relative object-contain"
-                  style={{ width: 16, height: 16 }}
-                />
-              ) : (
-                <span
-                  className="relative"
-                  style={{
-                    fontWeight: 800,
-                    fontSize: 15,
-                    color: '#fff',
-                    lineHeight: 1,
-                  }}
-                >
-                  {iconBtn.text}
-                </span>
-              )}
+              <img
+                src={iconBtn.icon}
+                alt=""
+                className="relative object-contain"
+                style={{ width: 20, height: 20 }}
+              />
             </button>
           ))}
         </div>
@@ -2405,8 +2636,9 @@ const GamePage = () => {
           );
         })()}
 
+        {/* Wooden signboard — always visible */}
         <motion.img
-          src={gameLogoSrc}
+          src="/image2/greedy_sign_board.png"
           alt=""
           className="absolute z-30 object-contain"
           style={{
@@ -2416,10 +2648,10 @@ const GamePage = () => {
             height: 196,
             filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.25))',
           }}
-
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
 
+        {/* Text overlay — always use local wordmark for consistent display */}
         <img
           src="/image2/greedy_wordmark.png"
           alt=""
@@ -2962,7 +3194,7 @@ const GamePage = () => {
           {boxData.map((box, idx) => {
             const totalBoxes = boxData.length;
             const containerWidth = 310;
-            const boxWidth = 48;
+            const boxWidth = 56;
             const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
             const xPos = 47 + idx * spacing;
 
@@ -2984,7 +3216,7 @@ const GamePage = () => {
                 className="absolute z-20 p-0 border-none bg-transparent"
                 style={{
                   left: xPos,
-                  top: 188,
+                  top: 180,
                   width: boxWidth,
                   height: boxWidth,
                   cursor: ready ? 'pointer' : 'default',
@@ -3004,19 +3236,29 @@ const GamePage = () => {
                         zIndex: 0,
                       }}
                       initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 0.95, scale: 1, rotate: 360 }}
+                      animate={{ opacity: 0.95, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{
-                        opacity: { duration: 0.2 },
-                        scale: { duration: 0.2 },
-                        rotate: { duration: .6, ease: 'linear', repeat: Infinity },
-                      }}
+                      transition={{ opacity: { duration: 0.2 }, scale: { duration: 0.2 } }}
                     >
-                      <img
+                      <motion.img
                         src="/image2/flare_circular.png"
                         alt=""
                         aria-hidden="true"
-                        className="h-full w-full object-contain"
+                        className="absolute object-contain"
+                        style={{
+                          left: 0,
+                          top: 0,
+                          width: '100%',
+                          height: '100%',
+                          transformOrigin: '50% 50%',
+                        }}
+                        animate={{ rotate: 360 }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 4,
+                          ease: 'linear',
+                          repeatType: 'loop',
+                        }}
                       />
                     </motion.div>
                   ) : null}
@@ -3034,6 +3276,26 @@ const GamePage = () => {
                   }
                   transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
                 />
+
+                {/* Label below chest */}
+                <span
+                  className="absolute text-center pointer-events-none"
+                  style={{
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    top: boxWidth - 10,
+                    width: 70,
+                    color: '#FFD866',
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 700,
+                    fontSize: 11,
+                    lineHeight: '13px',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                    zIndex: 2,
+                  }}
+                >
+                  {box.label}
+                </span>
               </button>
             );
           })}
@@ -3141,7 +3403,9 @@ const GamePage = () => {
                   bets={bets}
                   winnerItems={winnerIds.map((id) => itemMap[id]).filter(Boolean)}
                   winAmountLabel={winAmountLabel}
-                  rankRows={rankRows}
+                  rankRows={topWinnersRows.map(r => ({ name: r.name, diamonds: r.amount, pic: r.pic }))}
+                  roundType={roundType}
+                  winnerIds={winnerIds}
                 />
               ) : (
                 /* ✅ NO BET + LOSE PANEL */
@@ -3149,7 +3413,7 @@ const GamePage = () => {
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
                   {/* ── Header: inside the rounded pill-shaped strip ── */}
-                  <div className="absolute flex items-center" style={{ left: 28, top: 65, width: 294, height: 42 }}>
+                  <div className="absolute flex items-center" style={{ left: 30, top: 72, width: 290, height: 42 }}>
                     <div
                       className="shrink-0 flex items-center justify-center"
                       style={{ width: 44, height: 44 }}
@@ -3164,7 +3428,7 @@ const GamePage = () => {
                     <div className="mx-2 shrink-0" style={{ width: 2, height: 24, background: 'rgba(255,255,255,0.3)' }} />
 
                     <div
-                      className="flex-1 flex justify-start pl-2"
+                      className="flex-1 flex items-center justify-start pl-2"
                       style={{
                         color: '#fff',
                         fontFamily: 'Inter, system-ui, sans-serif',
@@ -3181,21 +3445,30 @@ const GamePage = () => {
                   </div>
 
                   {/* ── Leaderboard rows — inside body area below header strip ── */}
-                  {NO_BET_ROWS.map((row, idx) => (
+                  {topWinnersRows.slice(0, 3).map((row, idx) => (
                     <div
                       key={`${row.name}-${idx}`}
                       className="absolute flex items-center"
-                      style={{ left: 48, top: 140 + idx * 58, width: 254, height: 50 }}
+                      style={{ left: 33, top: 130 + idx * 52, width: 270, height: 50 }}
                     >
                       <img
                         src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
                         alt=""
                         style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
                       />
+                      {row.pic && (
+                        <img
+                          src={row.pic}
+                          alt=""
+                          style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginLeft: 4, border: '2px solid rgba(255,255,255,0.5)' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      )}
                       <div
                         style={{
                           marginLeft: 10,
-                          width: 120,
+                          width: 100,
+                          flexShrink: 0,
                           color: '#fff',
                           fontFamily: 'Inria Serif, serif',
                           fontStyle: 'italic',
@@ -3211,7 +3484,7 @@ const GamePage = () => {
                         {row.name}
                       </div>
 
-                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 85 }}>
+                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 90, paddingLeft: 8 }}>
                         <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
                         <span
                           style={{
@@ -3222,7 +3495,7 @@ const GamePage = () => {
                             lineHeight: '18px',
                             textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                             whiteSpace: 'nowrap',
-                            width: 60,
+                            width: 65,
                             textAlign: 'right',
                           }}
                         >
@@ -3336,16 +3609,61 @@ const GamePage = () => {
                 style={{ width: 326, height: 430 }}
               >
                 {activeModal === 'RULE' ? (
-                  <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
+                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-3">
+                    <div className="mx-auto mb-2 flex h-[44px] w-[160px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
+                      Rules
+                    </div>
+                    <div className="overflow-y-auto" style={{ maxHeight: 340 }}>
+                      {apiRules.length > 0 ? (
+                        <ol className="list-decimal space-y-2 pl-5 text-[14px] text-[#7b471d]">
+                          {apiRules.map((rule, idx) => (
+                            <li key={idx}>{rule}</li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
+                      )}
+                      {apiRulesVersion && (
+                        <div className="mt-3 text-right text-[11px] text-[#b58a55]">{apiRulesVersion}</div>
+                      )}
+                    </div>
+                  </div>
                 ) : null}
 
                 {activeModal === 'RECORDS' ? (
-                  <div className="relative h-full w-full">
-                    <img src="/image2/popup_game_records.png" alt="" className="h-full w-full object-fill" />
-                    <div className="absolute left-[28px] right-[30px] top-[90px] text-[13px] text-[#be6a31]">
-                      {records.length > 0
-                        ? `Round ${records[0].round} | Winner: ${records[0].winner} | Win: ${formatNum(records[0].win)}`
-                        : 'Display game records of the last 7 days, with a maximum of 200 records.'}
+                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-3">
+                    <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[22px] font-bold text-[#ffd64f]">
+                      Game Records
+                    </div>
+                    <div className="overflow-y-auto" style={{ maxHeight: 340 }}>
+                      {apiPlayerRecords.length > 0 ? (
+                        <>
+                          <div className="mb-1 flex items-center justify-between rounded-[8px] bg-[#e9b273] px-2 py-1 text-[12px] font-bold text-[#6d3712]">
+                            <span style={{ width: 50 }}>Round</span>
+                            <span style={{ width: 70 }}>Element</span>
+                            <span style={{ width: 50, textAlign: 'right' }}>Bet</span>
+                            <span style={{ width: 50, textAlign: 'right' }}>Win</span>
+                          </div>
+                          {apiPlayerRecords.map((r, idx) => (
+                            <div key={idx} className="flex items-center justify-between border-b border-[#e9c08a] px-2 py-[4px] text-[12px] text-[#7b471d]">
+                              <span style={{ width: 50 }}>{r.round ?? '-'}</span>
+                              <span style={{ width: 70 }}>{r.element ?? '-'}</span>
+                              <span style={{ width: 50, textAlign: 'right' }}>{r.bet != null ? formatNum(r.bet) : '-'}</span>
+                              <span style={{ width: 50, textAlign: 'right', color: (r.win ?? 0) > 0 ? '#2d8a1e' : '#7b471d' }}>{r.win != null ? formatNum(r.win) : '-'}</span>
+                            </div>
+                          ))}
+                        </>
+                      ) : records.length > 0 ? (
+                        records.map((rec, idx) => (
+                          <div key={idx} className="border-b border-[#e9c08a] px-2 py-[4px] text-[12px] text-[#7b471d]">
+                            Round {rec.round} | {rec.winner.join(', ')} | Win: {formatNum(rec.win)}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-8 text-center text-[14px] text-[#b58a55]">
+                          No records yet. Play some rounds!
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -3401,12 +3719,20 @@ const GamePage = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-1">
-                      {rankRows.slice(0, 7).map((row, idx) => (
+                    <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 320 }}>
+                      {rankRows.map((row, idx) => (
                         <div key={`${row.name}-${idx}`} className="relative h-[42px]">
                           <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
-                          <div className="absolute left-[14px] top-[8px] text-[20px] text-[#7b471d]">{idx + 1}</div>
-                          <div className="absolute left-[70px] top-[8px] text-[18px] text-[#7b471d]">{row.name}</div>
+                          {row.pic && (
+                            <img
+                              src={row.pic}
+                              alt=""
+                              className="absolute"
+                              style={{ left: 38, top: 5, width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(123,71,29,0.4)' }}
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                          <div className="absolute top-[8px] text-[18px] text-[#7b471d]" style={{ left: row.pic ? 72 : 70 }}>{row.name}</div>
                           <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
                             {formatNum(row.diamonds)}
                           </div>
