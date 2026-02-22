@@ -3184,7 +3184,7 @@ const GamePage = () => {
             const openSrc = box.openSrc || CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
             const chestSrc = opened ? openSrc : closedSrc;
 
-            const flareSize = boxWidth + 60;
+            const flareSize = boxWidth + 30;
 
             return (
               <button
@@ -3214,7 +3214,7 @@ const GamePage = () => {
                         zIndex: 0,
                       }}
                       initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 0.95, scale: 1 }}
+                      animate={{ opacity: 1, scale: 1, filter: 'brightness(1.4)' }}
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ opacity: { duration: 0.2 }, scale: { duration: 0.2 } }}
                     >
@@ -3222,18 +3222,17 @@ const GamePage = () => {
                         src="/image2/flare_circular.png"
                         alt=""
                         aria-hidden="true"
-                        className="absolute object-contain"
+                        className="absolute inset-0"
                         style={{
-                          left: 0,
-                          top: 0,
                           width: '100%',
                           height: '100%',
-                          transformOrigin: '50% 50%',
+                          objectFit: 'cover',
+                          transformOrigin: 'center center',
                         }}
                         animate={{ rotate: 360 }}
                         transition={{
                           repeat: Infinity,
-                          duration: 4,
+                          duration: 1,
                           ease: 'linear',
                           repeatType: 'loop',
                         }}
@@ -3711,9 +3710,28 @@ const GamePage = () => {
                 ) : null}
 
                 {activeModal === 'RANK' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff4d4] to-[#ffe3b3] p-3">
-                    <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
-                      Game Rank
+                  <div className="relative" style={{ width: 323, height: 546, borderRadius: 17, background: '#FFE9BD', margin: '0 auto', overflow: 'visible', paddingTop: 35, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
+                    {/* Ribbon header — overlaps top of modal */}
+                    <div className="absolute left-1/2" style={{ width: 242, height: 161, top: -75, transform: 'translateX(-50%)', zIndex: 10 }}>
+                      <img
+                        src="/image2/ribbon.png"
+                        alt=""
+                        className="w-full h-full"
+                        style={{ objectFit: 'contain' }}
+                      />
+                      <div
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontSize: 22,
+                          fontWeight: 800,
+                          color: '#ffd64f',
+                          textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                          paddingBottom: 20,
+                        }}
+                      >
+                        Game Rank
+                      </div>
                     </div>
 
                     <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
@@ -3735,9 +3753,16 @@ const GamePage = () => {
                       </button>
                     </div>
 
-                    <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 320 }}>
+                    {/* Column headers */}
+                    <div className="flex items-center mx-auto mb-1" style={{ width: 292, height: 28, fontSize: 13, fontWeight: 700, color: '#7b471d' }}>
+                      <span style={{ width: 50, textAlign: 'center' }}>Rank</span>
+                      <span style={{ flex: 1, textAlign: 'center' }}>Name</span>
+                      <span style={{ width: 100, textAlign: 'center' }}>Diamonds Play</span>
+                    </div>
+
+                    <div className="space-y-1 overflow-y-auto overflow-x-hidden" style={{ maxHeight: 400 }}>
                       {rankRows.map((row, idx) => (
-                        <div key={`${row.name}-${idx}`} className="relative h-[42px]">
+                        <div key={`${row.name}-${idx}`} className="relative" style={{ width: 292, height: 47, margin: '0 auto' }}>
                           <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
                           {row.pic && (
                             <img
