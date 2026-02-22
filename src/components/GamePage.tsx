@@ -3708,86 +3708,439 @@ const GamePage = () => {
                   </div>
                 ) : null}
 
-                {activeModal === 'RANK' ? (
-                  <div className="relative" style={{ width: 323, height: 546, margin: '0 auto', overflow: 'visible' }}>
-                    {/* Gameboard background image */}
-                    <img
-                      src="/image2/gameboard.png"
-                      alt=""
-                      className="absolute inset-0 w-full h-full"
-                      style={{ objectFit: 'fill', borderRadius: 17 }}
-                    />
 
-                    {/* "Game Rank" text on the built-in ribbon */}
-                    <div
-                      className="absolute left-1/2 flex items-center justify-center"
-                      style={{
-                        top: 8,
-                        transform: 'translateX(-50%)',
-                        width: 200,
-                        height: 50,
-                        fontFamily: 'Inter, system-ui, sans-serif',
-                        fontSize: 22,
-                        fontWeight: 800,
-                        color: '#ffd64f',
-                        textShadow: '0 2px 4px rgba(0,0,0,0.4)',
-                        zIndex: 10,
-                      }}
-                    >
-                      Game Rank
-                    </div>
 
-                    {/* Content area — positioned inside the gameboard frame */}
-                    <div className="relative" style={{ paddingTop: 70, paddingLeft: 20, paddingRight: 20, paddingBottom: 16 }}>
-                      <div className="mx-auto mb-2 flex h-[30px] w-[230px] items-center rounded-[18px] bg-[#dfa66e] p-[2px]">
-                        <button
-                          type="button"
-                          onClick={() => setRankTab('TODAY')}
-                          className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'TODAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                            }`}
-                        >
-                          Today
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRankTab('YESTERDAY')}
-                          className={`h-full w-1/2 rounded-[16px] text-[14px] ${rankTab === 'YESTERDAY' ? 'bg-[#ffcf22] text-[#7c430f]' : 'text-[#6b4a25]'
-                            }`}
-                        >
-                          Yesterday
-                        </button>
-                      </div>
+{activeModal === 'RANK' ? (
+  <div
+    className="absolute"
+    style={{
+      left: -24,
+      top: -84,
+      width: 374,
+      height: 597,
+      overflow: 'visible',
+    }}
+  >
+    {/* ── 1. Gameboard background (ribbon + "Game Rank" baked in) ── */}
+    <img
+      src="/image2/gameboard.png"
+      alt=""
+      className="absolute inset-0 w-full h-full"
+      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+    />
+    {/* ── Title: Game Rank ── */}
+<div
+  className="absolute"
+  style={{
+    left: '49%',
+    transform: 'translateX(-50%)',
+    top: 61,               /* Adjust this to move it up or down on the ribbon */
+    zIndex: 10,
+    whiteSpace: 'nowrap',
+  }}
+>
+  <span
+    style={{
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontWeight: 400,      /* Extra bold for that game title look */
+      fontSize: 18,         /* Large title size */
+      color: '#ffd900',     /* Bright Gold/Yellow */
+      textTransform: 'uppercase',
+      letterSpacing: '1px',
+      // Thin brown border (0.8px)
+      textShadow: `
+        0.8px 0.8px 0 #7a3c08, 
+        -0.8px -0.8px 0 #7a3c08, 
+         0.8px -0.8px 0 #7a3c08, 
+        -0.8px 0.8px 0 #7a3c08
+      `,
+    }}
+  >
+    Game Rank
+  </span>
+</div>
 
-                      {/* Column headers */}
-                      <div className="flex items-center mx-auto mb-1" style={{ width: 280, height: 28, fontSize: 13, fontWeight: 700, color: '#7b471d' }}>
-                        <span style={{ width: 50, textAlign: 'center' }}>Rank</span>
-                        <span style={{ flex: 1, textAlign: 'center' }}>Name</span>
-                        <span style={{ width: 100, textAlign: 'center' }}>Diamonds Play</span>
-                      </div>
+    {/* ── 2. Close button ── top: 60, right: -5 → move these independently */}
+    <button
+      type="button"
+      onClick={() => setActiveModal('NONE')}
+      className="absolute flex items-center justify-center"
+      style={{
+        right: -5,
+        top: 60,
+        width: 30,
+        height: 30,
+        borderRadius: '50%',
+        background: 'linear-gradient(180deg,#FF4444 0%,#CC1111 100%)',
+        border: '3px solid #fff',
+        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+        zIndex: 20,
+        cursor: 'pointer',
+      }}
+      aria-label="Close rank"
+    >
+      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+    </button>
 
-                      <div className="space-y-1 overflow-y-auto overflow-x-hidden" style={{ maxHeight: 380 }}>
-                        {rankRows.map((row, idx) => (
-                          <div key={`${row.name}-${idx}`} className="relative" style={{ width: 280, height: 47, margin: '0 auto' }}>
-                            <img src={rankBgByIndex(idx)} alt="" className="absolute inset-0 h-full w-full object-fill" />
-                            {row.pic && (
-                              <img
-                                src={row.pic}
-                                alt=""
-                                className="absolute"
-                                style={{ left: 38, top: 5, width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(123,71,29,0.4)' }}
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                            )}
-                            <div className="absolute top-[8px] text-[18px] text-[#7b471d]" style={{ left: row.pic ? 72 : 70 }}>{row.name}</div>
-                            <div className="absolute right-[12px] top-[8px] text-[18px] text-[#7b471d]">
-                              {formatNum(row.diamonds)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+    {/* ── 3. Timer pill ── left/top independent */}
+    <div
+      className="absolute flex items-center justify-center"
+      style={{
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 102.5,          /* ← change only this to move timer */
+        width: 135,
+        height: 20,
+        borderRadius: 13,
+        background: 'rgba(140,90,30,0.22)',
+        border: '1.5px solid rgba(160,110,50,0.35)',
+        gap: 5,
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: 13,
+        fontWeight: 300,
+        color: '#fff',
+        zIndex: 5,
+      }}
+    >
+      <span style={{ fontSize: 13 }}>⏱</span>
+      {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
+    </div>
+
+    {/* ── 4. Today / Yesterday sliding tab ── left/top independent */}
+    <div
+      className="absolute"
+      style={{
+        left: '50.8%',
+        transform: 'translateX(-50%)',
+        top: 124,         /* ← change only this to move tab row */
+        width: 245,
+        height: 38,
+        zIndex: 5,
+      }}
+    >
+      {/* Outer pill container */}
+      <div
+        className="relative flex items-center w-full h-full"
+        style={{
+          
+        }}
+      >
+        {/* Sliding button_gameboard.png indicator */}
+        <motion.div
+          className="absolute top-[3px] bottom-[3px]"
+          style={{
+            width: 'calc(50% - 3px)',
+            left: 3,
+            borderRadius: 16,
+            overflow: 'hidden',
+            zIndex: 1,
+          }}
+          animate={{ x: rankTab === 'TODAY' ? 0 : '100%' }}
+          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        >
+          <img
+            src="/image2/button_gameboard.png"
+            alt=""
+            className="absolute inset-0 w-full h-full"
+            style={{ objectFit: 'fill' }}
+          />
+        </motion.div>
+
+        {/* Today */}
+        <button
+          type="button"
+          onClick={() => setRankTab('TODAY')}
+          className="relative flex items-center justify-center"
+          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
+        >
+          <span
+  style={{
+    fontFamily: 'Inter, system-ui, sans-serif',
+    fontWeight: 500,
+    fontSize: 14.5,
+    // White text when active, Brown text when inactive
+    color: rankTab === 'TODAY' ? '#fff' : '#7a3c08', 
+    
+    // Thin border (0.8px) only when active
+    textShadow: rankTab === 'TODAY' 
+      ? `0.8px 0.8px 0 #7a3c08, 
+        -0.8px -0.8px 0 #7a3c08, 
+         0.8px -0.8px 0 #7a3c08, 
+        -0.8px 0.8px 0 #7a3c08` 
+      : 'none',
+      
+    transition: 'all 0.2s ease-in-out',
+  }}
+>
+  Today
+</span>
+        </button>
+
+        {/* Yesterday */}
+        <button
+          type="button"
+          onClick={() => setRankTab('YESTERDAY')}
+          className="relative flex items-center justify-center"
+          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
+        >
+          <span
+  style={{
+    fontFamily: 'Inter, system-ui, sans-serif',
+    fontWeight: 500,
+    fontSize: 14.5,
+    // White text when active (YESTERDAY), brown when inactive
+    color: rankTab === 'YESTERDAY' ? '#fff' : '#7a3c08',
+    
+    // Thin 0.8px border only when active
+    textShadow: rankTab === 'YESTERDAY' 
+      ? `0.8px 0.8px 0 #7a3c08, 
+        -0.8px -0.8px 0 #7a3c08, 
+         0.8px -0.8px 0 #7a3c08, 
+        -0.8px 0.8px 0 #7a3c08` 
+      : 'none',
+      
+    transition: 'all 0.2s ease-in-out',
+  }}
+>
+  Yesterday
+</span>
+        </button>
+      </div>
+
+      {/* ? help button — outside the pill, right side */}
+      <div
+        style={{
+          position: 'absolute',
+          right: -40,
+          top: '46%',
+          transform: 'translateY(-50%)',
+          width: 30,
+          height: 30,
+          borderRadius: '50%',
+          border: '2px solid #c8a05a',
+          background: 'rgba(240,220,170,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#8b5e20',
+          fontWeight: 900,
+          fontSize: 17,
+          zIndex: 6,
+        }}
+      >
+        ?
+      </div>
+    </div>
+
+    {/* ── 5. Column headers ── left/top independent */}
+    <div
+      className="absolute flex items-center"
+      style={{
+        left: 25,
+        right: 40,
+        top: 164,         /* ← change only this to move headers */
+        height: 28,
+        zIndex: 5,
+      }}
+    >
+      <span style={{ width: 64, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Rank</span>
+      <span style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Name</span>
+      <span style={{ width: 100, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Diamonds Play</span>
+    </div>
+
+    {/* ── 6. Scrollable rank rows ── left/top independent */}
+    <div
+      className="absolute overflow-y-auto overflow-x-hidden"
+      style={{
+        left: 30,
+        right: 30,
+        top: 198,         /* ← change only this to move the rows area */
+        height: 310,      /* ← change only this to adjust rows height */
+        zIndex: 5,
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+      }}
+    >
+      {rankRows.map((row, idx) => {
+        const rowBg =
+          idx === 0 ? '/image2/rank1_gameboard.png'
+          : idx === 1 ? '/image2/rank2_gameboard.png'
+          : idx === 2 ? '/image2/rank3_gameboard.png'
+          : '/image2/defaultrank_gameboard.png';
+
+        const rowH = idx === 0 ? 47 : 48;
+        const isTop3 = idx < 3;
+
+        return (
+          <div
+            key={`rank-row-${row.name}-${idx}`}
+            className="relative"
+            style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}
+          >
+            <img
+              src={rowBg}
+              alt=""
+              className="absolute inset-0 w-full h-full"
+              style={{ objectFit: 'fill', borderRadius: 8 }}
+            />
+
+            {/* Rank badge / number */}
+            <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
+              
+            </div>
+
+            {/* Profile picture */}
+            {row.pic ? (
+              <img
+                src={row.pic}
+                alt=""
+                className="absolute"
+                style={{ left: 59, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.75)' }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="absolute" style={{ left: 56, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', background: 'rgba(180,130,60,0.35)', border: '2px solid rgba(255,255,255,0.5)' }} />
+            )}
+
+            {/* Name */}
+            <div
+              className="absolute"
+              style={{ left: 96, top: '50%', transform: 'translateY(-50%)', width: 96, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {row.name}
+            </div>
+
+            {/* Divider */}
+            {isTop3 && (
+              <div className="absolute" style={{ left: 199, top: '50%', transform: 'translateY(-50%)', width: 1.5, height: 22, background: 'rgba(120,80,30,0.28)', borderRadius: 1 }} />
+            )}
+
+            {/* Diamond + amount */}
+            {/* Diamond + amount container */}
+<div 
+  className="absolute flex items-center" 
+  style={{ 
+    right: 12,             // Fixed distance from the right edge of the row
+    top: '50%', 
+    transform: 'translateY(-50%)', 
+    width: 90,             // Fixed width so the diamond doesn't move
+    gap: 4,
+    display: 'flex',
+    justifyContent: 'flex-start' // Keeps the diamond on the left of this box
+  }}
+>
+  {/* The Diamond: Locked at the start of the 90px box */}
+  <img 
+    src="/image2/diamond.png" 
+    alt="" 
+    style={{ width: 18, height: 18, flexShrink: 0 }} 
+  />
+
+  {/* The Number: Fills remaining space and pushes text to the right */}
+  <span 
+    style={{ 
+      flex: 1,              // Takes up all space between diamond and right edge
+      textAlign: 'right',   // Aligns the text to the right
+      fontFamily: 'Inter, system-ui, sans-serif', 
+      fontWeight: 400, 
+      fontSize: 13, 
+      color: '#5a2d0c', 
+      whiteSpace: 'nowrap' 
+    }}
+  >
+    {formatNum(row.diamonds)}
+  </span>
+</div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* ── 7. 99+ sticky bottom row ── left/top independent */}
+    <div
+      className="absolute"
+      style={{
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 530,         /* ← change only this to move the 99+ row */
+        width: 340,
+        height: 55,
+        zIndex: 5,
+      }}
+    >
+      <img
+        src="/image2/99_rankboard.png"
+        alt=""
+        className="absolute inset-0 w-full h-full"
+        style={{ objectFit: 'fill', borderRadius: 10 }}
+      />
+      <div className="absolute flex items-center" style={{ left: 22, right: 12, top: 0, bottom: 0, gap: 8 }}>
+        <span 
+  style={{ 
+    fontFamily: 'Inter, system-ui, sans-serif', 
+    fontWeight: 600, // Increased to 800 to match the tab thickness
+    fontSize: 15, 
+    color: '#fff', // White text
+    minWidth: 42, 
+    flexShrink: 0,
+    // Thin brown border (0.8px) to match the Today tab
+    textShadow: `
+      0.8px 0.8px 0 #7a3c08, 
+      -0.8px -0.8px 0 #7a3c08, 
+       0.8px -0.8px 0 #7a3c08, 
+      -0.8px 0.8px 0 #7a3c08
+    `,
+  }}
+>
+  99+
+</span>
+        {/* Profile Picture Circle */}
+<div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(180,130,60,0.4)', flexShrink: 0, border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+  👤
+</div>
+
+{/* "You" Text - Now White with Brown Border */}
+<span style={{ 
+  fontFamily: 'Inter, system-ui, sans-serif', 
+  fontWeight: 400, 
+  fontSize: 14, 
+  color: '#7a3c08', 
+  flex: 1, 
+  whiteSpace: 'nowrap', 
+  overflow: 'hidden', 
+  textOverflow: 'ellipsis',
+  
+}}>
+  You
+</span>
+
+{/* Diamond Container - Aligned with the rows above */}
+<div 
+  className="flex items-center" 
+  style={{ 
+    gap: 4, 
+    flexShrink: 0, 
+    width: 90,             // Matches the width we gave the list rows
+    justifyContent: 'flex-start' 
+  }}
+>
+  <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
+  <span style={{ 
+    flex: 1,
+    textAlign: 'right',    // Pushes the "0" to the right edge
+    fontFamily: 'Inter, system-ui, sans-serif', 
+    fontWeight: 400, 
+    fontSize: 15, 
+    color: '#7a3c08',
+  }}>
+    0
+  </span>
+</div>
+      </div>
+    </div>
+
+  </div>
+) : null}
 
                 {activeModal === 'ADVANCED' ? (
                   <div className="relative h-full w-full">
