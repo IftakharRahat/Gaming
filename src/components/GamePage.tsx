@@ -1060,7 +1060,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                       style={{
                         left: PX + 30,
                         top: LB_TOP + idx * (ROW_H + ROW_GAP),
-                        width: CONTENT_W - 60,
+                        width: CONTENT_W - 80,
                         height: ROW_H,
                       }}
                       initial={{ opacity: 0, x: -20 }}
@@ -3339,7 +3339,7 @@ const GamePage = () => {
                       height: 26,
                       minWidth: 26,
                       objectFit: 'contain',
-                      animation: idx === 0 ? 'slideInResult 0.3s ease-out' : undefined,
+                      animation: idx === 0 && phase === 'SHOWTIME' ? 'slideInResult 0.3s ease-out' : undefined,
                     }}
                   />
                 );
@@ -3463,7 +3463,7 @@ const GamePage = () => {
                     <div
                       key={`${row.name}-${idx}`}
                       className="absolute flex items-center"
-                      style={{ left: 33, top: 130 + idx * 52, width: 270, height: 50 }}
+                      style={{ left: 40, top: 130 + idx * 52, width: 250, height: 50 }}
                     >
                       <img
                         src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
@@ -3481,12 +3481,12 @@ const GamePage = () => {
                       <div
                         style={{
                           marginLeft: 10,
-                          width: 100,
+                          width: 70,
                           flexShrink: 0,
                           color: '#fff',
                           fontFamily: 'Inria Serif, serif',
                           fontStyle: 'italic',
-                          fontSize: 22,
+                          fontSize: 18,
                           fontWeight: 700,
                           lineHeight: '24px',
                           whiteSpace: 'nowrap',
@@ -3498,18 +3498,18 @@ const GamePage = () => {
                         {row.name}
                       </div>
 
-                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 90, paddingLeft: 8 }}>
-                        <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                      <div className="absolute flex items-center" style={{ gap: 3, left: 190, top: 0, bottom: 0 }}>
+                        <img src="/image2/diamond.png" alt="" style={{ width: 16, height: 16, flexShrink: 0 }} />
                         <span
                           style={{
                             color: '#ffe8a9',
                             fontFamily: 'Inter, system-ui, sans-serif',
                             fontWeight: 700,
-                            fontSize: 18,
+                            fontSize: 14,
                             lineHeight: '18px',
                             textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                             whiteSpace: 'nowrap',
-                            width: 65,
+                            width: 50,
                             textAlign: 'right',
                           }}
                         >
