@@ -1,0 +1,15 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/game",
+      "destination": "/api/game"
+    },
+    {
+      "source": "/game/:path*",
+      "destination": "/api/game?path=:path*"
+    }
+  ]
+}

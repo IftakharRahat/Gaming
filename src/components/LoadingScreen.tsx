@@ -1,9 +1,71 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
 // Using public folder assets for absolute reliability
 const logoUrl = '/logo.png';
 const backgroundUrl = '/image2/iphone16pro_background.jpg';
+
+// ── Critical images that GamePage needs immediately ──
+// These are preloaded during the loading screen so they're cached when the game mounts.
+const CRITICAL_IMAGES = [
+    // Backgrounds
+    '/image2/advance_bg.png',
+    '/image2/background_city_scene.png',
+    // Ferris wheel & game elements
+    '/image2/ferris-wheel.png',
+    '/image2/game-elements.png',
+    '/image2/game_elements_sheet.png',
+    // Sign board & branding
+    '/image2/greedy_sign_board.png',
+    '/image2/greedy_wordmark.png',
+    // Game items (sprites)
+    '/image2/honey_jar.png',
+    '/image2/tomato.png',
+    '/image2/lemon.png',
+    '/image2/milk_carton.png',
+    '/image2/pumpkin.png',
+    '/image2/zucchini.png',
+    '/image2/cola_can.png',
+    '/image2/water.png',
+    // Chips
+    '/image2/chip_10.png',
+    '/image2/chip_100.png',
+    '/image2/chip_500_orange.png',
+    '/image2/chip_1k.png',
+    '/image2/chip_5k.png',
+    // Chests
+    '/image2/chest_10k.png',
+    '/image2/chest_50k.png',
+    '/image2/chest_100k.png',
+    '/image2/chest_500k.png',
+    '/image2/chest_1m.png',
+    // UI elements
+    '/image2/gameboard.png',
+    '/image2/flare.png',
+    '/image2/flare_circular.png',
+    '/image2/trophy.png',
+    '/image2/ribbon.png',
+    '/image2/banner_game_on.png',
+    '/image2/curtain.png',
+    '/image2/select_items.png',
+    // Rank badges
+    '/image2/leaderboard_rank_1.png',
+    '/image2/leaderboard_rank_2.png',
+    '/image2/leaderboard_rank_3.png',
+    '/image2/leaderboard_rank_4_plus.png',
+];
+
+function preloadImage(src: string): Promise<void> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => {
+            console.warn(`[Preload] Failed to load: ${src}`);
+            resolve(); // Don't block loading on a failed image
+        };
+        img.src = src;
+    });
+}
 
 interface LoadingScreenProps {
     onLoadingComplete: () => void;
@@ -11,31 +73,50 @@ interface LoadingScreenProps {
 
 const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
     const [progress, setProgress] = useState(0);
+    const [preloadDone, setPreloadDone] = useState(false);
 
+    // Preload critical images and track real progress
     useEffect(() => {
-        // Slow progress for verification
-        const interval = setInterval(() => {
-            setProgress((prev) => {
-                if (prev >= 100) {
-                    clearInterval(interval);
-                    return 100;
-                }
-                const next = prev + Math.floor(Math.random() * 2) + 1;
-                return next > 100 ? 100 : next;
-            });
-        }, 40);
+        let cancelled = false;
+        const total = CRITICAL_IMAGES.length;
+        let loaded = 0;
 
-        return () => clearInterval(interval);
+        const loadAll = async () => {
+            // Load in batches of 6 to avoid overwhelming the network
+            const batchSize = 6;
+            for (let i = 0; i < total; i += batchSize) {
+                if (cancelled) return;
+                const batch = CRITICAL_IMAGES.slice(i, i + batchSize);
+                await Promise.all(batch.map(preloadImage));
+                loaded += batch.length;
+                if (!cancelled) {
+                    // Map actual progress to 10-95% range (reserve 0-10 for initial render, 95-100 for transition)
+                    const realProgress = Math.min(95, Math.round(10 + (loaded / total) * 85));
+                    setProgress(realProgress);
+                }
+            }
+            if (!cancelled) {
+                setProgress(100);
+                setPreloadDone(true);
+            }
+        };
+
+        // Start with a small initial progress to feel responsive immediately
+        setProgress(5);
+        loadAll();
+
+        return () => { cancelled = true; };
     }, []);
 
+    // Transition to game after preload completes
     useEffect(() => {
-        if (progress === 100) {
+        if (preloadDone) {
             const timer = setTimeout(() => {
                 onLoadingComplete();
-            }, 800);
+            }, 600);
             return () => clearTimeout(timer);
         }
-    }, [progress, onLoadingComplete]);
+    }, [preloadDone, onLoadingComplete]);
 
     return (
         <div className="relative w-full h-full flex flex-col items-center bg-[#8DA6DE] overflow-hidden">
@@ -83,7 +164,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
                             className="h-full rounded-full bg-gradient-to-r from-[#00d2ff] via-[#4facfe] to-[#3a7bd5] relative shadow-[0_0_15px_rgba(0,210,255,0.5)]"
                             initial={{ width: 0 }}
                             animate={{ width: `${progress}%` }}
-                            transition={{ duration: 0.1, ease: "linear" }}
+                            transition={{ duration: 0.3, ease: "easeOut" }}
                         >
                             <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent rounded-full opacity-80" />
                         </motion.div>

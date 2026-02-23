@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { compression } from 'vite-plugin-compression2'
 import https from 'node:https'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -60,5 +61,25 @@ export default defineConfig({
         server.middlewares.use(gameApiMiddleware)
       },
     },
+    // Pre-compress assets with gzip and brotli for production
+    compression({ algorithm: 'gzip', exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
+    compression({ algorithm: 'brotliCompress', exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
   ],
+  build: {
+    // Target modern browsers for smaller output
+    target: 'es2020',
+    rollupOptions: {
+      output: {
+        // Split vendor libraries into separate cacheable chunks
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-motion': ['framer-motion'],
+          'vendor-socket': ['socket.io-client'],
+          'vendor-utils': ['canvas-confetti', 'howler', 'clsx', 'tailwind-merge'],
+        },
+      },
+    },
+    // Increase chunk size warning limit (the game component is inherently large)
+    chunkSizeWarningLimit: 200,
+  },
 })
