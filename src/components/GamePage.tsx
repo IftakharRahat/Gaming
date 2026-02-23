@@ -1778,29 +1778,34 @@ const GamePage = () => {
       });
     }
 
-    // 4) Submit bets to API in sequence with a running balance
-    let runningBalance = balance;
-    ids.forEach((itemId) => {
-      runningBalance -= selectedChip;
-
-      const elementId = elementApiIds[itemId] || 0;
-      if (!PLAYER_ID) return; // skip API call if no player_id in URL
-      fetch('/game/player/gaming/participants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player_id: PLAYER_ID,
-          balance: runningBalance,
-          bet: selectedChip,
-          element: elementId,
-          mode: isAdvanceMode ? 1 : 2,
-        }),
-      })
-        .then((res) => {
-          if (!res.ok && res.status !== 500) console.warn('[API] Bet submit failed:', res.status);
-        })
-        .catch(() => { /* silently ignore bet errors */ });
-    });
+    // 4) Submit bets to API sequentially (server can't handle concurrent writes)
+    if (PLAYER_ID) {
+      let runningBalance = balance;
+      (async () => {
+        for (const itemId of ids) {
+          runningBalance -= selectedChip;
+          const elementId = elementApiIds[itemId] || 0;
+          try {
+            const res = await fetch('/game/player/gaming/participants', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                player_id: PLAYER_ID,
+                balance: runningBalance,
+                bet: selectedChip,
+                element: elementId,
+                mode: isAdvanceMode ? 1 : 2,
+              }),
+            });
+            if (res.ok) {
+              console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
+            }
+            // Small delay between sequential bets to avoid overwhelming the server
+            if (ids.length > 1) await new Promise((r) => setTimeout(r, 200));
+          } catch { /* silently ignore bet errors */ }
+        }
+      })();
+    }
   };
 
 
