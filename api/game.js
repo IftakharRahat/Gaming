@@ -27,13 +27,16 @@ function parsePath(query) {
 export default async function handler(req, res) {
   try {
     const normalizedPath = parsePath(req.query);
-    const gamePath = normalizedPath ? `/game/${normalizedPath}` : '/game';
+    const hasTrailingSlash = req.query.trailing_slash === '1';
+    const gamePath = normalizedPath
+      ? `/game/${normalizedPath}${hasTrailingSlash ? '/' : ''}`
+      : '/game';
     const isPlayerEndpoint = gamePath.startsWith('/game/player');
     const method = isPlayerEndpoint ? 'POST' : 'GET';
 
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
-      if (key === 'path' || key === '...path') continue;
+      if (key === 'path' || key === '...path' || key === 'trailing_slash') continue;
       if (Array.isArray(value)) {
         for (const v of value) qs.append(key, String(v));
       } else if (value != null) {

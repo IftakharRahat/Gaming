@@ -8,6 +8,10 @@
       "destination": "/api/game"
     },
     {
+      "source": "/game/:path*/",
+      "destination": "/api/game?path=:path*&trailing_slash=1"
+    },
+    {
       "source": "/game/:path*",
       "destination": "/api/game?path=:path*"
     }
