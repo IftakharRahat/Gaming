@@ -56,7 +56,7 @@ export default async function handler(req, res) {
         path: requestPath,
         method,
         headers: {
-          'Content-Type': req.headers['content-type'] || 'application/json',
+          'Content-Type': method === 'POST' ? 'application/json' : 'text/plain',
           'Content-Length': String(bodyBuffer.length),
         },
       },
