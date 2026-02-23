@@ -1,4 +1,4 @@
-import https from 'node:https';
+import https from 'https';
 
 const API_HOST = 'gameadmin.nanovisionltd.com';
 
@@ -7,15 +7,6 @@ function toBuffer(body) {
   if (Buffer.isBuffer(body)) return body;
   if (typeof body === 'string') return Buffer.from(body);
   return Buffer.from(JSON.stringify(body));
-}
-
-function readRawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
 }
 
 function parsePath(query) {
@@ -31,6 +22,7 @@ export default async function handler(req, res) {
     const isPlayerEndpoint = gamePath.startsWith('/game/player');
     const method = isPlayerEndpoint ? 'POST' : 'GET';
 
+    // Build query string from remaining params
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
       if (key === 'path' || key === '...path') continue;
@@ -42,10 +34,8 @@ export default async function handler(req, res) {
     }
     const requestPath = qs.size > 0 ? `${gamePath}?${qs.toString()}` : gamePath;
 
-    const bodyBuffer =
-      req.body !== undefined
-        ? toBuffer(req.body)
-        : await readRawBody(req);
+    // Get the body — Vercel auto-parses it, so use req.body
+    const bodyBuffer = toBuffer(req.body);
 
     const proxyReq = https.request(
       {
@@ -53,14 +43,16 @@ export default async function handler(req, res) {
         path: requestPath,
         method,
         headers: {
-          'Content-Type': req.headers['content-type'] || 'application/json',
+          // The upstream API expects text/plain, not application/json
+          'Content-Type': 'text/plain',
           'Content-Length': String(bodyBuffer.length),
         },
       },
       (proxyRes) => {
         res.statusCode = proxyRes.statusCode || 200;
+        // Forward response headers (skip transfer-encoding to avoid conflicts)
         for (const [key, value] of Object.entries(proxyRes.headers)) {
-          if (value !== undefined) {
+          if (value !== undefined && key.toLowerCase() !== 'transfer-encoding') {
             res.setHeader(key, value);
           }
         }
@@ -69,6 +61,7 @@ export default async function handler(req, res) {
     );
 
     proxyReq.on('error', (err) => {
+      console.error('[proxy] Request error:', err.message);
       res.statusCode = 502;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: err.message }));
@@ -79,6 +72,7 @@ export default async function handler(req, res) {
     }
     proxyReq.end();
   } catch (err) {
+    console.error('[proxy] Handler error:', err);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Unexpected proxy error' }));
