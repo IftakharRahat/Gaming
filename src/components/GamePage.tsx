@@ -51,7 +51,11 @@ const JACKPOT_EVERY_N_NORMAL_ROUNDS = 3;
 const JACKPOT_BONUS_AMOUNT = 500000;
 /* ── API config ── */
 const API_BASE = ''; // proxied via vite.config.ts
-const API_BODY = JSON.stringify({ regisation: '3' });
+const API_BODY = JSON.stringify({ regisation: 3 });
+/* Body with mode: 2 = general/basic, 1 = advance */
+const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
+const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
+const apiBodyPlayerNoMode = () => JSON.stringify({ regisation: 3, player_id: PLAYER_ID });
 
 type ApiElement = {
   id: number;
@@ -1180,49 +1184,58 @@ const GamePage = () => {
 
     (async () => {
       try {
+        /* mode: 2 = general/basic, 1 = advance */
+        const modeNum = 2; // default to general on init
+        const mBody = apiBodyWithMode(modeNum);
+        const pBody = apiBodyPlayer(modeNum);
+
         const results = await Promise.allSettled([
-          apiFetch<ApiElement[]>('/game/game/elements'),
-          apiFetch<ApiButton[]>('/game/sorce/buttons'),
-          apiFetch<ApiBox[]>('/game/magic/boxs'),
+          /* ── APIs that need mode ── */
+          apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
+          apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
+          apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
+          apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
+          apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
+          apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
+          apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
+          apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
+          apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
+          apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
+          apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
+          /* ── APIs that DON'T need mode ── */
           apiFetch<ApiTrophy>('/game/game/trophy'),
-          apiFetch<ApiWinElement[]>('/game/win/elements/list'),
           apiFetch<ApiCoin>('/game/game/coin'),
           apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
-          apiFetch<ApiTodayWin>('/game/today/win'),
-          apiFetch<ApiJackpot>('/game/jackpot'),
-          apiFetch<ApiSessionTime>('/game/game/session/end/time'),
-          apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
-          apiFetch<ApiGameMode>('/game/game/mode'),
-          apiFetch<ApiRankRow[]>('/game/game/rank/today'),
-          apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
-          apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn', 2, JSON.stringify({ regisation: 3 })),
-          apiFetch<ApiRankRow[]>('/game/game/rank/yesterday'),
+          apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn'),
           apiFetch<ApiGameRule>('/game/game/rule'),
-          apiFetch<ApiJackpotDetails>('/game/jackpot/details'),
+          apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           apiFetch<ApiGameMetadata>('/game/game/icon/'),
-          apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
+          apiFetch<ApiTodayWin>('/game/today/win'),
+          /* session API (unfinished on backend) */
+          apiFetch<ApiSessionTime>('/game/game/session/end/time'),
         ]);
 
+        /* Map results — order matches the Promise.allSettled array above */
         const elements = results[0].status === 'fulfilled' ? results[0].value : null;
         const buttons = results[1].status === 'fulfilled' ? results[1].value : null;
         const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
-        const trophy = results[3].status === 'fulfilled' ? results[3].value : null;
-        const winHistory = results[4].status === 'fulfilled' ? results[4].value : null;
-        const coin = results[5].status === 'fulfilled' ? results[5].value : null;
-        const gameIcon = results[6].status === 'fulfilled' ? results[6].value : null;
-        const todayWinApi = results[7].status === 'fulfilled' ? results[7].value : null;
-        const jackpotApi = results[8].status === 'fulfilled' ? results[8].value : null;
-        const sessionTime = results[9].status === 'fulfilled' ? results[9].value : null;
-        const prizeDistrib = results[10].status === 'fulfilled' ? results[10].value : null;
-        const gameMode = results[11].status === 'fulfilled' ? results[11].value : null;
-        const rankToday = results[12].status === 'fulfilled' ? results[12].value : null;
-        const topWinners = results[13].status === 'fulfilled' ? results[13].value : null;
+        const winHistory = results[3].status === 'fulfilled' ? results[3].value : null;
+        const topWinners = results[4].status === 'fulfilled' ? results[4].value : null;
+        const jackpotApi = results[5].status === 'fulfilled' ? results[5].value : null;
+        const jackpotDetails = results[6].status === 'fulfilled' ? results[6].value : null;
+        const gameMode = results[7].status === 'fulfilled' ? results[7].value : null;
+        const rankToday = results[8].status === 'fulfilled' ? results[8].value : null;
+        const rankYesterday = results[9].status === 'fulfilled' ? results[9].value : null;
+        const playerRecords = results[10].status === 'fulfilled' ? results[10].value : null;
+        const trophy = results[11].status === 'fulfilled' ? results[11].value : null;
+        const coin = results[12].status === 'fulfilled' ? results[12].value : null;
+        const gameIcon = results[13].status === 'fulfilled' ? results[13].value : null;
         const maxFruits = results[14].status === 'fulfilled' ? results[14].value : null;
-        const rankYesterday = results[15].status === 'fulfilled' ? results[15].value : null;
-        const gameRules = results[16].status === 'fulfilled' ? results[16].value : null;
-        const jackpotDetails = results[17].status === 'fulfilled' ? results[17].value : null;
-        const gameMetadata = results[18].status === 'fulfilled' ? results[18].value : null;
-        const playerRecords = results[19].status === 'fulfilled' ? results[19].value : null;
+        const gameRules = results[15].status === 'fulfilled' ? results[15].value : null;
+        const prizeDistrib = results[16].status === 'fulfilled' ? results[16].value : null;
+        const gameMetadata = results[17].status === 'fulfilled' ? results[17].value : null;
+        const todayWinApi = results[18].status === 'fulfilled' ? results[18].value : null;
+        const sessionTime = results[19].status === 'fulfilled' ? results[19].value : null;
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1778,6 +1791,7 @@ const GamePage = () => {
           balance: runningBalance,
           bet: selectedChip,
           element: elementId,
+          mode: isAdvanceMode ? 1 : 2,
         }),
       })
         .then((res) => {
@@ -2076,6 +2090,7 @@ const GamePage = () => {
         balance: balance - selectedChip,
         bet: selectedChip,
         element: elementId,
+        mode: isAdvanceMode ? 1 : 2,
       }),
     })
       .then((res) => {
@@ -2135,8 +2150,8 @@ const GamePage = () => {
     // Must match the sizing logic in your render
     const baseSize = n > 5 ? 48 : 54;
     const totalW = n * baseSize;
-const gap = (containerWidth - totalW) / (n + 1);
-const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize / 2;
+    const gap = (containerWidth - totalW) / (n + 1);
+    const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize / 2;
     const centerY = containerTop + containerHeight / 2;
 
     // flying chip rendered 44x44 => offset by 22
@@ -2346,15 +2361,15 @@ const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize 
                 className="absolute inset-0 h-full w-full object-contain"
               />
               <img
-  src={iconBtn.icon}
-  alt=""
-  className="relative object-contain"
-  style={{ 
-    width: iconBtn.key === 'close' ? 15 : 22, 
-    height: iconBtn.key === 'close' ? 20 : 22,
-    marginTop: iconBtn.key === 'close' ? 0 : 0,
-  }}
-/>
+                src={iconBtn.icon}
+                alt=""
+                className="relative object-contain"
+                style={{
+                  width: iconBtn.key === 'close' ? 15 : 22,
+                  height: iconBtn.key === 'close' ? 20 : 22,
+                  marginTop: iconBtn.key === 'close' ? 0 : 0,
+                }}
+              />
             </button>
           ))}
         </div>
@@ -2427,40 +2442,40 @@ const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize 
         </div>
 
         <button
-  type="button"
-  onClick={() => {
-    if (!canOpenSystemModal) return;
-    setActiveModal('JACKPOT');
-  }}
-  className="absolute z-40"
-  style={{ left: 295, top: 38, width: 100, height: 72 }}
->
-            <motion.div
-              className="relative h-full w-full"
-              animate={{ y: [0, -2.2, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            >
+          type="button"
+          onClick={() => {
+            if (!canOpenSystemModal) return;
+            setActiveModal('JACKPOT');
+          }}
+          className="absolute z-40"
+          style={{ left: 295, top: 38, width: 100, height: 72 }}
+        >
+          <motion.div
+            className="relative h-full w-full"
+            animate={{ y: [0, -2.2, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          >
             <img
               src="/image2/jackpot2.png"
               alt=""
               className="h-full w-full object-contain"
             />
             <div
-  className="absolute"
-  style={{
-    bottom: 8, left: '50%', transform: 'translateX(-50%)',
-    fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 10,
-    color: '#FFD700',
-    textShadow: `
+              className="absolute"
+              style={{
+                bottom: 8, left: '50%', transform: 'translateX(-50%)',
+                fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 10,
+                color: '#FFD700',
+                textShadow: `
       1px 0 0 #4a1a00, -1px 0 0 #4a1a00,
       0 1px 0 #4a1a00, 0 -1px 0 #4a1a00,
       0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(255,180,0,0.4)
     `,
-    whiteSpace: 'nowrap', letterSpacing: '0.05em',
-  }}
->
-            {formatNum(jackpotAmount)}
-          </div>
+                whiteSpace: 'nowrap', letterSpacing: '0.05em',
+              }}
+            >
+              {formatNum(jackpotAmount)}
+            </div>
           </motion.div>
         </button>
 
@@ -3104,126 +3119,126 @@ const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize 
             transition={{ duration: 0.24 }}
           />
 
-<div
-  className="absolute z-20 flex items-center overflow-x-auto overflow-y-hidden select-none"
-  style={{
-    left: 30,
-    top: 93,
-    width: 340,
-    height: 80,
-    pointerEvents: canBet ? 'auto' : 'none',
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
-    WebkitOverflowScrolling: 'touch',
-    paddingLeft: 10, // starting padding
-    gap: 0, // disable auto gap
-    cursor: 'grab',
-    userSelect: 'none',
-  }}
-  onMouseDown={(e) => {
-    const slider = e.currentTarget;
-    slider.style.cursor = 'grabbing';
-    const startX = e.pageX - slider.offsetLeft;
-    const scrollLeft = slider.scrollLeft;
-    
-    const onMouseMove = (e: MouseEvent) => {
-      const x = e.pageX - slider.offsetLeft;
-      const walk = (x - startX) * 1.5;
-      slider.scrollLeft = scrollLeft - walk;
-    };
-    
-    const onMouseUp = () => {
-      slider.style.cursor = 'grab';
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }}
->
-  <style>{`
+          <div
+            className="absolute z-20 flex items-center overflow-x-auto overflow-y-hidden select-none"
+            style={{
+              left: 30,
+              top: 93,
+              width: 340,
+              height: 80,
+              pointerEvents: canBet ? 'auto' : 'none',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+              paddingLeft: 10, // starting padding
+              gap: 0, // disable auto gap
+              cursor: 'grab',
+              userSelect: 'none',
+            }}
+            onMouseDown={(e) => {
+              const slider = e.currentTarget;
+              slider.style.cursor = 'grabbing';
+              const startX = e.pageX - slider.offsetLeft;
+              const scrollLeft = slider.scrollLeft;
+
+              const onMouseMove = (e: MouseEvent) => {
+                const x = e.pageX - slider.offsetLeft;
+                const walk = (x - startX) * 1.5;
+                slider.scrollLeft = scrollLeft - walk;
+              };
+
+              const onMouseUp = () => {
+                slider.style.cursor = 'grab';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+              };
+
+              document.addEventListener('mousemove', onMouseMove);
+              document.addEventListener('mouseup', onMouseUp);
+            }}
+          >
+            <style>{`
     div::-webkit-scrollbar {
       display: none;
     }
   `}</style>
-  
-  {chipValues.map((value, idx) => {
-    const active = value === selectedChip;
-    const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
-    
-    const isLargeChip = value === 100 || value === 10000;
-    const baseSize = isLargeChip ? 67 : 54;
-    const chipSize = active ? baseSize * 0.88 : baseSize;
-    const marginTop = isLargeChip ? -5 : 0;
 
-    // Manual gap control - adjust each value as needed
-    const gaps = [0, 4, 7, 11, 11, 4.5]; // gap before each chip (index 0 is first chip)
-    const marginLeft = idx === 0 ? 0 : (gaps[idx] ?? 10);
+            {chipValues.map((value, idx) => {
+              const active = value === selectedChip;
+              const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
 
-    return (
-      <motion.button
-        key={value}
-        type="button"
-        onClick={() => {
-          if (!canBet) return;
-          setSelectedChip(value);
-        }}
-        className="shrink-0 border-none bg-transparent p-0"
-        style={{
-          width: baseSize,
-          height: baseSize,
-          marginLeft: marginLeft,
-          marginTop: marginTop,
-          cursor: canBet ? 'pointer' : 'default',
-          borderRadius: 999,
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          WebkitAppearance: 'none',
-          outline: 'none',
-          flexShrink: 0,
-        }}
-        whileTap={canBet ? { scale: 0.94 } : undefined}
-      >
-        {/* Smooth white fade background - only when selected */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            borderRadius: 999,
-            background: 'radial-gradient(circle, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.15) 50%, transparent 70%)',
-          }}
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ 
-            opacity: active ? 1 : 0,
-            scale: active ? 1.1 : 0.8,
-          }}
-          transition={{ 
-            duration: 0.25, 
-            ease: [0.4, 0, 0.2, 1]
-          }}
-        />
-        
-        <motion.img 
-          src={imgSrc} 
-          alt={`${value}`} 
-          className="object-contain relative z-10"
-          draggable={false}
-          style={{
-            width: chipSize,
-            height: chipSize,
-          }}
-          animate={{ 
-            scale: active ? 0.88 : 1,
-          }}
-          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        />
-      </motion.button>
-    );
-  })}
-</div>
+              const isLargeChip = value === 100 || value === 10000;
+              const baseSize = isLargeChip ? 67 : 54;
+              const chipSize = active ? baseSize * 0.88 : baseSize;
+              const marginTop = isLargeChip ? -5 : 0;
+
+              // Manual gap control - adjust each value as needed
+              const gaps = [0, 4, 7, 11, 11, 4.5]; // gap before each chip (index 0 is first chip)
+              const marginLeft = idx === 0 ? 0 : (gaps[idx] ?? 10);
+
+              return (
+                <motion.button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    if (!canBet) return;
+                    setSelectedChip(value);
+                  }}
+                  className="shrink-0 border-none bg-transparent p-0"
+                  style={{
+                    width: baseSize,
+                    height: baseSize,
+                    marginLeft: marginLeft,
+                    marginTop: marginTop,
+                    cursor: canBet ? 'pointer' : 'default',
+                    borderRadius: 999,
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'transparent',
+                    WebkitAppearance: 'none',
+                    outline: 'none',
+                    flexShrink: 0,
+                  }}
+                  whileTap={canBet ? { scale: 0.94 } : undefined}
+                >
+                  {/* Smooth white fade background - only when selected */}
+                  <motion.div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      borderRadius: 999,
+                      background: 'radial-gradient(circle, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.15) 50%, transparent 70%)',
+                    }}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{
+                      opacity: active ? 1 : 0,
+                      scale: active ? 1.1 : 0.8,
+                    }}
+                    transition={{
+                      duration: 0.25,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
+                  />
+
+                  <motion.img
+                    src={imgSrc}
+                    alt={`${value}`}
+                    className="object-contain relative z-10"
+                    draggable={false}
+                    style={{
+                      width: chipSize,
+                      height: chipSize,
+                    }}
+                    animate={{
+                      scale: active ? 0.88 : 1,
+                    }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  />
+                </motion.button>
+              );
+            })}
+          </div>
 
           <div
             className="absolute z-10 overflow-hidden"
@@ -3251,14 +3266,14 @@ const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize 
           {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
           {boxData.map((box, idx) => {
             const totalBoxes = boxData.length;
-const boxWidth = 56;
-// Align chests exactly with the progress bar (left: 25, width: 343)
-const barLeft = 25;
-const barRight = 25 + 355; // 380
-const firstChestLeft = barLeft + 20; // 45 — slight inset from bar start
-const lastChestLeft = barRight - boxWidth; // 324 — last chest flush with bar end
-const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
-const xPos = firstChestLeft + idx * spacing;
+            const boxWidth = 56;
+            // Align chests exactly with the progress bar (left: 25, width: 343)
+            const barLeft = 25;
+            const barRight = 25 + 355; // 380
+            const firstChestLeft = barLeft + 20; // 45 — slight inset from bar start
+            const lastChestLeft = barRight - boxWidth; // 324 — last chest flush with bar end
+            const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
+            const xPos = firstChestLeft + idx * spacing;
 
             const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
             const opened = !!openedChests[threshold];
@@ -3707,623 +3722,623 @@ const xPos = firstChestLeft + idx * spacing;
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
                 style={{ width: 326, height: 430 }}
               >
-               {activeModal === 'RULE' ? (
-  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+                {activeModal === 'RULE' ? (
+                  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-    {/* ── rules_board.png as the outer frame ── */}
-    <img
-      src="/image2/rules_board.png"
-      alt=""
-      className="absolute inset-0 w-full h-full"
-      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
-    />
+                    {/* ── rules_board.png as the outer frame ── */}
+                    <img
+                      src="/image2/rules_board.png"
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+                    />
 
-    {/* ── "Rule" title — same gold style as jackpot board, NO red pill ── */}
-    <div
-      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-      style={{
-        top: 14,
-        zIndex: 10,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'Inter, system-ui, sans-serif',
-          fontWeight: 700,
-          fontSize: 26,
-          color: '#ffd900',
-          textTransform: 'uppercase',
-          letterSpacing: '1px',
-          textShadow: `
+                    {/* ── "Rule" title — same gold style as jackpot board, NO red pill ── */}
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+                      style={{
+                        top: 14,
+                        zIndex: 10,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 700,
+                          fontSize: 26,
+                          color: '#ffd900',
+                          textTransform: 'uppercase',
+                          letterSpacing: '1px',
+                          textShadow: `
             0.8px  0.8px 0 #7a3c08,
             -0.8px -0.8px 0 #7a3c08,
              0.8px -0.8px 0 #7a3c08,
             -0.8px  0.8px 0 #7a3c08
           `,
-        }}
-      >
-       
-      </span>
-    </div>
+                        }}
+                      >
 
-    {/* ── Red ✕ close button ── */}
-    <button
-      type="button"
-      onClick={() => setActiveModal('NONE')}
-      className="absolute flex items-center justify-center"
-      style={{
-        right: -1,
-        top: 28,
-        width: 32,
-        height: 32,
-        borderRadius: '50%',
-        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
-        border: '3px solid #fff',
-        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
-        zIndex: 20,
-        cursor: 'pointer',
-      }}
-      aria-label="Close rules"
-    >
-      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
-    </button>
-
-    {/* ── #FFEBBB content mask — hides baked-in board text ── */}
-    <div
-      style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 60,
-        width: 290,
-        height: 357,
-        borderRadius: 13,
-        background: '#FFEBBB',
-        zIndex: 5,
-        overflow: 'hidden',
-      }}
-    >
-      {/* ── Scrollable rules list ── */}
-      <div
-        style={{
-          height: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          paddingTop: 14,
-          paddingBottom: 14,
-          paddingLeft: 16,
-          paddingRight: 10,
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-        <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
-          {(apiRules.length > 0
-            ? apiRules
-            : [
-                'Choose the quantity of diamonds and then select an option to place a bet on.',
-                'The time for betting is 30 seconds each round and the winners will be announced after betting.',
-                'If you bet diamonds on the winning option, you will receive the corresponding diamonds.',
-                'You can bet on up to 6 options each round.',
-                'The Prize Pool enlarges as more and more players join in, the chances to choose Vegetables or Animals increase when the pool reaches a certain scale.',
-                'If the winning option is a vegetable, then all players who bet on vegetables will receive rewards.',
-                'Players who bet on the exact winning item will receive a higher reward multiplier.',
-              ]
-          ).map((rule, idx) => (
-            <li
-              key={idx}
-              style={{
-                fontFamily: 'Inter, system-ui, sans-serif',
-                fontWeight: 400,
-                fontSize: 13,
-                lineHeight: '20px',
-                color: '#7b471d',
-                marginBottom: 8,
-              }}
-            >
-              {rule}
-            </li>
-          ))}
-        </ol>
-
-        {apiRulesVersion && (
-          <div
-            style={{
-              marginTop: 6,
-              textAlign: 'right',
-              fontFamily: 'Inter, system-ui, sans-serif',
-              fontSize: 11,
-              color: '#b58a55',
-              paddingRight: 4,
-            }}
-          >
-            {apiRulesVersion}
-          </div>
-        )}
-      </div>
-    </div>
-
-  </div>
-) : null}
-
-{activeModal === 'PRIZE' ? (
-  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
-
-    {/* ── Outer board frame ── */}
-    <img
-      src="/image2/rules_board.png"
-      alt=""
-      className="absolute inset-0 w-full h-full"
-      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
-    />
-<div
-  className="absolute left-1/2 -translate-x-1/2"
-  style={{
-    top: 14,
-    zIndex: 9,
-    width: 200,
-    height: 35,
-    background: 'linear-gradient(180deg, #FFC100 0%, #FFAE03 100%)',
-    borderRadius: 8,
-  }}
-/>
-    {/* ── "Prize distribution" gold title ── */}
-    <div
-      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-      style={{ top: 18, zIndex: 10, whiteSpace: 'nowrap' }}
-    >
-      <span
-        style={{
-          fontFamily: 'Inter, system-ui, sans-serif',
-          fontWeight: 600,
-          fontSize: 20,
-          color: '#fff4d9',
-          top: -20,
-          letterSpacing: '0.5px',
-          textShadow: `
-            0.8px  0.8px 0 #7a3c08,
-            -0.8px -0.8px 0 #7a3c08,
-             0.8px -0.8px 0 #7a3c08,
-            -0.8px  0.8px 0 #7a3c08
-          `,
-        }}
-      >
-        Prize distribution
-      </span>
-    </div>
-
-    {/* ── Red ✕ close button ── */}
-    <button
-      type="button"
-      onClick={() => setActiveModal('NONE')}
-      className="absolute flex items-center justify-center"
-      style={{
-        right: -1,
-        top: 28,
-        width: 32,
-        height: 32,
-        borderRadius: '50%',
-        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
-        border: '3px solid #fff',
-        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
-        zIndex: 20,
-        cursor: 'pointer',
-      }}
-      aria-label="Close prize"
-    >
-      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
-    </button>
-
-    {/* ── #FFEBBB content mask ── */}
-    <div
-      style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 58,
-        width: 290,
-        height: 359,
-        borderRadius: 13,
-        background: '#FFEBBB',
-        zIndex: 5,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* ── Scrollable content ── */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '12px 12px 10px',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-
-        {/* ── Prize table ── */}
-        <div
-          style={{
-            width: '100%',
-            borderRadius: 10,
-            overflow: 'hidden',
-            marginBottom: 16,
-            border: '1.5px solid rgba(180,110,40,0.25)',
-          }}
-        >
-          {/* Table header */}
-          <div
-            style={{
-              display: 'flex',
-              background: 'linear-gradient(180deg, #e8a43a 0%, #d4881c 100%)',
-              padding: '9px 16px',
-            }}
-          >
-            <span style={{
-              flex: 1,
-              fontFamily: 'Inter, system-ui, sans-serif',
-              fontWeight: 400,
-              fontSize: 16,
-              color: '#fff',
-              textAlign: 'center',
-              
-            }}>
-              Rank
-            </span>
-            <span style={{
-              flex: 1,
-              fontFamily: 'Inter, system-ui, sans-serif',
-              fontWeight: 400,
-              fontSize: 16,
-              color: '#fff',
-              textAlign: 'center',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-            }}>
-              Prize <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18}} />
-            </span>
-          </div>
-
-          {/* Table rows — pull from API or use defaults */}
-          {(() => {
-            const defaultRows = [
-              { rank: '1',     prize: 1000000 },
-              { rank: '2',     prize: 800000  },
-              { rank: '3',     prize: 500000  },
-              { rank: '4~9',   prize: 100000  },
-              { rank: '10~15', prize: 80000   },
-            ];
-
-            // Try to build rows from prizeData API
-            const apiRows: { rank: string; prize: number }[] = [];
-            if (prizeData) {
-              const src = isAdvanceMode ? prizeData.advance : prizeData.general;
-              if (src?.ranks?.length) {
-                src.ranks.forEach(r => apiRows.push({ rank: r.rank, prize: r.prize }));
-              }
-            }
-
-            const rows = apiRows.length > 0 ? apiRows : defaultRows;
-
-            return rows.map((row, idx) => {
-              const isAlt = idx % 2 === 1;
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    padding: '10px 16px',
-                    background: isAlt
-                      ? 'rgba(220,150,60,0.18)'
-                      : 'rgba(255,240,200,0.55)',
-                    borderTop: '1px solid rgba(180,110,40,0.12)',
-                  }}
-                >
-                  <span style={{
-                    flex: 1,
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 14,
-                    color: '#7b471d',
-                    textAlign: 'center',
-                  }}>
-                    {row.rank}
-                  </span>
-                  <span style={{
-                    flex: 1,
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 14,
-                    color: '#7b471d',
-                    textAlign: 'center',
-                  }}>
-                    {row.prize.toLocaleString('en-US')}
-                  </span>
-                </div>
-              );
-            });
-          })()}
-        </div>
-
-        {/* ── Numbered rules below table ── */}
-        {(() => {
-          const src = isAdvanceMode ? prizeData?.advance : prizeData?.general;
-          // If API has a title, show it (not needed per ref — ref has no sub-title)
-          const rules = [
-            'The prize diamond will increase after each game round.',
-            'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
-            'The ranking of the leaderboard depends on the amount of players\' diamonds Played. The more diamonds Played in the game, the higher the ranking and the richer the rewards.',
-          ];
-
-          return (
-            <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
-              {rules.map((rule, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 13,
-                    lineHeight: '21px',
-                    color: '#7b471d',
-                    marginBottom: 10,
-                  }}
-                >
-                  {rule}
-                </li>
-              ))}
-            </ol>
-          );
-        })()}
-
-      </div>
-    </div>
-
-  </div>
-) : null}
-
-               {activeModal === 'RECORDS' ? (
-  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
-
-    {/* ── game_record_board.png as outer frame ── */}
-    <img
-      src="/image2/game_record_board.png"
-      alt=""
-      className="absolute inset-0 w-full h-full"
-      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
-    />
-
-    {/* ── Red ✕ close button ── */}
-    <button
-      type="button"
-      onClick={() => setActiveModal('NONE')}
-      className="absolute flex items-center justify-center"
-      style={{
-        right: -1,
-        top: 18,
-        width: 32,
-        height: 32,
-        borderRadius: '50%',
-        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
-        border: '3px solid #fff',
-        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
-        zIndex: 20,
-        cursor: 'pointer',
-      }}
-      aria-label="Close records"
-    >
-      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
-    </button>
-
-    {/* ── #FFEBBB content mask ── */}
-    <div
-      style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 55,
-        width: 290,
-        height: 362,
-        borderRadius: 13,
-        background: '#FFEBBB',
-        zIndex: 5,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* ── Scrollable records list ── */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '10px 10px 6px 10px',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-        {(() => {
-          const displayRecords = apiPlayerRecords.length > 0
-            ? apiPlayerRecords
-            : records.map(r => ({
-                round: r.round,
-                element: ID_TO_API_NAME[r.winner[0]] ?? r.winner[0],
-                bet: r.selectedAmount,
-                win: r.win,
-                time: r.at,
-                balanceBefore: r.balanceBefore,
-                balanceAfter: r.balanceAfter,
-              }));
-
-          if (displayRecords.length === 0) {
-            return (
-              <div style={{
-                paddingTop: 60,
-                textAlign: 'center',
-                fontFamily: 'Inter, system-ui, sans-serif',
-                fontSize: 13,
-                color: '#b58a55',
-              }}>
-                No records yet. Play some rounds!
-              </div>
-            );
-          }
-
-          return displayRecords.map((r: any, idx: number) => {
-            // Resolve element → ItemSpec for icon
-            const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
-            const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
-
-            // Balances
-            const balBefore = r.balanceBefore ?? null;
-            const balAfter  = r.balanceAfter  ?? null;
-
-            return (
-              <div
-                key={idx}
-                style={{
-                  background: 'rgba(255,255,255,0.6)',
-                  borderRadius: 10,
-                  padding: '10px 12px 10px 12px',
-                  marginBottom: 8,
-                  border: '1px solid rgba(180,120,50,0.15)',
-                }}
-              >
-                {/* ── Row 1: Round + Time ── */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 700, fontSize: 13, color: '#5a2d0c',
-                  }}>
-                    Round: {r.round ?? '-'}
-                  </span>
-                  {r.time && (
-                    <span style={{
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      fontWeight: 400, fontSize: 10.5, color: '#8a5a2a',
-                    }}>
-                      {r.time}
-                    </span>
-                  )}
-                </div>
-
-                {/* ── Row 2: Selected option ── */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
-                  }}>
-                    Selected option:
-                  </span>
-                  {itemSpec && (
-                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
-                  )}
-                  {r.bet != null && r.bet > 0 && (
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 3,
-                      background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
-                      borderRadius: 999, paddingLeft: 7, paddingRight: 7, height: 19,
-                      border: '1px solid rgba(0,0,0,0.15)',
-                    }}>
-                      <span style={{ fontFamily: 'Inter', fontWeight: 800, fontSize: 11, color: '#0b2a12' }}>
-                        {formatNum(r.bet)}
                       </span>
                     </div>
-                  )}
-                </div>
 
-                {/* ── Row 3: Winning items ── */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
-                  }}>
-                    Winning items:
-                  </span>
-                  {itemSpec ? (
-                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
-                  ) : (
-                    <span style={{ fontFamily: 'Inter', fontSize: 12, color: '#7b471d' }}>-</span>
-                  )}
-                </div>
+                    {/* ── Red ✕ close button ── */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('NONE')}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        right: -1,
+                        top: 28,
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+                        border: '3px solid #fff',
+                        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+                        zIndex: 20,
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Close rules"
+                    >
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                    </button>
 
-                {/* ── Row 4: Win diamonds ── */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
-                  }}>
-                    Win diamonds:
-                  </span>
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 3,
-                    background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
-                    borderRadius: 999, paddingLeft: 6, paddingRight: 8, height: 20,
-                    border: '1px solid rgba(0,0,0,0.12)',
-                  }}>
-                    <img src="/image2/diamond.png" alt="" style={{ width: 13, height: 13, flexShrink: 0 }} />
-                    <span style={{
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      fontWeight: 700, fontSize: 11.5, color: '#fff',
-                    }}>
-                      {r.win != null ? formatNum(r.win) : '0'}
-                    </span>
+                    {/* ── #FFEBBB content mask — hides baked-in board text ── */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: 60,
+                        width: 290,
+                        height: 357,
+                        borderRadius: 13,
+                        background: '#FFEBBB',
+                        zIndex: 5,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {/* ── Scrollable rules list ── */}
+                      <div
+                        style={{
+                          height: '100%',
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          paddingTop: 14,
+                          paddingBottom: 14,
+                          paddingLeft: 16,
+                          paddingRight: 10,
+                          scrollbarWidth: 'none',
+                          msOverflowStyle: 'none',
+                        }}
+                      >
+                        <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
+                          {(apiRules.length > 0
+                            ? apiRules
+                            : [
+                              'Choose the quantity of diamonds and then select an option to place a bet on.',
+                              'The time for betting is 30 seconds each round and the winners will be announced after betting.',
+                              'If you bet diamonds on the winning option, you will receive the corresponding diamonds.',
+                              'You can bet on up to 6 options each round.',
+                              'The Prize Pool enlarges as more and more players join in, the chances to choose Vegetables or Animals increase when the pool reaches a certain scale.',
+                              'If the winning option is a vegetable, then all players who bet on vegetables will receive rewards.',
+                              'Players who bet on the exact winning item will receive a higher reward multiplier.',
+                            ]
+                          ).map((rule, idx) => (
+                            <li
+                              key={idx}
+                              style={{
+                                fontFamily: 'Inter, system-ui, sans-serif',
+                                fontWeight: 400,
+                                fontSize: 13,
+                                lineHeight: '20px',
+                                color: '#7b471d',
+                                marginBottom: 8,
+                              }}
+                            >
+                              {rule}
+                            </li>
+                          ))}
+                        </ol>
+
+                        {apiRulesVersion && (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              textAlign: 'right',
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontSize: 11,
+                              color: '#b58a55',
+                              paddingRight: 4,
+                            }}
+                          >
+                            {apiRulesVersion}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
-                </div>
+                ) : null}
 
-                {/* ── Row 5: Diamond Balance ── */}
-                {(balBefore != null || balAfter != null) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
-                    }}>
-                      Diamond Balance:
-                    </span>
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
-                      borderRadius: 999, paddingLeft: 7, paddingRight: 8, height: 20,
-                      border: '1px solid rgba(0,0,0,0.12)',
-                    }}>
-                      <img src="/image2/diamond.png" alt="" style={{ width: 12, height: 12, flexShrink: 0 }} />
-                      <span style={{
+                {activeModal === 'PRIZE' ? (
+                  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+
+                    {/* ── Outer board frame ── */}
+                    <img
+                      src="/image2/rules_board.png"
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+                    />
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2"
+                      style={{
+                        top: 14,
+                        zIndex: 9,
+                        width: 200,
+                        height: 35,
+                        background: 'linear-gradient(180deg, #FFC100 0%, #FFAE03 100%)',
+                        borderRadius: 8,
+                      }}
+                    />
+                    {/* ── "Prize distribution" gold title ── */}
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+                      style={{ top: 18, zIndex: 10, whiteSpace: 'nowrap' }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 600,
+                          fontSize: 20,
+                          color: '#fff4d9',
+                          top: -20,
+                          letterSpacing: '0.5px',
+                          textShadow: `
+            0.8px  0.8px 0 #7a3c08,
+            -0.8px -0.8px 0 #7a3c08,
+             0.8px -0.8px 0 #7a3c08,
+            -0.8px  0.8px 0 #7a3c08
+          `,
+                        }}
+                      >
+                        Prize distribution
+                      </span>
+                    </div>
+
+                    {/* ── Red ✕ close button ── */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('NONE')}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        right: -1,
+                        top: 28,
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+                        border: '3px solid #fff',
+                        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+                        zIndex: 20,
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Close prize"
+                    >
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                    </button>
+
+                    {/* ── #FFEBBB content mask ── */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: 58,
+                        width: 290,
+                        height: 359,
+                        borderRadius: 13,
+                        background: '#FFEBBB',
+                        zIndex: 5,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      {/* ── Scrollable content ── */}
+                      <div
+                        style={{
+                          flex: 1,
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          padding: '12px 12px 10px',
+                          scrollbarWidth: 'none',
+                          msOverflowStyle: 'none',
+                        }}
+                      >
+
+                        {/* ── Prize table ── */}
+                        <div
+                          style={{
+                            width: '100%',
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            marginBottom: 16,
+                            border: '1.5px solid rgba(180,110,40,0.25)',
+                          }}
+                        >
+                          {/* Table header */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              background: 'linear-gradient(180deg, #e8a43a 0%, #d4881c 100%)',
+                              padding: '9px 16px',
+                            }}
+                          >
+                            <span style={{
+                              flex: 1,
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontWeight: 400,
+                              fontSize: 16,
+                              color: '#fff',
+                              textAlign: 'center',
+
+                            }}>
+                              Rank
+                            </span>
+                            <span style={{
+                              flex: 1,
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontWeight: 400,
+                              fontSize: 16,
+                              color: '#fff',
+                              textAlign: 'center',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 4,
+                            }}>
+                              Prize <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18 }} />
+                            </span>
+                          </div>
+
+                          {/* Table rows — pull from API or use defaults */}
+                          {(() => {
+                            const defaultRows = [
+                              { rank: '1', prize: 1000000 },
+                              { rank: '2', prize: 800000 },
+                              { rank: '3', prize: 500000 },
+                              { rank: '4~9', prize: 100000 },
+                              { rank: '10~15', prize: 80000 },
+                            ];
+
+                            // Try to build rows from prizeData API
+                            const apiRows: { rank: string; prize: number }[] = [];
+                            if (prizeData) {
+                              const src = isAdvanceMode ? prizeData.advance : prizeData.general;
+                              if (src?.ranks?.length) {
+                                src.ranks.forEach(r => apiRows.push({ rank: r.rank, prize: r.prize }));
+                              }
+                            }
+
+                            const rows = apiRows.length > 0 ? apiRows : defaultRows;
+
+                            return rows.map((row, idx) => {
+                              const isAlt = idx % 2 === 1;
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: 'flex',
+                                    padding: '10px 16px',
+                                    background: isAlt
+                                      ? 'rgba(220,150,60,0.18)'
+                                      : 'rgba(255,240,200,0.55)',
+                                    borderTop: '1px solid rgba(180,110,40,0.12)',
+                                  }}
+                                >
+                                  <span style={{
+                                    flex: 1,
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 400,
+                                    fontSize: 14,
+                                    color: '#7b471d',
+                                    textAlign: 'center',
+                                  }}>
+                                    {row.rank}
+                                  </span>
+                                  <span style={{
+                                    flex: 1,
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 400,
+                                    fontSize: 14,
+                                    color: '#7b471d',
+                                    textAlign: 'center',
+                                  }}>
+                                    {row.prize.toLocaleString('en-US')}
+                                  </span>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+
+                        {/* ── Numbered rules below table ── */}
+                        {(() => {
+                          const src = isAdvanceMode ? prizeData?.advance : prizeData?.general;
+                          // If API has a title, show it (not needed per ref — ref has no sub-title)
+                          const rules = [
+                            'The prize diamond will increase after each game round.',
+                            'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
+                            'The ranking of the leaderboard depends on the amount of players\' diamonds Played. The more diamonds Played in the game, the higher the ranking and the richer the rewards.',
+                          ];
+
+                          return (
+                            <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
+                              {rules.map((rule, idx) => (
+                                <li
+                                  key={idx}
+                                  style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 400,
+                                    fontSize: 13,
+                                    lineHeight: '21px',
+                                    color: '#7b471d',
+                                    marginBottom: 10,
+                                  }}
+                                >
+                                  {rule}
+                                </li>
+                              ))}
+                            </ol>
+                          );
+                        })()}
+
+                      </div>
+                    </div>
+
+                  </div>
+                ) : null}
+
+                {activeModal === 'RECORDS' ? (
+                  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+
+                    {/* ── game_record_board.png as outer frame ── */}
+                    <img
+                      src="/image2/game_record_board.png"
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+                    />
+
+                    {/* ── Red ✕ close button ── */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('NONE')}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        right: -1,
+                        top: 18,
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+                        border: '3px solid #fff',
+                        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+                        zIndex: 20,
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Close records"
+                    >
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                    </button>
+
+                    {/* ── #FFEBBB content mask ── */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: 55,
+                        width: 290,
+                        height: 362,
+                        borderRadius: 13,
+                        background: '#FFEBBB',
+                        zIndex: 5,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      {/* ── Scrollable records list ── */}
+                      <div
+                        style={{
+                          flex: 1,
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          padding: '10px 10px 6px 10px',
+                          scrollbarWidth: 'none',
+                          msOverflowStyle: 'none',
+                        }}
+                      >
+                        {(() => {
+                          const displayRecords = apiPlayerRecords.length > 0
+                            ? apiPlayerRecords
+                            : records.map(r => ({
+                              round: r.round,
+                              element: ID_TO_API_NAME[r.winner[0]] ?? r.winner[0],
+                              bet: r.selectedAmount,
+                              win: r.win,
+                              time: r.at,
+                              balanceBefore: r.balanceBefore,
+                              balanceAfter: r.balanceAfter,
+                            }));
+
+                          if (displayRecords.length === 0) {
+                            return (
+                              <div style={{
+                                paddingTop: 60,
+                                textAlign: 'center',
+                                fontFamily: 'Inter, system-ui, sans-serif',
+                                fontSize: 13,
+                                color: '#b58a55',
+                              }}>
+                                No records yet. Play some rounds!
+                              </div>
+                            );
+                          }
+
+                          return displayRecords.map((r: any, idx: number) => {
+                            // Resolve element → ItemSpec for icon
+                            const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
+                            const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
+
+                            // Balances
+                            const balBefore = r.balanceBefore ?? null;
+                            const balAfter = r.balanceAfter ?? null;
+
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  background: 'rgba(255,255,255,0.6)',
+                                  borderRadius: 10,
+                                  padding: '10px 12px 10px 12px',
+                                  marginBottom: 8,
+                                  border: '1px solid rgba(180,120,50,0.15)',
+                                }}
+                              >
+                                {/* ── Row 1: Round + Time ── */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                  <span style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 700, fontSize: 13, color: '#5a2d0c',
+                                  }}>
+                                    Round: {r.round ?? '-'}
+                                  </span>
+                                  {r.time && (
+                                    <span style={{
+                                      fontFamily: 'Inter, system-ui, sans-serif',
+                                      fontWeight: 400, fontSize: 10.5, color: '#8a5a2a',
+                                    }}>
+                                      {r.time}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* ── Row 2: Selected option ── */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                  <span style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                                  }}>
+                                    Selected option:
+                                  </span>
+                                  {itemSpec && (
+                                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
+                                  )}
+                                  {r.bet != null && r.bet > 0 && (
+                                    <div style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                                      background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                                      borderRadius: 999, paddingLeft: 7, paddingRight: 7, height: 19,
+                                      border: '1px solid rgba(0,0,0,0.15)',
+                                    }}>
+                                      <span style={{ fontFamily: 'Inter', fontWeight: 800, fontSize: 11, color: '#0b2a12' }}>
+                                        {formatNum(r.bet)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* ── Row 3: Winning items ── */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                  <span style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                                  }}>
+                                    Winning items:
+                                  </span>
+                                  {itemSpec ? (
+                                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
+                                  ) : (
+                                    <span style={{ fontFamily: 'Inter', fontSize: 12, color: '#7b471d' }}>-</span>
+                                  )}
+                                </div>
+
+                                {/* ── Row 4: Win diamonds ── */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                  <span style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                                  }}>
+                                    Win diamonds:
+                                  </span>
+                                  <div style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                                    background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
+                                    borderRadius: 999, paddingLeft: 6, paddingRight: 8, height: 20,
+                                    border: '1px solid rgba(0,0,0,0.12)',
+                                  }}>
+                                    <img src="/image2/diamond.png" alt="" style={{ width: 13, height: 13, flexShrink: 0 }} />
+                                    <span style={{
+                                      fontFamily: 'Inter, system-ui, sans-serif',
+                                      fontWeight: 700, fontSize: 11.5, color: '#fff',
+                                    }}>
+                                      {r.win != null ? formatNum(r.win) : '0'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* ── Row 5: Diamond Balance ── */}
+                                {(balBefore != null || balAfter != null) && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{
+                                      fontFamily: 'Inter, system-ui, sans-serif',
+                                      fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                                    }}>
+                                      Diamond Balance:
+                                    </span>
+                                    <div style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
+                                      borderRadius: 999, paddingLeft: 7, paddingRight: 8, height: 20,
+                                      border: '1px solid rgba(0,0,0,0.12)',
+                                    }}>
+                                      <img src="/image2/diamond.png" alt="" style={{ width: 12, height: 12, flexShrink: 0 }} />
+                                      <span style={{
+                                        fontFamily: 'Inter, system-ui, sans-serif',
+                                        fontWeight: 600, fontSize: 11, color: '#fff', whiteSpace: 'nowrap',
+                                      }}>
+                                        {formatNum(balBefore ?? 0)} -&gt; {formatNum(balAfter ?? 0)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      {/* ── Footer note pinned at bottom ── */}
+                      <div style={{
+                        flexShrink: 0,
+                        padding: '7px 12px 9px',
                         fontFamily: 'Inter, system-ui, sans-serif',
-                        fontWeight: 600, fontSize: 11, color: '#fff', whiteSpace: 'nowrap',
+                        fontWeight: 400, fontSize: 11,
+                        color: '#a07040',
+                        textAlign: 'center',
+                        borderTop: '1px solid rgba(180,120,50,0.15)',
                       }}>
-                        {formatNum(balBefore ?? 0)} -&gt; {formatNum(balAfter ?? 0)}
-                      </span>
+                        Display game records of the last 7 days, with a maximum of 200 records.
+                      </div>
                     </div>
+
                   </div>
-                )}
-              </div>
-            );
-          });
-        })()}
-      </div>
-
-      {/* ── Footer note pinned at bottom ── */}
-      <div style={{
-        flexShrink: 0,
-        padding: '7px 12px 9px',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fontWeight: 400, fontSize: 11,
-        color: '#a07040',
-        textAlign: 'center',
-        borderTop: '1px solid rgba(180,120,50,0.15)',
-      }}>
-        Display game records of the last 7 days, with a maximum of 200 records.
-      </div>
-    </div>
-
-  </div>
-) : null}
+                ) : null}
 
                 {activeModal === 'JACKPOT' ? (
                   (() => {
@@ -4659,440 +4674,440 @@ const xPos = firstChestLeft + idx * spacing;
 
 
 
-{activeModal === 'RANK' ? (
-  <div
-    className="absolute"
-    style={{
-      left: -24,
-      top: -84,
-      width: 374,
-      height: 597,
-      overflow: 'visible',
-    }}
-  >
-    {/* ── 1. Gameboard background (ribbon + "Game Rank" baked in) ── */}
-    <img
-      src="/image2/gameboard.png"
-      alt=""
-      className="absolute inset-0 w-full h-full"
-      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
-    />
-    {/* ── Title: Game Rank ── */}
-<div
-  className="absolute"
-  style={{
-    left: '49%',
-    transform: 'translateX(-50%)',
-    top: 61,               /* Adjust this to move it up or down on the ribbon */
-    zIndex: 10,
-    whiteSpace: 'nowrap',
-  }}
->
-  <span
-    style={{
-      fontFamily: 'Inter, system-ui, sans-serif',
-      fontWeight: 400,      /* Extra bold for that game title look */
-      fontSize: 18,         /* Large title size */
-      color: '#ffd900',     /* Bright Gold/Yellow */
-      textTransform: 'uppercase',
-      letterSpacing: '1px',
-      // Thin brown border (0.8px)
-      textShadow: `
+                {activeModal === 'RANK' ? (
+                  <div
+                    className="absolute"
+                    style={{
+                      left: -24,
+                      top: -84,
+                      width: 374,
+                      height: 597,
+                      overflow: 'visible',
+                    }}
+                  >
+                    {/* ── 1. Gameboard background (ribbon + "Game Rank" baked in) ── */}
+                    <img
+                      src="/image2/gameboard.png"
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+                    />
+                    {/* ── Title: Game Rank ── */}
+                    <div
+                      className="absolute"
+                      style={{
+                        left: '49%',
+                        transform: 'translateX(-50%)',
+                        top: 61,               /* Adjust this to move it up or down on the ribbon */
+                        zIndex: 10,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 400,      /* Extra bold for that game title look */
+                          fontSize: 18,         /* Large title size */
+                          color: '#ffd900',     /* Bright Gold/Yellow */
+                          textTransform: 'uppercase',
+                          letterSpacing: '1px',
+                          // Thin brown border (0.8px)
+                          textShadow: `
         0.8px 0.8px 0 #7a3c08, 
         -0.8px -0.8px 0 #7a3c08, 
          0.8px -0.8px 0 #7a3c08, 
         -0.8px 0.8px 0 #7a3c08
       `,
-    }}
-  >
-    Game Rank
-  </span>
-</div>
+                        }}
+                      >
+                        Game Rank
+                      </span>
+                    </div>
 
-    {/* ── 2. Close button ── top: 60, right: -5 → move these independently */}
-    <button
-      type="button"
-      onClick={() => setActiveModal('NONE')}
-      className="absolute flex items-center justify-center"
-      style={{
-        right: -5,
-        top: 60,
-        width: 30,
-        height: 30,
-        borderRadius: '50%',
-        background: 'linear-gradient(180deg,#FF4444 0%,#CC1111 100%)',
-        border: '3px solid #fff',
-        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
-        zIndex: 20,
-        cursor: 'pointer',
-      }}
-      aria-label="Close rank"
-    >
-      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
-    </button>
+                    {/* ── 2. Close button ── top: 60, right: -5 → move these independently */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('NONE')}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        right: -5,
+                        top: 60,
+                        width: 30,
+                        height: 30,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(180deg,#FF4444 0%,#CC1111 100%)',
+                        border: '3px solid #fff',
+                        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+                        zIndex: 20,
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Close rank"
+                    >
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                    </button>
 
-    {/* ── 3. Timer pill ── left/top independent */}
-    <div
-      className="absolute flex items-center justify-center"
-      style={{
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 102.5,          /* ← change only this to move timer */
-        width: 135,
-        height: 20,
-        borderRadius: 13,
-        background: 'rgba(140,90,30,0.22)',
-        border: '1.5px solid rgba(160,110,50,0.35)',
-        gap: 5,
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fontSize: 13,
-        fontWeight: 300,
-        color: '#fff',
-        zIndex: 5,
-      }}
-    >
-      <span style={{ fontSize: 13 }}>⏱</span>
-      {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
-    </div>
+                    {/* ── 3. Timer pill ── left/top independent */}
+                    <div
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: 102.5,          /* ← change only this to move timer */
+                        width: 135,
+                        height: 20,
+                        borderRadius: 13,
+                        background: 'rgba(140,90,30,0.22)',
+                        border: '1.5px solid rgba(160,110,50,0.35)',
+                        gap: 5,
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontSize: 13,
+                        fontWeight: 300,
+                        color: '#fff',
+                        zIndex: 5,
+                      }}
+                    >
+                      <span style={{ fontSize: 13 }}>⏱</span>
+                      {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
+                    </div>
 
-    {/* ── 4. Today / Yesterday sliding tab ── left/top independent */}
-    <div
-      className="absolute"
-      style={{
-        left: '50.8%',
-        transform: 'translateX(-50%)',
-        top: 124,         /* ← change only this to move tab row */
-        width: 245,
-        height: 38,
-        zIndex: 5,
-      }}
-    >
-      {/* Outer pill container */}
-      <div
-        className="relative flex items-center w-full h-full"
-        style={{
-          
-        }}
-      >
-        {/* Sliding button_gameboard.png indicator */}
-        <motion.div
-          className="absolute top-[3px] bottom-[3px]"
-          style={{
-            width: 'calc(50% - 3px)',
-            left: 3,
-            borderRadius: 16,
-            overflow: 'hidden',
-            zIndex: 1,
-          }}
-          animate={{ x: rankTab === 'TODAY' ? 0 : '100%' }}
-          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-        >
-          <img
-            src="/image2/button_gameboard.png"
-            alt=""
-            className="absolute inset-0 w-full h-full"
-            style={{ objectFit: 'fill' }}
-          />
-        </motion.div>
+                    {/* ── 4. Today / Yesterday sliding tab ── left/top independent */}
+                    <div
+                      className="absolute"
+                      style={{
+                        left: '50.8%',
+                        transform: 'translateX(-50%)',
+                        top: 124,         /* ← change only this to move tab row */
+                        width: 245,
+                        height: 38,
+                        zIndex: 5,
+                      }}
+                    >
+                      {/* Outer pill container */}
+                      <div
+                        className="relative flex items-center w-full h-full"
+                        style={{
 
-        {/* Today */}
-        <button
-          type="button"
-          onClick={() => setRankTab('TODAY')}
-          className="relative flex items-center justify-center"
-          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
-        >
-          <span
-  style={{
-    fontFamily: 'Inter, system-ui, sans-serif',
-    fontWeight: 500,
-    fontSize: 14.5,
-    // White text when active, Brown text when inactive
-    color: rankTab === 'TODAY' ? '#fff' : '#7a3c08', 
-    
-    // Thin border (0.8px) only when active
-    textShadow: rankTab === 'TODAY' 
-      ? `0.8px 0.8px 0 #7a3c08, 
+                        }}
+                      >
+                        {/* Sliding button_gameboard.png indicator */}
+                        <motion.div
+                          className="absolute top-[3px] bottom-[3px]"
+                          style={{
+                            width: 'calc(50% - 3px)',
+                            left: 3,
+                            borderRadius: 16,
+                            overflow: 'hidden',
+                            zIndex: 1,
+                          }}
+                          animate={{ x: rankTab === 'TODAY' ? 0 : '100%' }}
+                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                        >
+                          <img
+                            src="/image2/button_gameboard.png"
+                            alt=""
+                            className="absolute inset-0 w-full h-full"
+                            style={{ objectFit: 'fill' }}
+                          />
+                        </motion.div>
+
+                        {/* Today */}
+                        <button
+                          type="button"
+                          onClick={() => setRankTab('TODAY')}
+                          className="relative flex items-center justify-center"
+                          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontWeight: 500,
+                              fontSize: 14.5,
+                              // White text when active, Brown text when inactive
+                              color: rankTab === 'TODAY' ? '#fff' : '#7a3c08',
+
+                              // Thin border (0.8px) only when active
+                              textShadow: rankTab === 'TODAY'
+                                ? `0.8px 0.8px 0 #7a3c08, 
         -0.8px -0.8px 0 #7a3c08, 
          0.8px -0.8px 0 #7a3c08, 
-        -0.8px 0.8px 0 #7a3c08` 
-      : 'none',
-      
-    transition: 'all 0.2s ease-in-out',
-  }}
->
-  Today
-</span>
-        </button>
+        -0.8px 0.8px 0 #7a3c08`
+                                : 'none',
 
-        {/* Yesterday */}
-        <button
-          type="button"
-          onClick={() => setRankTab('YESTERDAY')}
-          className="relative flex items-center justify-center"
-          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
-        >
-          <span
-  style={{
-    fontFamily: 'Inter, system-ui, sans-serif',
-    fontWeight: 500,
-    fontSize: 14.5,
-    // White text when active (YESTERDAY), brown when inactive
-    color: rankTab === 'YESTERDAY' ? '#fff' : '#7a3c08',
-    
-    // Thin 0.8px border only when active
-    textShadow: rankTab === 'YESTERDAY' 
-      ? `0.8px 0.8px 0 #7a3c08, 
+                              transition: 'all 0.2s ease-in-out',
+                            }}
+                          >
+                            Today
+                          </span>
+                        </button>
+
+                        {/* Yesterday */}
+                        <button
+                          type="button"
+                          onClick={() => setRankTab('YESTERDAY')}
+                          className="relative flex items-center justify-center"
+                          style={{ flex: 1, height: '100%', background: 'transparent', border: 'none', cursor: 'pointer', zIndex: 2 }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontWeight: 500,
+                              fontSize: 14.5,
+                              // White text when active (YESTERDAY), brown when inactive
+                              color: rankTab === 'YESTERDAY' ? '#fff' : '#7a3c08',
+
+                              // Thin 0.8px border only when active
+                              textShadow: rankTab === 'YESTERDAY'
+                                ? `0.8px 0.8px 0 #7a3c08, 
         -0.8px -0.8px 0 #7a3c08, 
          0.8px -0.8px 0 #7a3c08, 
-        -0.8px 0.8px 0 #7a3c08` 
-      : 'none',
-      
-    transition: 'all 0.2s ease-in-out',
-  }}
->
-  Yesterday
-</span>
-        </button>
-      </div>
+        -0.8px 0.8px 0 #7a3c08`
+                                : 'none',
 
-      {/* ? help button — outside the pill, right side */}
-      <button
-  type="button"
-  onClick={() => setActiveModal('PRIZE')}
-  style={{
-    position: 'absolute',
-    right: -40,
-    top: '46%',
-    transform: 'translateY(-50%)',
-    width: 30,
-    height: 30,
-    borderRadius: '50%',
-    border: '2px solid #c8a05a',
-    background: 'rgba(240,220,170,0.65)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#8b5e20',
-    fontWeight: 900,
-    fontSize: 17,
-    zIndex: 6,
-    cursor: 'pointer',
-  }}
->
-  ?
-</button>
-    </div>
+                              transition: 'all 0.2s ease-in-out',
+                            }}
+                          >
+                            Yesterday
+                          </span>
+                        </button>
+                      </div>
 
-    {/* ── 5. Column headers ── left/top independent */}
-    <div
-      className="absolute flex items-center"
-      style={{
-        left: 25,
-        right: 40,
-        top: 164,         /* ← change only this to move headers */
-        height: 28,
-        zIndex: 5,
-      }}
-    >
-      <span style={{ width: 64, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Rank</span>
-      <span style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Name</span>
-      <span style={{ width: 100, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Diamonds Play</span>
-    </div>
+                      {/* ? help button — outside the pill, right side */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveModal('PRIZE')}
+                        style={{
+                          position: 'absolute',
+                          right: -40,
+                          top: '46%',
+                          transform: 'translateY(-50%)',
+                          width: 30,
+                          height: 30,
+                          borderRadius: '50%',
+                          border: '2px solid #c8a05a',
+                          background: 'rgba(240,220,170,0.65)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#8b5e20',
+                          fontWeight: 900,
+                          fontSize: 17,
+                          zIndex: 6,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ?
+                      </button>
+                    </div>
 
-    {/* ── 6. Scrollable rank rows ── left/top independent */}
-    <div
-      className="absolute overflow-y-auto overflow-x-hidden"
-      style={{
-        left: 30,
-        right: 30,
-        top: 198,         /* ← change only this to move the rows area */
-        height: 310,      /* ← change only this to adjust rows height */
-        zIndex: 5,
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
-      }}
-    >
-      {rankRows.map((row, idx) => {
-        const rowBg =
-          idx === 0 ? '/image2/rank1_gameboard.png'
-          : idx === 1 ? '/image2/rank2_gameboard.png'
-          : idx === 2 ? '/image2/rank3_gameboard.png'
-          : '/image2/defaultrank_gameboard.png';
+                    {/* ── 5. Column headers ── left/top independent */}
+                    <div
+                      className="absolute flex items-center"
+                      style={{
+                        left: 25,
+                        right: 40,
+                        top: 164,         /* ← change only this to move headers */
+                        height: 28,
+                        zIndex: 5,
+                      }}
+                    >
+                      <span style={{ width: 64, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Rank</span>
+                      <span style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Name</span>
+                      <span style={{ width: 100, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Diamonds Play</span>
+                    </div>
 
-        const rowH = idx === 0 ? 47 : 48;
-        const isTop3 = idx < 3;
+                    {/* ── 6. Scrollable rank rows ── left/top independent */}
+                    <div
+                      className="absolute overflow-y-auto overflow-x-hidden"
+                      style={{
+                        left: 30,
+                        right: 30,
+                        top: 198,         /* ← change only this to move the rows area */
+                        height: 310,      /* ← change only this to adjust rows height */
+                        zIndex: 5,
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none',
+                      }}
+                    >
+                      {rankRows.map((row, idx) => {
+                        const rowBg =
+                          idx === 0 ? '/image2/rank1_gameboard.png'
+                            : idx === 1 ? '/image2/rank2_gameboard.png'
+                              : idx === 2 ? '/image2/rank3_gameboard.png'
+                                : '/image2/defaultrank_gameboard.png';
 
-        return (
-          <div
-            key={`rank-row-${row.name}-${idx}`}
-            className="relative"
-            style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}
-          >
-            <img
-              src={rowBg}
-              alt=""
-              className="absolute inset-0 w-full h-full"
-              style={{ objectFit: 'fill', borderRadius: 8 }}
-            />
+                        const rowH = idx === 0 ? 47 : 48;
+                        const isTop3 = idx < 3;
 
-            {/* Rank badge / number */}
-            <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
-              
-            </div>
+                        return (
+                          <div
+                            key={`rank-row-${row.name}-${idx}`}
+                            className="relative"
+                            style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}
+                          >
+                            <img
+                              src={rowBg}
+                              alt=""
+                              className="absolute inset-0 w-full h-full"
+                              style={{ objectFit: 'fill', borderRadius: 8 }}
+                            />
 
-            {/* Profile picture */}
-            {row.pic ? (
-              <img
-                src={row.pic}
-                alt=""
-                className="absolute"
-                style={{ left: 59, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.75)' }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : (
-              <div className="absolute" style={{ left: 56, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', background: 'rgba(180,130,60,0.35)', border: '2px solid rgba(255,255,255,0.5)' }} />
-            )}
+                            {/* Rank badge / number */}
+                            <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
 
-            {/* Name */}
-            <div
-              className="absolute"
-              style={{ left: 96, top: '50%', transform: 'translateY(-50%)', width: 96, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-            >
-              {row.name}
-            </div>
+                            </div>
 
-            {/* Divider */}
-            {isTop3 && (
-              <div className="absolute" style={{ left: 199, top: '50%', transform: 'translateY(-50%)', width: 1.5, height: 22, background: 'rgba(120,80,30,0.28)', borderRadius: 1 }} />
-            )}
+                            {/* Profile picture */}
+                            {row.pic ? (
+                              <img
+                                src={row.pic}
+                                alt=""
+                                className="absolute"
+                                style={{ left: 59, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.75)' }}
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="absolute" style={{ left: 56, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', background: 'rgba(180,130,60,0.35)', border: '2px solid rgba(255,255,255,0.5)' }} />
+                            )}
 
-            {/* Diamond + amount */}
-            {/* Diamond + amount container */}
-<div 
-  className="absolute flex items-center" 
-  style={{ 
-    right: 12,             // Fixed distance from the right edge of the row
-    top: '50%', 
-    transform: 'translateY(-50%)', 
-    width: 90,             // Fixed width so the diamond doesn't move
-    gap: 4,
-    display: 'flex',
-    justifyContent: 'flex-start' // Keeps the diamond on the left of this box
-  }}
->
-  {/* The Diamond: Locked at the start of the 90px box */}
-  <img 
-    src="/image2/diamond.png" 
-    alt="" 
-    style={{ width: 18, height: 18, flexShrink: 0 }} 
-  />
+                            {/* Name */}
+                            <div
+                              className="absolute"
+                              style={{ left: 96, top: '50%', transform: 'translateY(-50%)', width: 96, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {row.name}
+                            </div>
 
-  {/* The Number: Fills remaining space and pushes text to the right */}
-  <span 
-    style={{ 
-      flex: 1,              // Takes up all space between diamond and right edge
-      textAlign: 'right',   // Aligns the text to the right
-      fontFamily: 'Inter, system-ui, sans-serif', 
-      fontWeight: 400, 
-      fontSize: 13, 
-      color: '#5a2d0c', 
-      whiteSpace: 'nowrap' 
-    }}
-  >
-    {formatNum(row.diamonds)}
-  </span>
-</div>
-          </div>
-        );
-      })}
-    </div>
+                            {/* Divider */}
+                            {isTop3 && (
+                              <div className="absolute" style={{ left: 199, top: '50%', transform: 'translateY(-50%)', width: 1.5, height: 22, background: 'rgba(120,80,30,0.28)', borderRadius: 1 }} />
+                            )}
 
-    {/* ── 7. 99+ sticky bottom row ── left/top independent */}
-    <div
-      className="absolute"
-      style={{
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 530,         /* ← change only this to move the 99+ row */
-        width: 340,
-        height: 55,
-        zIndex: 5,
-      }}
-    >
-      <img
-        src="/image2/99_rankboard.png"
-        alt=""
-        className="absolute inset-0 w-full h-full"
-        style={{ objectFit: 'fill', borderRadius: 10 }}
-      />
-      <div className="absolute flex items-center" style={{ left: 22, right: 12, top: 0, bottom: 0, gap: 8 }}>
-        <span 
-  style={{ 
-    fontFamily: 'Inter, system-ui, sans-serif', 
-    fontWeight: 600, // Increased to 800 to match the tab thickness
-    fontSize: 15, 
-    color: '#fff', // White text
-    minWidth: 42, 
-    flexShrink: 0,
-    // Thin brown border (0.8px) to match the Today tab
-    textShadow: `
+                            {/* Diamond + amount */}
+                            {/* Diamond + amount container */}
+                            <div
+                              className="absolute flex items-center"
+                              style={{
+                                right: 12,             // Fixed distance from the right edge of the row
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                width: 90,             // Fixed width so the diamond doesn't move
+                                gap: 4,
+                                display: 'flex',
+                                justifyContent: 'flex-start' // Keeps the diamond on the left of this box
+                              }}
+                            >
+                              {/* The Diamond: Locked at the start of the 90px box */}
+                              <img
+                                src="/image2/diamond.png"
+                                alt=""
+                                style={{ width: 18, height: 18, flexShrink: 0 }}
+                              />
+
+                              {/* The Number: Fills remaining space and pushes text to the right */}
+                              <span
+                                style={{
+                                  flex: 1,              // Takes up all space between diamond and right edge
+                                  textAlign: 'right',   // Aligns the text to the right
+                                  fontFamily: 'Inter, system-ui, sans-serif',
+                                  fontWeight: 400,
+                                  fontSize: 13,
+                                  color: '#5a2d0c',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {formatNum(row.diamonds)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── 7. 99+ sticky bottom row ── left/top independent */}
+                    <div
+                      className="absolute"
+                      style={{
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: 530,         /* ← change only this to move the 99+ row */
+                        width: 340,
+                        height: 55,
+                        zIndex: 5,
+                      }}
+                    >
+                      <img
+                        src="/image2/99_rankboard.png"
+                        alt=""
+                        className="absolute inset-0 w-full h-full"
+                        style={{ objectFit: 'fill', borderRadius: 10 }}
+                      />
+                      <div className="absolute flex items-center" style={{ left: 22, right: 12, top: 0, bottom: 0, gap: 8 }}>
+                        <span
+                          style={{
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 600, // Increased to 800 to match the tab thickness
+                            fontSize: 15,
+                            color: '#fff', // White text
+                            minWidth: 42,
+                            flexShrink: 0,
+                            // Thin brown border (0.8px) to match the Today tab
+                            textShadow: `
       0.8px 0.8px 0 #7a3c08, 
       -0.8px -0.8px 0 #7a3c08, 
        0.8px -0.8px 0 #7a3c08, 
       -0.8px 0.8px 0 #7a3c08
     `,
-  }}
->
-  99+
-</span>
-        {/* Profile Picture Circle */}
-<div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(180,130,60,0.4)', flexShrink: 0, border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-  👤
-</div>
+                          }}
+                        >
+                          99+
+                        </span>
+                        {/* Profile Picture Circle */}
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(180,130,60,0.4)', flexShrink: 0, border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                          👤
+                        </div>
 
-{/* "You" Text - Now White with Brown Border */}
-<span style={{ 
-  fontFamily: 'Inter, system-ui, sans-serif', 
-  fontWeight: 400, 
-  fontSize: 14, 
-  color: '#7a3c08', 
-  flex: 1, 
-  whiteSpace: 'nowrap', 
-  overflow: 'hidden', 
-  textOverflow: 'ellipsis',
-  
-}}>
-  You
-</span>
+                        {/* "You" Text - Now White with Brown Border */}
+                        <span style={{
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 400,
+                          fontSize: 14,
+                          color: '#7a3c08',
+                          flex: 1,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
 
-{/* Diamond Container - Aligned with the rows above */}
-<div 
-  className="flex items-center" 
-  style={{ 
-    gap: 4, 
-    flexShrink: 0, 
-    width: 90,             // Matches the width we gave the list rows
-    justifyContent: 'flex-start' 
-  }}
->
-  <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
-  <span style={{ 
-    flex: 1,
-    textAlign: 'right',    // Pushes the "0" to the right edge
-    fontFamily: 'Inter, system-ui, sans-serif', 
-    fontWeight: 400, 
-    fontSize: 15, 
-    color: '#7a3c08',
-  }}>
-    0
-  </span>
-</div>
-      </div>
-    </div>
+                        }}>
+                          You
+                        </span>
 
-  </div>
-) : null}
+                        {/* Diamond Container - Aligned with the rows above */}
+                        <div
+                          className="flex items-center"
+                          style={{
+                            gap: 4,
+                            flexShrink: 0,
+                            width: 90,             // Matches the width we gave the list rows
+                            justifyContent: 'flex-start'
+                          }}
+                        >
+                          <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
+                          <span style={{
+                            flex: 1,
+                            textAlign: 'right',    // Pushes the "0" to the right edge
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 400,
+                            fontSize: 15,
+                            color: '#7a3c08',
+                          }}>
+                            0
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                ) : null}
 
                 {activeModal === 'ADVANCED' ? (
                   <div className="relative h-full w-full">
