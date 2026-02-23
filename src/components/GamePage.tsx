@@ -55,7 +55,6 @@ const API_BODY = JSON.stringify({ regisation: 3 });
 /* Body with mode: 2 = general/basic, 1 = advance */
 const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
 const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
-const apiBodyPlayerNoMode = () => JSON.stringify({ regisation: 3, player_id: PLAYER_ID });
 
 type ApiElement = {
   id: number;
@@ -137,7 +136,9 @@ const ID_TO_API_NAME: Record<ItemId, string> = {
   water: 'Water',
 };
 
-const PLAYER_ID = 1065465; // TODO: make dynamic per user
+/* Read player_id from URL query param, e.g. ?player_id=2610 */
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
 
 async function apiFetch<T>(path: string, retries = 2, customBody?: string): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -1424,11 +1425,11 @@ const GamePage = () => {
 
         // Try top winners API first
         if (topWinners && Array.isArray(topWinners) && topWinners.length > 0) {
-          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs_player_id_player_name: string; mrs_player_id_player_pic?: string; last_balance: number }) => ({
-            name: r.mrs_player_id_player_name,
+          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }) => ({
+            name: r.mrs__player_id__player_name,
             amount: r.last_balance,
-            pic: r.mrs_player_id_player_pic
-              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
+            pic: r.mrs__player_id__player_pic
+              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs__player_id__player_pic}`)
               : undefined,
           }));
           console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
