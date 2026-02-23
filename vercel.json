@@ -4,8 +4,8 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/game/:path(.*)",
-      "destination": "/api/game/:path"
+      "source": "/game/:path*",
+      "destination": "/api/game/:path*"
     }
   ]
 }
