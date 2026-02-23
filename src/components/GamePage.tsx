@@ -198,7 +198,7 @@ function computeJackpotWin(params: {
 type ItemId = 'honey' | 'tomato' | 'lemon' | 'milk' | 'pumpkin' | 'zucchini' | 'cola' | 'water';
 type Phase = 'BETTING' | 'DRAWING' | 'SHOWTIME';
 type Mode = 'BASIC' | 'ADVANCE';
-type ModalType = 'NONE' | 'RULE' | 'RECORDS' | 'PRIZE' | 'RANK' | 'ADVANCED';
+type ModalType = 'NONE' | 'RULE' | 'RECORDS' | 'PRIZE' | 'RANK' | 'ADVANCED' | 'JACKPOT';
 type RankTab = 'TODAY' | 'YESTERDAY';
 type ResultKind = 'WIN' | 'LOSE' | 'NOBET';
 
@@ -656,12 +656,14 @@ const INITIAL_RESULT_SRCS = [
   '/image2/tomato.png',
 ];
 
+// Around line 340-346 - Update the CHIPS array with larger sizes
 const CHIPS: ChipSpec[] = [
   { src: '/image2/chip_10.png', left: 29 + 17, top: 526 + 24, width: 54, height: 54 },
-  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 70, height: 70, shadow: true },
+  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 85, height: 85, shadow: true },  // ← larger
   { src: '/image2/chip_500_orange.png', left: 29 + 146, top: 523 + 25, width: 55, height: 54, shadow: true },
   { src: '/image2/chip_1k.png', left: 29 + 211, top: 523 + 24, width: 54, height: 53, shadow: true },
   { src: '/image2/chip_5k.png', left: 29 + 275, top: 523 + 24, width: 54, height: 54, shadow: true },
+  { src: '/image2/chip_10k.png', left: 29 + 275, top: 523 + 24, width: 85, height: 85, shadow: true }, // ← add 10k with larger size
 ];
 
 const CHESTS = [
@@ -2132,18 +2134,9 @@ const GamePage = () => {
 
     // Must match the sizing logic in your render
     const baseSize = n > 5 ? 48 : 54;
-    const activeSize = baseSize + 12;
-
-    // Build the exact widths array (because active chip is bigger)
-    const widths = chipValues.map((v) => (v === value ? activeSize : baseSize));
-    const totalW = widths.reduce((s, w) => s + w, 0);
-
-    // justify-evenly => (n + 1) equal gaps
-    const gap = (containerWidth - totalW) / (n + 1);
-
-    // X position = left + gap + widths before + half current width
-    const beforeW = widths.slice(0, index).reduce((s, w) => s + w, 0);
-    const centerX = containerLeft + gap * (index + 1) + beforeW + widths[index] / 2;
+    const totalW = n * baseSize;
+const gap = (containerWidth - totalW) / (n + 1);
+const centerX = containerLeft + gap * (index + 1) + baseSize * index + baseSize / 2;
     const centerY = containerTop + containerHeight / 2;
 
     // flying chip rendered 44x44 => offset by 22
@@ -2336,8 +2329,9 @@ const GamePage = () => {
               onClick={iconBtn.onClick}
               className="relative flex items-center justify-center"
               style={{
-                width: 40,
-                height: 40,
+                width: 32,
+                height: 32,
+                left: 25,
                 border: 'none',
                 background: 'transparent',
                 cursor: canOpenSystemModal || iconBtn.key === 'close' ? 'pointer' : 'default',
@@ -2352,11 +2346,15 @@ const GamePage = () => {
                 className="absolute inset-0 h-full w-full object-contain"
               />
               <img
-                src={iconBtn.icon}
-                alt=""
-                className="relative object-contain"
-                style={{ width: 20, height: 20 }}
-              />
+  src={iconBtn.icon}
+  alt=""
+  className="relative object-contain"
+  style={{ 
+    width: iconBtn.key === 'close' ? 15 : 22, 
+    height: iconBtn.key === 'close' ? 20 : 22,
+    marginTop: iconBtn.key === 'close' ? 0 : 0,
+  }}
+/>
             </button>
           ))}
         </div>
@@ -2429,34 +2427,41 @@ const GamePage = () => {
         </div>
 
         <button
-          type="button"
-          onClick={() => {
-            if (!canOpenSystemModal) return;
-            setActiveModal('PRIZE');
-          }}
-          className="absolute z-40"
-          style={{ left: 295, top: 38, width: 100, height: 72 }}
-        >
-          <motion.img
-            src="/image2/jackpot2.png"
-            alt=""
-            className="h-full w-full object-contain"
-            animate={{ y: [0, -2.2, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <div
-            className="absolute"
-            style={{
-              bottom: 10, left: '50%', transform: 'translateX(-50%)',
-              fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 900, fontSize: 11,
-              color: '#FFD700',
-              WebkitTextStroke: '0.5px #4a1a00',
-              textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(255,180,0,0.4)',
-              whiteSpace: 'nowrap', letterSpacing: '0.05em',
-            }}
-          >
+  type="button"
+  onClick={() => {
+    if (!canOpenSystemModal) return;
+    setActiveModal('JACKPOT');
+  }}
+  className="absolute z-40"
+  style={{ left: 295, top: 38, width: 100, height: 72 }}
+>
+            <motion.div
+              className="relative h-full w-full"
+              animate={{ y: [0, -2.2, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            >
+            <img
+              src="/image2/jackpot2.png"
+              alt=""
+              className="h-full w-full object-contain"
+            />
+            <div
+  className="absolute"
+  style={{
+    bottom: 8, left: '50%', transform: 'translateX(-50%)',
+    fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 10,
+    color: '#FFD700',
+    textShadow: `
+      1px 0 0 #4a1a00, -1px 0 0 #4a1a00,
+      0 1px 0 #4a1a00, 0 -1px 0 #4a1a00,
+      0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(255,180,0,0.4)
+    `,
+    whiteSpace: 'nowrap', letterSpacing: '0.05em',
+  }}
+>
             {formatNum(jackpotAmount)}
           </div>
+          </motion.div>
         </button>
 
         <div
@@ -3099,50 +3104,126 @@ const GamePage = () => {
             transition={{ duration: 0.24 }}
           />
 
-          {/* ── Dynamic chip slider ── */}
-          <div
-            className="absolute z-20 flex items-center justify-evenly"
-            style={{
-              left: 30,
-              top: 88,
-              width: 340,
-              height: 80,
-              pointerEvents: canBet ? 'auto' : 'none',
-            }}
-          >
-            {chipValues.map((value) => {
-              const active = value === selectedChip;
-              const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
-              const chipSize = chipValues.length > 5 ? 48 : 54;
-              const activeSize = chipSize + 12;
+<div
+  className="absolute z-20 flex items-center overflow-x-auto overflow-y-hidden select-none"
+  style={{
+    left: 30,
+    top: 93,
+    width: 340,
+    height: 80,
+    pointerEvents: canBet ? 'auto' : 'none',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+    WebkitOverflowScrolling: 'touch',
+    paddingLeft: 10, // starting padding
+    gap: 0, // disable auto gap
+    cursor: 'grab',
+    userSelect: 'none',
+  }}
+  onMouseDown={(e) => {
+    const slider = e.currentTarget;
+    slider.style.cursor = 'grabbing';
+    const startX = e.pageX - slider.offsetLeft;
+    const scrollLeft = slider.scrollLeft;
+    
+    const onMouseMove = (e: MouseEvent) => {
+      const x = e.pageX - slider.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      slider.scrollLeft = scrollLeft - walk;
+    };
+    
+    const onMouseUp = () => {
+      slider.style.cursor = 'grab';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }}
+>
+  <style>{`
+    div::-webkit-scrollbar {
+      display: none;
+    }
+  `}</style>
+  
+  {chipValues.map((value, idx) => {
+    const active = value === selectedChip;
+    const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
+    
+    const isLargeChip = value === 100 || value === 10000;
+    const baseSize = isLargeChip ? 67 : 54;
+    const chipSize = active ? baseSize * 0.88 : baseSize;
+    const marginTop = isLargeChip ? -5 : 0;
 
-              return (
-                <motion.button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    if (!canBet) return;
-                    setSelectedChip(value);
-                  }}
-                  className="shrink-0 border-none bg-transparent p-0"
-                  style={{
-                    width: active ? activeSize : chipSize,
-                    height: active ? activeSize : chipSize,
-                    cursor: canBet ? 'pointer' : 'default',
-                    filter: active
-                      ? 'drop-shadow(0px 0px 16px rgba(255,255,255,0.65))'
-                      : 'drop-shadow(0px 0px 12px rgba(0,0,0,0.55))',
-                    borderRadius: 999,
-                  }}
-                  animate={{ scale: active ? 1.08 : 1 }}
-                  transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-                  whileTap={canBet ? { scale: 0.94 } : undefined}
-                >
-                  <img src={imgSrc} alt={`${value}`} className="h-full w-full object-contain" />
-                </motion.button>
-              );
-            })}
-          </div>
+    // Manual gap control - adjust each value as needed
+    const gaps = [0, 4, 7, 11, 11, 4.5]; // gap before each chip (index 0 is first chip)
+    const marginLeft = idx === 0 ? 0 : (gaps[idx] ?? 10);
+
+    return (
+      <motion.button
+        key={value}
+        type="button"
+        onClick={() => {
+          if (!canBet) return;
+          setSelectedChip(value);
+        }}
+        className="shrink-0 border-none bg-transparent p-0"
+        style={{
+          width: baseSize,
+          height: baseSize,
+          marginLeft: marginLeft,
+          marginTop: marginTop,
+          cursor: canBet ? 'pointer' : 'default',
+          borderRadius: 999,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          WebkitAppearance: 'none',
+          outline: 'none',
+          flexShrink: 0,
+        }}
+        whileTap={canBet ? { scale: 0.94 } : undefined}
+      >
+        {/* Smooth white fade background - only when selected */}
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            borderRadius: 999,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.15) 50%, transparent 70%)',
+          }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ 
+            opacity: active ? 1 : 0,
+            scale: active ? 1.1 : 0.8,
+          }}
+          transition={{ 
+            duration: 0.25, 
+            ease: [0.4, 0, 0.2, 1]
+          }}
+        />
+        
+        <motion.img 
+          src={imgSrc} 
+          alt={`${value}`} 
+          className="object-contain relative z-10"
+          draggable={false}
+          style={{
+            width: chipSize,
+            height: chipSize,
+          }}
+          animate={{ 
+            scale: active ? 0.88 : 1,
+          }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+        />
+      </motion.button>
+    );
+  })}
+</div>
 
           <div
             className="absolute z-10 overflow-hidden"
@@ -3170,10 +3251,14 @@ const GamePage = () => {
           {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
           {boxData.map((box, idx) => {
             const totalBoxes = boxData.length;
-            const containerWidth = 310;
-            const boxWidth = 56;
-            const spacing = totalBoxes > 1 ? (containerWidth - boxWidth) / (totalBoxes - 1) : 0;
-            const xPos = 47 + idx * spacing;
+const boxWidth = 56;
+// Align chests exactly with the progress bar (left: 25, width: 343)
+const barLeft = 25;
+const barRight = 25 + 355; // 380
+const firstChestLeft = barLeft + 20; // 45 — slight inset from bar start
+const lastChestLeft = barRight - boxWidth; // 324 — last chest flush with bar end
+const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
+const xPos = firstChestLeft + idx * spacing;
 
             const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
             const opened = !!openedChests[threshold];
@@ -3279,9 +3364,9 @@ const GamePage = () => {
             className="absolute z-10"
             style={{
               left: 27,
-              top: 244,
+              top: 245,
               width: 343,
-              height: 45,
+              height: 35,
               borderRadius: 12,
               background: isAdvanceMode ? '#D95B48' : '#0F6095',
               border: isAdvanceMode ? '2px solid #E92407' : '2px solid #1087C6',
@@ -3290,12 +3375,12 @@ const GamePage = () => {
           />
 
 
-          <div className="absolute z-20 flex items-center" style={{ left: 40, top: 258, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+          <div className="absolute z-20 flex items-center" style={{ left: 40, top: 255, width: 43, height: 16, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 700, fontSize: 14.24, lineHeight: '15.34px', letterSpacing: '-0.02em', color: '#FFFFFF' }}>
             Result
           </div>
 
           <div className="absolute z-20" style={{
-            left: 92.5, top: 254, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
+            left: 92.5, top: 250, width: 0, height: 24, borderLeft: '1px solid', borderImageSource: isAdvanceMode
               ? 'linear-gradient(180deg, #D95B48 -6.25%, #FFFFFF 50%, #D95B48 106.25%)'
               : 'linear-gradient(180deg, #0F6095 -6.25%, #FFFFFF 50%, #0F6095 106.25%)',
             borderImageSlice: 1
@@ -3306,7 +3391,7 @@ const GamePage = () => {
             className="absolute z-20"
             style={{
               left: 100,
-              top: 250,
+              top: 246,
               width: 260,
               height: 35,
               overflow: 'hidden',
@@ -3622,91 +3707,955 @@ const GamePage = () => {
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
                 style={{ width: 326, height: 430 }}
               >
-                {activeModal === 'RULE' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-3">
-                    <div className="mx-auto mb-2 flex h-[44px] w-[160px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[24px] font-bold text-[#ffd64f]">
-                      Rules
+               {activeModal === 'RULE' ? (
+  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+
+    {/* ── rules_board.png as the outer frame ── */}
+    <img
+      src="/image2/rules_board.png"
+      alt=""
+      className="absolute inset-0 w-full h-full"
+      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+    />
+
+    {/* ── "Rule" title — same gold style as jackpot board, NO red pill ── */}
+    <div
+      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+      style={{
+        top: 14,
+        zIndex: 10,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontWeight: 700,
+          fontSize: 26,
+          color: '#ffd900',
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          textShadow: `
+            0.8px  0.8px 0 #7a3c08,
+            -0.8px -0.8px 0 #7a3c08,
+             0.8px -0.8px 0 #7a3c08,
+            -0.8px  0.8px 0 #7a3c08
+          `,
+        }}
+      >
+       
+      </span>
+    </div>
+
+    {/* ── Red ✕ close button ── */}
+    <button
+      type="button"
+      onClick={() => setActiveModal('NONE')}
+      className="absolute flex items-center justify-center"
+      style={{
+        right: -1,
+        top: 28,
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+        border: '3px solid #fff',
+        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+        zIndex: 20,
+        cursor: 'pointer',
+      }}
+      aria-label="Close rules"
+    >
+      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+    </button>
+
+    {/* ── #FFEBBB content mask — hides baked-in board text ── */}
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 60,
+        width: 290,
+        height: 357,
+        borderRadius: 13,
+        background: '#FFEBBB',
+        zIndex: 5,
+        overflow: 'hidden',
+      }}
+    >
+      {/* ── Scrollable rules list ── */}
+      <div
+        style={{
+          height: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingTop: 14,
+          paddingBottom: 14,
+          paddingLeft: 16,
+          paddingRight: 10,
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
+          {(apiRules.length > 0
+            ? apiRules
+            : [
+                'Choose the quantity of diamonds and then select an option to place a bet on.',
+                'The time for betting is 30 seconds each round and the winners will be announced after betting.',
+                'If you bet diamonds on the winning option, you will receive the corresponding diamonds.',
+                'You can bet on up to 6 options each round.',
+                'The Prize Pool enlarges as more and more players join in, the chances to choose Vegetables or Animals increase when the pool reaches a certain scale.',
+                'If the winning option is a vegetable, then all players who bet on vegetables will receive rewards.',
+                'Players who bet on the exact winning item will receive a higher reward multiplier.',
+              ]
+          ).map((rule, idx) => (
+            <li
+              key={idx}
+              style={{
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontWeight: 400,
+                fontSize: 13,
+                lineHeight: '20px',
+                color: '#7b471d',
+                marginBottom: 8,
+              }}
+            >
+              {rule}
+            </li>
+          ))}
+        </ol>
+
+        {apiRulesVersion && (
+          <div
+            style={{
+              marginTop: 6,
+              textAlign: 'right',
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontSize: 11,
+              color: '#b58a55',
+              paddingRight: 4,
+            }}
+          >
+            {apiRulesVersion}
+          </div>
+        )}
+      </div>
+    </div>
+
+  </div>
+) : null}
+
+{activeModal === 'PRIZE' ? (
+  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+
+    {/* ── Outer board frame ── */}
+    <img
+      src="/image2/rules_board.png"
+      alt=""
+      className="absolute inset-0 w-full h-full"
+      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+    />
+<div
+  className="absolute left-1/2 -translate-x-1/2"
+  style={{
+    top: 14,
+    zIndex: 9,
+    width: 200,
+    height: 35,
+    background: 'linear-gradient(180deg, #FFC100 0%, #FFAE03 100%)',
+    borderRadius: 8,
+  }}
+/>
+    {/* ── "Prize distribution" gold title ── */}
+    <div
+      className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+      style={{ top: 18, zIndex: 10, whiteSpace: 'nowrap' }}
+    >
+      <span
+        style={{
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontWeight: 600,
+          fontSize: 20,
+          color: '#fff4d9',
+          top: -20,
+          letterSpacing: '0.5px',
+          textShadow: `
+            0.8px  0.8px 0 #7a3c08,
+            -0.8px -0.8px 0 #7a3c08,
+             0.8px -0.8px 0 #7a3c08,
+            -0.8px  0.8px 0 #7a3c08
+          `,
+        }}
+      >
+        Prize distribution
+      </span>
+    </div>
+
+    {/* ── Red ✕ close button ── */}
+    <button
+      type="button"
+      onClick={() => setActiveModal('NONE')}
+      className="absolute flex items-center justify-center"
+      style={{
+        right: -1,
+        top: 28,
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+        border: '3px solid #fff',
+        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+        zIndex: 20,
+        cursor: 'pointer',
+      }}
+      aria-label="Close prize"
+    >
+      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+    </button>
+
+    {/* ── #FFEBBB content mask ── */}
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 58,
+        width: 290,
+        height: 359,
+        borderRadius: 13,
+        background: '#FFEBBB',
+        zIndex: 5,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* ── Scrollable content ── */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '12px 12px 10px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+
+        {/* ── Prize table ── */}
+        <div
+          style={{
+            width: '100%',
+            borderRadius: 10,
+            overflow: 'hidden',
+            marginBottom: 16,
+            border: '1.5px solid rgba(180,110,40,0.25)',
+          }}
+        >
+          {/* Table header */}
+          <div
+            style={{
+              display: 'flex',
+              background: 'linear-gradient(180deg, #e8a43a 0%, #d4881c 100%)',
+              padding: '9px 16px',
+            }}
+          >
+            <span style={{
+              flex: 1,
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontWeight: 400,
+              fontSize: 16,
+              color: '#fff',
+              textAlign: 'center',
+              
+            }}>
+              Rank
+            </span>
+            <span style={{
+              flex: 1,
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontWeight: 400,
+              fontSize: 16,
+              color: '#fff',
+              textAlign: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}>
+              Prize <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18}} />
+            </span>
+          </div>
+
+          {/* Table rows — pull from API or use defaults */}
+          {(() => {
+            const defaultRows = [
+              { rank: '1',     prize: 1000000 },
+              { rank: '2',     prize: 800000  },
+              { rank: '3',     prize: 500000  },
+              { rank: '4~9',   prize: 100000  },
+              { rank: '10~15', prize: 80000   },
+            ];
+
+            // Try to build rows from prizeData API
+            const apiRows: { rank: string; prize: number }[] = [];
+            if (prizeData) {
+              const src = isAdvanceMode ? prizeData.advance : prizeData.general;
+              if (src?.ranks?.length) {
+                src.ranks.forEach(r => apiRows.push({ rank: r.rank, prize: r.prize }));
+              }
+            }
+
+            const rows = apiRows.length > 0 ? apiRows : defaultRows;
+
+            return rows.map((row, idx) => {
+              const isAlt = idx % 2 === 1;
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    padding: '10px 16px',
+                    background: isAlt
+                      ? 'rgba(220,150,60,0.18)'
+                      : 'rgba(255,240,200,0.55)',
+                    borderTop: '1px solid rgba(180,110,40,0.12)',
+                  }}
+                >
+                  <span style={{
+                    flex: 1,
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    color: '#7b471d',
+                    textAlign: 'center',
+                  }}>
+                    {row.rank}
+                  </span>
+                  <span style={{
+                    flex: 1,
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 14,
+                    color: '#7b471d',
+                    textAlign: 'center',
+                  }}>
+                    {row.prize.toLocaleString('en-US')}
+                  </span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+
+        {/* ── Numbered rules below table ── */}
+        {(() => {
+          const src = isAdvanceMode ? prizeData?.advance : prizeData?.general;
+          // If API has a title, show it (not needed per ref — ref has no sub-title)
+          const rules = [
+            'The prize diamond will increase after each game round.',
+            'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
+            'The ranking of the leaderboard depends on the amount of players\' diamonds Played. The more diamonds Played in the game, the higher the ranking and the richer the rewards.',
+          ];
+
+          return (
+            <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
+              {rules.map((rule, idx) => (
+                <li
+                  key={idx}
+                  style={{
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 400,
+                    fontSize: 13,
+                    lineHeight: '21px',
+                    color: '#7b471d',
+                    marginBottom: 10,
+                  }}
+                >
+                  {rule}
+                </li>
+              ))}
+            </ol>
+          );
+        })()}
+
+      </div>
+    </div>
+
+  </div>
+) : null}
+
+               {activeModal === 'RECORDS' ? (
+  <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
+
+    {/* ── game_record_board.png as outer frame ── */}
+    <img
+      src="/image2/game_record_board.png"
+      alt=""
+      className="absolute inset-0 w-full h-full"
+      style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
+    />
+
+    {/* ── Red ✕ close button ── */}
+    <button
+      type="button"
+      onClick={() => setActiveModal('NONE')}
+      className="absolute flex items-center justify-center"
+      style={{
+        right: -1,
+        top: 18,
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        background: 'linear-gradient(180deg, #FF4444 0%, #CC1111 100%)',
+        border: '3px solid #fff',
+        boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+        zIndex: 20,
+        cursor: 'pointer',
+      }}
+      aria-label="Close records"
+    >
+      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+    </button>
+
+    {/* ── #FFEBBB content mask ── */}
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 55,
+        width: 290,
+        height: 362,
+        borderRadius: 13,
+        background: '#FFEBBB',
+        zIndex: 5,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* ── Scrollable records list ── */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '10px 10px 6px 10px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        {(() => {
+          const displayRecords = apiPlayerRecords.length > 0
+            ? apiPlayerRecords
+            : records.map(r => ({
+                round: r.round,
+                element: ID_TO_API_NAME[r.winner[0]] ?? r.winner[0],
+                bet: r.selectedAmount,
+                win: r.win,
+                time: r.at,
+                balanceBefore: r.balanceBefore,
+                balanceAfter: r.balanceAfter,
+              }));
+
+          if (displayRecords.length === 0) {
+            return (
+              <div style={{
+                paddingTop: 60,
+                textAlign: 'center',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontSize: 13,
+                color: '#b58a55',
+              }}>
+                No records yet. Play some rounds!
+              </div>
+            );
+          }
+
+          return displayRecords.map((r: any, idx: number) => {
+            // Resolve element → ItemSpec for icon
+            const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
+            const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
+
+            // Balances
+            const balBefore = r.balanceBefore ?? null;
+            const balAfter  = r.balanceAfter  ?? null;
+
+            return (
+              <div
+                key={idx}
+                style={{
+                  background: 'rgba(255,255,255,0.6)',
+                  borderRadius: 10,
+                  padding: '10px 12px 10px 12px',
+                  marginBottom: 8,
+                  border: '1px solid rgba(180,120,50,0.15)',
+                }}
+              >
+                {/* ── Row 1: Round + Time ── */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 700, fontSize: 13, color: '#5a2d0c',
+                  }}>
+                    Round: {r.round ?? '-'}
+                  </span>
+                  {r.time && (
+                    <span style={{
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      fontWeight: 400, fontSize: 10.5, color: '#8a5a2a',
+                    }}>
+                      {r.time}
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Row 2: Selected option ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                  }}>
+                    Selected option:
+                  </span>
+                  {itemSpec && (
+                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
+                  )}
+                  {r.bet != null && r.bet > 0 && (
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                      borderRadius: 999, paddingLeft: 7, paddingRight: 7, height: 19,
+                      border: '1px solid rgba(0,0,0,0.15)',
+                    }}>
+                      <span style={{ fontFamily: 'Inter', fontWeight: 800, fontSize: 11, color: '#0b2a12' }}>
+                        {formatNum(r.bet)}
+                      </span>
                     </div>
-                    <div className="overflow-y-auto" style={{ maxHeight: 340 }}>
-                      {apiRules.length > 0 ? (
-                        <ol className="list-decimal space-y-2 pl-5 text-[14px] text-[#7b471d]">
-                          {apiRules.map((rule, idx) => (
-                            <li key={idx}>{rule}</li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <img src="/image2/popup_rules.png" alt="" className="h-full w-full object-fill" />
-                      )}
-                      {apiRulesVersion && (
-                        <div className="mt-3 text-right text-[11px] text-[#b58a55]">{apiRulesVersion}</div>
-                      )}
+                  )}
+                </div>
+
+                {/* ── Row 3: Winning items ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                  }}>
+                    Winning items:
+                  </span>
+                  {itemSpec ? (
+                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ fontFamily: 'Inter', fontSize: 12, color: '#7b471d' }}>-</span>
+                  )}
+                </div>
+
+                {/* ── Row 4: Win diamonds ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                  }}>
+                    Win diamonds:
+                  </span>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
+                    borderRadius: 999, paddingLeft: 6, paddingRight: 8, height: 20,
+                    border: '1px solid rgba(0,0,0,0.12)',
+                  }}>
+                    <img src="/image2/diamond.png" alt="" style={{ width: 13, height: 13, flexShrink: 0 }} />
+                    <span style={{
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      fontWeight: 700, fontSize: 11.5, color: '#fff',
+                    }}>
+                      {r.win != null ? formatNum(r.win) : '0'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ── Row 5: Diamond Balance ── */}
+                {(balBefore != null || balAfter != null) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                    }}>
+                      Diamond Balance:
+                    </span>
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      background: 'linear-gradient(180deg, #b06ef3 0%, #7c3aed 100%)',
+                      borderRadius: 999, paddingLeft: 7, paddingRight: 8, height: 20,
+                      border: '1px solid rgba(0,0,0,0.12)',
+                    }}>
+                      <img src="/image2/diamond.png" alt="" style={{ width: 12, height: 12, flexShrink: 0 }} />
+                      <span style={{
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontWeight: 600, fontSize: 11, color: '#fff', whiteSpace: 'nowrap',
+                      }}>
+                        {formatNum(balBefore ?? 0)} -&gt; {formatNum(balAfter ?? 0)}
+                      </span>
                     </div>
                   </div>
-                ) : null}
+                )}
+              </div>
+            );
+          });
+        })()}
+      </div>
 
-                {activeModal === 'RECORDS' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-3">
-                    <div className="mx-auto mb-2 flex h-[44px] w-[210px] items-center justify-center rounded-[999px] bg-gradient-to-b from-[#d81f2f] to-[#900f16] text-[22px] font-bold text-[#ffd64f]">
-                      Game Records
-                    </div>
-                    <div className="overflow-y-auto" style={{ maxHeight: 340 }}>
-                      {apiPlayerRecords.length > 0 ? (
-                        <>
-                          <div className="mb-1 flex items-center justify-between rounded-[8px] bg-[#e9b273] px-2 py-1 text-[12px] font-bold text-[#6d3712]">
-                            <span style={{ width: 50 }}>Round</span>
-                            <span style={{ width: 70 }}>Element</span>
-                            <span style={{ width: 50, textAlign: 'right' }}>Bet</span>
-                            <span style={{ width: 50, textAlign: 'right' }}>Win</span>
-                          </div>
-                          {apiPlayerRecords.map((r, idx) => (
-                            <div key={idx} className="flex items-center justify-between border-b border-[#e9c08a] px-2 py-[4px] text-[12px] text-[#7b471d]">
-                              <span style={{ width: 50 }}>{r.round ?? '-'}</span>
-                              <span style={{ width: 70 }}>{r.element ?? '-'}</span>
-                              <span style={{ width: 50, textAlign: 'right' }}>{r.bet != null ? formatNum(r.bet) : '-'}</span>
-                              <span style={{ width: 50, textAlign: 'right', color: (r.win ?? 0) > 0 ? '#2d8a1e' : '#7b471d' }}>{r.win != null ? formatNum(r.win) : '-'}</span>
+      {/* ── Footer note pinned at bottom ── */}
+      <div style={{
+        flexShrink: 0,
+        padding: '7px 12px 9px',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontWeight: 400, fontSize: 11,
+        color: '#a07040',
+        textAlign: 'center',
+        borderTop: '1px solid rgba(180,120,50,0.15)',
+      }}>
+        Display game records of the last 7 days, with a maximum of 200 records.
+      </div>
+    </div>
+
+  </div>
+) : null}
+
+                {activeModal === 'JACKPOT' ? (
+                  (() => {
+                    /* ── Jackpot number formatter: pad to 11 digits with leading zeros ── */
+                    const jackpotStr = String(jackpotAmount).padStart(11, '0');
+
+                    return (
+                      <div
+                        className="relative flex items-center justify-center"
+                        style={{ width: 326, height: 430 }}
+                      >
+                        {/* ── LAYER 1: Outer orange board background ── */}
+                        {/* jackpot_board_bg: 339×535, #EC9813, borderRadius 17 */}
+                        {/* We scale it to fit the 326×430 modal container */}
+                        <img
+                          src="/image2/jackpot_board_bg.png"
+                          alt=""
+                          className="absolute inset-0 w-full h-full"
+                          style={{ objectFit: 'fill', borderRadius: 17, zIndex: 0 }}
+                        />
+
+                        {/* ── LAYER 2: Inner front panel ── */}
+                        {/* jackpot_front_bg: 323×517, borderRadius 17 */}
+                        {/* Centered, ~8px inset on each side */}
+                        <img
+                          src="/image2/jackpot_front_bg.png"
+                          alt=""
+                          className="absolute"
+                          style={{
+                            left: 8, right: 8, top: 8, bottom: 8,
+                            width: 'calc(100% - 16px)',
+                            height: 'calc(100% - 16px)',
+                            objectFit: 'fill',
+                            borderRadius: 17,
+                            zIndex: 1,
+                          }}
+                        />
+
+                        {/* ── LAYER 3: Ribbon at top center ── */}
+                        {/* ribbon.png sits on the top edge, overlapping both panels */}
+                        <img
+                          src="/image2/ribbon.png"
+                          alt=""
+                          className="absolute"
+                          style={{
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            top: -80, /* Overlaps the top edge */
+                            width: 260,
+                            height: 'auto',
+                            zIndex: 10,
+                          }}
+                        />
+
+                        {/* ── LAYER 4: "Jackpot" text on the ribbon ── */}
+                        {/* Match Game Rank text style: gold with brown border */}
+                        <div
+                          className="absolute"
+                          style={{
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            top: -11, /* Adjust if ribbon height changes */
+                            zIndex: 11,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'Inter, system-ui, sans-serif',
+                              fontWeight: 400,
+                              fontSize: 22,
+                              color: '#ffd900',
+                              textTransform: 'uppercase',
+                              letterSpacing: '1px',
+                              textShadow: `
+                                0.8px 0.8px 0 #7a3c08,
+                                -0.8px -0.8px 0 #7a3c08,
+                                0.8px -0.8px 0 #7a3c08,
+                                -0.8px 0.8px 0 #7a3c08
+                              `,
+                            }}
+                          >
+                            Jackpot
+                          </span>
+                        </div>
+
+                        {/* ── LAYER 5: Close button ── */}
+                        <button
+                          type="button"
+                          onClick={() => setActiveModal('NONE')}
+                          className="absolute flex items-center justify-center"
+                          style={{
+                            right: -4, top: -4,
+                            width: 32, height: 32,
+                            borderRadius: '50%',
+                            background: 'linear-gradient(180deg,#FF4444 0%,#CC1111 100%)',
+                            border: '3px solid #fff',
+                            boxShadow: '0 3px 8px rgba(0,0,0,0.4)',
+                            zIndex: 20,
+                            cursor: 'pointer',
+                          }}
+                          aria-label="Close jackpot"
+                        >
+                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                        </button>
+
+                        {/* ── LAYER 6: Purple diamonds pile ── */}
+                        {/* diamonds.png: 273×131, centered below ribbon */}
+                        <img
+                          src="/image2/diamonds.png"
+                          alt=""
+                          className="absolute"
+                          style={{
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            top: 42, /* Below ribbon — adjust if ribbon top changes */
+                            width: 260,
+                            height: 125,
+                            objectFit: 'contain',
+                            zIndex: 5,
+                          }}
+                        />
+
+                        {/* ── LAYER 7: Red number frame ── */}
+                        {/* jackpot_red_frame: 296×65 */}
+                        <div
+                          className="absolute"
+                          style={{
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            top: 140, /* Below the diamonds pile */
+                            width: 290,
+                            height: 63,
+                            zIndex: 6,
+                          }}
+                        >
+                          <img
+                            src="/image2/jackpot_red_frame.png"
+                            alt=""
+                            className="absolute inset-0 w-full h-full"
+                            style={{ objectFit: 'fill', borderRadius: 8 }}
+                          />
+
+                          {/* Number display: diamond icon + padded number */}
+                          {/* Leading zeros in a dimmer color, significant digits in bright gold */}
+                          <div
+                            className="absolute inset-0 flex items-center justify-center"
+                            style={{ gap: 6, paddingLeft: 8, paddingRight: 8 }}
+                          >
+                            {/* Small diamond icon inside frame */}
+                            <img
+                              src="/image2/diamond.png"
+                              alt=""
+                              style={{ width: 22, height: 22, flexShrink: 0 }}
+                            />
+
+                            {/* Padded jackpot number — leading zeros dimmer, significant digits bright */}
+                            <div
+                              className="flex items-center"
+                              style={{
+                                fontFamily: 'Inter, system-ui, sans-serif',
+                                fontWeight: 900,
+                                fontSize: 22,
+                                letterSpacing: '0.06em',
+                                lineHeight: 1,
+                              }}
+                            >
+                              {jackpotStr.split('').map((ch, ci) => {
+                                /* Find first non-zero digit index */
+                                const firstSig = jackpotStr.search(/[1-9]/);
+                                const isLeading = firstSig === -1 ? ci < jackpotStr.length - 1 : ci < firstSig;
+                                return (
+                                  <span
+                                    key={ci}
+                                    style={{
+                                      color: isLeading ? 'rgba(255,200,50,0.38)' : '#FFD700',
+                                      textShadow: isLeading
+                                        ? 'none'
+                                        : '0 0 8px rgba(255,200,0,0.7), 0 2px 0 rgba(0,0,0,0.5)',
+                                    }}
+                                  >
+                                    {ch}
+                                  </span>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </>
-                      ) : records.length > 0 ? (
-                        records.map((rec, idx) => (
-                          <div key={idx} className="border-b border-[#e9c08a] px-2 py-[4px] text-[12px] text-[#7b471d]">
-                            Round {rec.round} | {rec.winner.join(', ')} | Win: {formatNum(rec.win)}
                           </div>
-                        ))
-                      ) : (
-                        <div className="py-8 text-center text-[14px] text-[#b58a55]">
-                          No records yet. Play some rounds!
                         </div>
-                      )}
-                    </div>
-                  </div>
+
+                        {/* ── LAYER 8: Description text ── */}
+                        <div
+                          className="absolute"
+                          style={{
+                            left: 24, right: 24,
+                            top: 210, /* Below number frame */
+                            zIndex: 5,
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 400,
+                            fontSize: 13,
+                            color: '#8f5a1f',
+                            textAlign: 'center',
+                            lineHeight: '19px',
+                          }}
+                        >
+                          All players can win the Jackpot. The more you play,
+                          the higher your chances.
+                        </div>
+
+                        {/* ── LAYER 9: Awards section ── */}
+                        <div
+                          className="absolute"
+                          style={{
+                            left: 14,   /* contained inside board, was -14 */
+                            right: 14,  /* contained inside board, was -14 */
+                            top: 258,
+                            zIndex: 5,
+                          }}
+                        >
+
+                          {/* ── "Awards" label — sits ABOVE the prize board strip ── */}
+                          <div
+                            className="flex items-center justify-center"
+                            style={{ marginBottom: 6 }}
+                          >
+                            <div style={{ flex: 1, height: 1, background: 'rgba(180,110,40,0.4)', marginRight: 8 }} />
+                            <span
+                              style={{
+                                fontFamily: 'Inter, system-ui, sans-serif',
+                                fontWeight: 700,
+                                fontSize: 13,
+                                color: '#8f5a1f',
+                                letterSpacing: '0.5px',
+                              }}
+                            >
+                              Awards
+                            </span>
+                            <div style={{ flex: 1, height: 1, background: 'rgba(180,110,40,0.4)', marginLeft: 8 }} />
+                          </div>
+
+                          {/* ── Prize board strip — column headers ── */}
+                          <div
+                            className="relative flex items-center"
+                            style={{ width: '100%', height: 28 }}
+                          >
+                            <img
+                              src="/image2/jackpot_prize_board.png"
+                              alt=""
+                              className="absolute inset-0 w-full h-full"
+                              style={{ objectFit: 'fill', borderRadius: 6 }}
+                            />
+                            {['Round', 'Win', 'Time'].map((h) => (
+                              <span
+                                key={h}
+                                style={{
+                                  position: 'relative',
+                                  zIndex: 1,
+                                  flex: h === 'Time' ? 1.4 : 1,
+                                  fontFamily: 'Inter, system-ui, sans-serif',
+                                  fontWeight: 700,
+                                  fontSize: 11,
+                                  color: '#fff',
+                                  textAlign: h === 'Win' ? 'center' : h === 'Time' ? 'right' : 'left',
+                                  paddingLeft: h === 'Round' ? 10 : 0,
+                                  paddingRight: h === 'Time' ? 10 : 0,
+                                  textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                }}
+                              >
+                                {h}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* ── Awards rows ── */}
+                          <div
+                            style={{
+                              marginTop: 2,
+                              paddingLeft: 10,
+                              paddingRight: 10,
+                              maxHeight: 88,
+                              overflowY: 'auto',
+                              scrollbarWidth: 'none',
+                              msOverflowStyle: 'none',
+                            }}
+                          >
+                            {jackpotAwards.length > 0 ? (
+                              jackpotAwards.slice(0, 7).map((award, ai) => (
+                                <div
+                                  key={ai}
+                                  className="flex items-center"
+                                  style={{
+                                    height: 24,
+                                    borderBottom: '1px solid rgba(200,140,70,0.25)',
+                                  }}
+                                >
+                                  <span style={{ flex: 1, fontFamily: 'Inter', fontSize: 11, color: '#8f5a1f', fontWeight: 500 }}>
+                                    {award.round}
+                                  </span>
+                                  <span style={{ flex: 1, fontFamily: 'Inter', fontSize: 11, color: '#8f5a1f', fontWeight: 500, textAlign: 'center' }}>
+                                    {formatNum(award.win)}
+                                  </span>
+                                  <span style={{ flex: 1.4, fontFamily: 'Inter', fontSize: 10, color: '#8f5a1f', fontWeight: 400, textAlign: 'right' }}>
+                                    {award.time}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{ height: 56 }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* ── LAYER 10: Footer note ── */}
+                        <div
+                          className="absolute"
+                          style={{
+                            left: 0, right: 0,
+                            bottom: 14,
+                            zIndex: 5,
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            fontWeight: 500,
+                            fontSize: 11,
+                            color: '#c07830',
+                            textAlign: 'center',
+                          }}
+                        >
+                          Display game records of the last 7 days.
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : null}
 
-                {activeModal === 'PRIZE' ? (
-                  <div className="h-full w-full rounded-[22px] border-[5px] border-[#f09c16] bg-gradient-to-b from-[#fff3cc] to-[#ffdd9d] p-4 text-[#8f4f1f]">
-                    <div className="mx-auto mb-3 flex h-[44px] w-[200px] items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ffcb1d] to-[#f6a602] text-[22px] font-bold text-[#7a3c08]">
-                      Prize distribution
-                    </div>
-                    {(prizeData ? (isAdvanceMode ? prizeData.advance : prizeData.general) : null)?.ranks ? (
-                      <div className="rounded-[10px] bg-[#e9b273] p-2 text-[15px]">
-                        <div className="mb-1 flex items-center justify-between border-b border-[#d4994a] pb-1 text-[13px] font-bold text-[#6d3712]">
-                          <span style={{ width: 60 }}>Rank</span>
-                          <span>Prize</span>
-                        </div>
-                        {(isAdvanceMode ? prizeData!.advance : prizeData!.general).ranks.map((r) => (
-                          <div key={r.rank} className="flex items-center justify-between py-[2px] text-[#7b471d]">
-                            <span style={{ width: 60, fontWeight: 700 }}>{r.rank}</span>
-                            <span>{formatNum(r.prize)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-[10px] bg-[#e9b273] p-3 text-center text-[18px]">
-                        1st: 1,000,000 | 2nd: 800,000 | 3rd: 500,000
-                      </div>
-                    )}
-                  </div>
-                ) : null}
 
 
 
@@ -3908,28 +4857,31 @@ const GamePage = () => {
       </div>
 
       {/* ? help button — outside the pill, right side */}
-      <div
-        style={{
-          position: 'absolute',
-          right: -40,
-          top: '46%',
-          transform: 'translateY(-50%)',
-          width: 30,
-          height: 30,
-          borderRadius: '50%',
-          border: '2px solid #c8a05a',
-          background: 'rgba(240,220,170,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#8b5e20',
-          fontWeight: 900,
-          fontSize: 17,
-          zIndex: 6,
-        }}
-      >
-        ?
-      </div>
+      <button
+  type="button"
+  onClick={() => setActiveModal('PRIZE')}
+  style={{
+    position: 'absolute',
+    right: -40,
+    top: '46%',
+    transform: 'translateY(-50%)',
+    width: 30,
+    height: 30,
+    borderRadius: '50%',
+    border: '2px solid #c8a05a',
+    background: 'rgba(240,220,170,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#8b5e20',
+    fontWeight: 900,
+    fontSize: 17,
+    zIndex: 6,
+    cursor: 'pointer',
+  }}
+>
+  ?
+</button>
     </div>
 
     {/* ── 5. Column headers ── left/top independent */}
