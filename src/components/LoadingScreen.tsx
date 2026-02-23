@@ -1,24 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 // Using public folder assets for absolute reliability
 const logoUrl = '/logo.png';
 const backgroundUrl = '/image2/iphone16pro_background.jpg';
 
-// ── Critical images that GamePage needs immediately ──
-// These are preloaded during the loading screen so they're cached when the game mounts.
+// ── Only preload small essential sprites (< 100KB each) ──
+// Heavy backgrounds/decorations load naturally after game mounts
 const CRITICAL_IMAGES = [
-    // Backgrounds
-    '/image2/advance_bg.png',
-    '/image2/background_city_scene.png',
-    // Ferris wheel & game elements
-    '/image2/ferris-wheel.png',
-    '/image2/game-elements.png',
-    '/image2/game_elements_sheet.png',
-    // Sign board & branding
-    '/image2/greedy_sign_board.png',
-    '/image2/greedy_wordmark.png',
-    // Game items (sprites)
+    // Game item sprites (~20-30KB each)
     '/image2/honey_jar.png',
     '/image2/tomato.png',
     '/image2/lemon.png',
@@ -27,42 +17,29 @@ const CRITICAL_IMAGES = [
     '/image2/zucchini.png',
     '/image2/cola_can.png',
     '/image2/water.png',
-    // Chips
+    // Chips (~11-22KB each)
     '/image2/chip_10.png',
     '/image2/chip_100.png',
     '/image2/chip_500_orange.png',
     '/image2/chip_1k.png',
     '/image2/chip_5k.png',
-    // Chests
+    // Chests (~30KB each)
     '/image2/chest_10k.png',
     '/image2/chest_50k.png',
     '/image2/chest_100k.png',
     '/image2/chest_500k.png',
     '/image2/chest_1m.png',
-    // UI elements
+    // Small UI elements
     '/image2/gameboard.png',
-    '/image2/flare.png',
-    '/image2/flare_circular.png',
-    '/image2/trophy.png',
     '/image2/ribbon.png',
-    '/image2/banner_game_on.png',
-    '/image2/curtain.png',
-    '/image2/select_items.png',
-    // Rank badges
-    '/image2/leaderboard_rank_1.png',
-    '/image2/leaderboard_rank_2.png',
-    '/image2/leaderboard_rank_3.png',
-    '/image2/leaderboard_rank_4_plus.png',
+    '/image2/flare_circular.png',
 ];
 
 function preloadImage(src: string): Promise<void> {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
-        img.onerror = () => {
-            console.warn(`[Preload] Failed to load: ${src}`);
-            resolve(); // Don't block loading on a failed image
-        };
+        img.onerror = () => resolve(); // Don't block on failure
         img.src = src;
     });
 }
@@ -73,50 +50,51 @@ interface LoadingScreenProps {
 
 const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
     const [progress, setProgress] = useState(0);
-    const [preloadDone, setPreloadDone] = useState(false);
 
-    // Preload critical images and track real progress
     useEffect(() => {
         let cancelled = false;
         const total = CRITICAL_IMAGES.length;
         let loaded = 0;
 
         const loadAll = async () => {
-            // Load in batches of 6 to avoid overwhelming the network
-            const batchSize = 6;
-            for (let i = 0; i < total; i += batchSize) {
-                if (cancelled) return;
-                const batch = CRITICAL_IMAGES.slice(i, i + batchSize);
-                await Promise.all(batch.map(preloadImage));
-                loaded += batch.length;
-                if (!cancelled) {
-                    // Map actual progress to 10-95% range (reserve 0-10 for initial render, 95-100 for transition)
-                    const realProgress = Math.min(95, Math.round(10 + (loaded / total) * 85));
-                    setProgress(realProgress);
-                }
-            }
+            // Load all images concurrently (they're small enough)
+            const promises = CRITICAL_IMAGES.map((src) =>
+                preloadImage(src).then(() => {
+                    loaded++;
+                    if (!cancelled) {
+                        const pct = Math.min(95, Math.round(10 + (loaded / total) * 85));
+                        setProgress(pct);
+                    }
+                })
+            );
+
+            await Promise.all(promises);
             if (!cancelled) {
                 setProgress(100);
-                setPreloadDone(true);
+                // Short delay before transitioning
+                setTimeout(() => {
+                    if (!cancelled) onLoadingComplete();
+                }, 400);
             }
         };
 
-        // Start with a small initial progress to feel responsive immediately
+        // Timeout fallback — proceed after 6 seconds no matter what
+        const timeout = setTimeout(() => {
+            if (!cancelled) {
+                cancelled = true;
+                setProgress(100);
+                setTimeout(() => onLoadingComplete(), 200);
+            }
+        }, 6000);
+
         setProgress(5);
         loadAll();
 
-        return () => { cancelled = true; };
-    }, []);
-
-    // Transition to game after preload completes
-    useEffect(() => {
-        if (preloadDone) {
-            const timer = setTimeout(() => {
-                onLoadingComplete();
-            }, 600);
-            return () => clearTimeout(timer);
-        }
-    }, [preloadDone, onLoadingComplete]);
+        return () => {
+            cancelled = true;
+            clearTimeout(timeout);
+        };
+    }, [onLoadingComplete]);
 
     return (
         <div className="relative w-full h-full flex flex-col items-center bg-[#8DA6DE] overflow-hidden">
@@ -134,10 +112,10 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
                 <div className="absolute inset-0 bg-black/5 backdrop-blur-[0.5px]" />
             </div>
 
-            {/* Content Layer - Explicitly High Z-Index with Figma Top Position */}
+            {/* Content Layer */}
             <div className="relative z-[999] flex flex-col items-center w-full pt-[242px]">
 
-                {/* Logo Area - 214x212 from Figma */}
+                {/* Logo */}
                 <motion.div
                     className="mb-8 select-none pointer-events-none"
                     initial={{ scale: 0.9, opacity: 0 }}
@@ -155,23 +133,22 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
                     />
                 </motion.div>
 
-                {/* Progress Bar Container - Capsule Style 223x54 */}
+                {/* Progress Bar */}
                 <div className="w-[223px] h-[54px] bg-[#91a0b8]/30 rounded-full p-[5px] border-[2px] border-white/40 backdrop-blur-md relative overflow-hidden shadow-2xl">
                     <div className="absolute top-[4px] inset-x-8 h-[2.5px] bg-white/40 rounded-full z-10" />
-
                     <div className="w-full h-full bg-black/20 rounded-full overflow-hidden relative">
                         <motion.div
                             className="h-full rounded-full bg-gradient-to-r from-[#00d2ff] via-[#4facfe] to-[#3a7bd5] relative shadow-[0_0_15px_rgba(0,210,255,0.5)]"
                             initial={{ width: 0 }}
                             animate={{ width: `${progress}%` }}
-                            transition={{ duration: 0.3, ease: "easeOut" }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
                         >
                             <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent rounded-full opacity-80" />
                         </motion.div>
                     </div>
                 </div>
 
-                {/* Loading Text - Thicker, Logo-style typography (Outfit Black 900) */}
+                {/* Loading Text */}
                 <motion.div
                     className="mt-6 text-white text-[24px] font-[900] tracking-tight select-none uppercase"
                     style={{
