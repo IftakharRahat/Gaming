@@ -93,7 +93,7 @@ type ApiGameIcon = { icon: string };
 type ApiTodayWin = { today_win: { total_balance: number | null } };
 type ApiJackpot = { Jackpot: number };
 type ApiSessionTime = { started_at: string; next_run_time: string };
-type ApiTopWinnerResponse = { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }[];
+type ApiTopWinnerResponse = { mrs_player_id_player_name: string; mrs_player_id_player_pic?: string; last_balance: number }[];
 type ApiMaxPlayers = { max_players: number };
 type ApiPrizeRank = { rank: string; prize: number };
 type ApiPrizeDistribution = {
@@ -1425,11 +1425,11 @@ const GamePage = () => {
 
         // Try top winners API first
         if (topWinners && Array.isArray(topWinners) && topWinners.length > 0) {
-          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs__player_id__player_name: string; mrs__player_id__player_pic?: string; last_balance: number }) => ({
-            name: r.mrs__player_id__player_name,
+          topWinnersMapped = topWinners.slice(0, 3).map((r: { mrs_player_id_player_name: string; mrs_player_id_player_pic?: string; last_balance: number }) => ({
+            name: r.mrs_player_id_player_name,
             amount: r.last_balance,
-            pic: r.mrs__player_id__player_pic
-              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs__player_id__player_pic}`)
+            pic: r.mrs_player_id_player_pic
+              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
               : undefined,
           }));
           console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
@@ -1784,6 +1784,7 @@ const GamePage = () => {
       runningBalance -= selectedChip;
 
       const elementId = elementApiIds[itemId] || 0;
+      if (!PLAYER_ID) return; // skip API call if no player_id in URL
       fetch('/game/player/gaming/participants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2083,22 +2084,23 @@ const GamePage = () => {
 
     /* Submit bet to API */
     const elementId = elementApiIds[itemId] || 0;
-    fetch('/game/player/gaming/participants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        player_id: PLAYER_ID,
-        balance: balance - selectedChip,
-        bet: selectedChip,
-        element: elementId,
-        mode: isAdvanceMode ? 1 : 2,
-      }),
-    })
-      .then((res) => {
-        if (res.ok) console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
+    if (PLAYER_ID) {
+      fetch('/game/player/gaming/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_id: PLAYER_ID,
+          balance: balance - selectedChip,
+          bet: selectedChip,
+          element: elementId,
+          mode: isAdvanceMode ? 1 : 2,
+        }),
       })
-      .catch(() => { /* silently ignore bet errors */ });
-
+        .then((res) => {
+          if (res.ok) console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
+        })
+        .catch(() => { /* silently ignore bet errors */ });
+    }
 
     if (phase === 'BETTING') {
       const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
