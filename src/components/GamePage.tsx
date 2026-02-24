@@ -1216,9 +1216,18 @@ const GamePage = () => {
           /* session/end/time API is unfinished on backend — skip to avoid 500 noise */
         ];
 
-        /* Execute in batches of 4 to avoid overwhelming the server */
-        const BATCH_SIZE = 4;
-        const BATCH_DELAY = 250; // ms between batches
+        /* Warm up the Vercel serverless function to avoid cold-start 500s */
+        try {
+          await fetch('/game/game/trophy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: API_BODY,
+          });
+        } catch { /* ignore warm-up errors */ }
+
+        /* Execute in batches of 3 with delay to avoid overwhelming the server */
+        const BATCH_SIZE = 3;
+        const BATCH_DELAY = 300; // ms between batches
         const results: PromiseSettledResult<unknown>[] = [];
 
         for (let i = 0; i < apiCalls.length; i += BATCH_SIZE) {
