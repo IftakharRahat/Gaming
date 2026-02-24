@@ -1223,10 +1223,11 @@ const GamePage = () => {
             headers: { 'Content-Type': 'application/json' },
             body: API_BODY,
           });
-        } catch { /* ignore warm-up errors */ }
+        } catch { /* warm-up done */ }
+        await new Promise(r => setTimeout(r, 500)); // let serverless instance stay warm
 
         /* Execute in batches of 3 with delay to avoid overwhelming the server */
-        const BATCH_SIZE = 3;
+        const BATCH_SIZE = 2;
         const BATCH_DELAY = 300; // ms between batches
         const results: PromiseSettledResult<unknown>[] = [];
 
