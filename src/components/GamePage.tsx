@@ -1213,13 +1213,12 @@ const GamePage = () => {
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
           () => apiFetch<ApiTodayWin>('/game/today/win'),
-          /* 19: session API (unfinished on backend) */
-          () => apiFetch<ApiSessionTime>('/game/game/session/end/time'),
+          /* session/end/time API is unfinished on backend — skip to avoid 500 noise */
         ];
 
         /* Execute in batches of 4 to avoid overwhelming the server */
         const BATCH_SIZE = 4;
-        const BATCH_DELAY = 150; // ms between batches
+        const BATCH_DELAY = 250; // ms between batches
         const results: PromiseSettledResult<unknown>[] = [];
 
         for (let i = 0; i < apiCalls.length; i += BATCH_SIZE) {
@@ -1231,27 +1230,30 @@ const GamePage = () => {
           }
         }
 
-        /* Map results — order matches the Promise.allSettled array above */
-        const elements = results[0].status === 'fulfilled' ? results[0].value : null;
-        const buttons = results[1].status === 'fulfilled' ? results[1].value : null;
-        const boxes = results[2].status === 'fulfilled' ? results[2].value : null;
-        const winHistory = results[3].status === 'fulfilled' ? results[3].value : null;
-        const topWinners = results[4].status === 'fulfilled' ? results[4].value : null;
-        const jackpotApi = results[5].status === 'fulfilled' ? results[5].value : null;
-        const jackpotDetails = results[6].status === 'fulfilled' ? results[6].value : null;
-        const gameMode = results[7].status === 'fulfilled' ? results[7].value : null;
-        const rankToday = results[8].status === 'fulfilled' ? results[8].value : null;
-        const rankYesterday = results[9].status === 'fulfilled' ? results[9].value : null;
-        const playerRecords = results[10].status === 'fulfilled' ? results[10].value : null;
-        const trophy = results[11].status === 'fulfilled' ? results[11].value : null;
-        const coin = results[12].status === 'fulfilled' ? results[12].value : null;
-        const gameIcon = results[13].status === 'fulfilled' ? results[13].value : null;
-        const maxFruits = results[14].status === 'fulfilled' ? results[14].value : null;
-        const gameRules = results[15].status === 'fulfilled' ? results[15].value : null;
-        const prizeDistrib = results[16].status === 'fulfilled' ? results[16].value : null;
-        const gameMetadata = results[17].status === 'fulfilled' ? results[17].value : null;
-        const todayWinApi = results[18].status === 'fulfilled' ? results[18].value : null;
-        const sessionTime = results[19].status === 'fulfilled' ? results[19].value : null;
+        /* Map results — order matches the API calls array above */
+        const val = <T,>(i: number): T | null =>
+          results[i]?.status === 'fulfilled' ? (results[i].value as T) : null;
+
+        const elements = val<ApiElement[]>(0);
+        const buttons = val<ApiButton[]>(1);
+        const boxes = val<ApiBox[]>(2);
+        const winHistory = val<ApiWinElement[]>(3);
+        const topWinners = val<ApiTopWinnerResponse>(4);
+        const jackpotApi = val<ApiJackpot>(5);
+        const jackpotDetails = val<ApiJackpotDetails>(6);
+        const gameMode = val<ApiGameMode>(7);
+        const rankToday = val<ApiRankRow[]>(8);
+        const rankYesterday = val<ApiRankRow[]>(9);
+        const playerRecords = val<ApiPlayerRecords>(10);
+        const trophy = val<ApiTrophy>(11);
+        const coin = val<ApiCoin>(12);
+        const gameIcon = val<ApiGameIcon>(13);
+        const maxFruits = val<ApiMaxPlayers>(14);
+        const gameRules = val<ApiGameRule>(15);
+        const prizeDistrib = val<ApiPrizeDistribution>(16);
+        const gameMetadata = val<ApiGameMetadata>(17);
+        const todayWinApi = val<ApiTodayWin>(18);
+        const sessionTime = null as ApiSessionTime | null; // session/end/time API is unfinished — skipped
 
         /* Log failures */
         results.forEach((r, i) => {
