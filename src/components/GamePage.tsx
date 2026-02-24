@@ -1890,52 +1890,64 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [canBet, pointerStops.length]);
 
-  // â”€â”€ Sequential lottery-style spinning during DRAWING â”€â”€
-  // Cycles through items in order (like a roulette wheel) with decelerating speed,
-  // landing on the winner
+  // -- Sequential lottery-style spinning during DRAWING --
+  // Phase 1: fast spin loop while waiting for server winner
+  // Phase 2: decelerate and land on winner once winnerIds arrives
+  const drawStartRef = useRef<number>(0);
+
   useEffect(() => {
     if (phase !== 'DRAWING') return;
 
-    const winners = winnerRef.current;
-    if (!winners || winners.length === 0) return;
-
-    // during spinning we still â€œlandâ€ on something.
-    // for NORMAL: winners[0]
-    // for JACKPOT: choose one representative to land on (e.g. first item)
-    const landingId = winners[0];
-
     const order = DRAW_HIGHLIGHT_ORDER;
+    const winners = winnerRef.current;
+
+    if (!winners || winners.length === 0) {
+      // -- Phase 1: no winner yet, spin fast in a loop --
+      drawStartRef.current = Date.now();
+      let step = 0;
+      const spinInterval = window.setInterval(() => {
+        step++;
+        setDrawHighlightIndex(step % order.length);
+      }, 100); // fast spin: 100ms per step
+      return () => window.clearInterval(spinInterval);
+    }
+
+    // -- Phase 2: winner arrived, decelerate and land --
+    const landingId = winners[0];
     const winnerIdx = order.indexOf(landingId);
 
-    // Calculate total steps: 3 full loops + extra to land on winner
-    const fullLoops = 3;
+    // How much time is left for the animation?
+    const elapsed = Date.now() - drawStartRef.current;
+    const remainingMs = Math.max(2000, DRAW_SECONDS * 1000 - elapsed - 100);
+
+    // 2 full loops + steps to land on winner
+    const fullLoops = 2;
     const totalSteps = fullLoops * order.length + winnerIdx + 1;
 
-    const totalDurationMs = DRAW_SECONDS * 1000 - 100;
     const rawDelays: number[] = [];
     for (let i = 0; i < totalSteps; i++) {
       const p = totalSteps > 1 ? i / (totalSteps - 1) : 0;
       rawDelays.push(1 + 5 * p * p * p);
     }
     const rawSum = rawDelays.reduce((a, b) => a + b, 0);
-    const delays = rawDelays.map(d => d * (totalDurationMs / rawSum));
+    const delays = rawDelays.map(d => d * (remainingMs / rawSum));
 
-    let elapsed = 0;
+    let cumulative = 0;
     const timers: number[] = [];
 
     for (let i = 0; i < totalSteps; i++) {
-      elapsed += delays[i];
+      cumulative += delays[i];
       const step = i;
       const timerId = window.setTimeout(() => {
         setDrawHighlightIndex(step % order.length);
-      }, elapsed);
+      }, cumulative);
       timers.push(timerId);
     }
 
     return () => {
       timers.forEach((t) => window.clearTimeout(t));
     };
-  }, [phase]);
+  }, [phase, winnerIds]);
 
   useEffect(
     () => () => {
