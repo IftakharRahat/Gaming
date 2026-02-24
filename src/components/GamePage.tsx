@@ -1190,31 +1190,46 @@ const GamePage = () => {
         const mBody = apiBodyWithMode(modeNum);
         const pBody = apiBodyPlayer(modeNum);
 
-        const results = await Promise.allSettled([
-          /* ── APIs that need mode ── */
-          apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
-          apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
-          apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
-          apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
-          apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
-          apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
-          apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
-          apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
-          apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
-          apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
-          apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
-          /* ── APIs that DON'T need mode ── */
-          apiFetch<ApiTrophy>('/game/game/trophy'),
-          apiFetch<ApiCoin>('/game/game/coin'),
-          apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
-          apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn'),
-          apiFetch<ApiGameRule>('/game/game/rule'),
-          apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
-          apiFetch<ApiGameMetadata>('/game/game/icon/'),
-          apiFetch<ApiTodayWin>('/game/today/win'),
-          /* session API (unfinished on backend) */
-          apiFetch<ApiSessionTime>('/game/game/session/end/time'),
-        ]);
+        /* Build the list of API calls (they won't execute until we call them) */
+        const apiCalls: (() => Promise<unknown>)[] = [
+          /* 0–10: APIs that need mode */
+          () => apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
+          () => apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
+          () => apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
+          () => apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
+          () => apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
+          () => apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
+          () => apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
+          () => apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
+          () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
+          () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
+          () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
+          /* 11–18: APIs that DON'T need mode */
+          () => apiFetch<ApiTrophy>('/game/game/trophy'),
+          () => apiFetch<ApiCoin>('/game/game/coin'),
+          () => apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
+          () => apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn'),
+          () => apiFetch<ApiGameRule>('/game/game/rule'),
+          () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
+          () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
+          () => apiFetch<ApiTodayWin>('/game/today/win'),
+          /* 19: session API (unfinished on backend) */
+          () => apiFetch<ApiSessionTime>('/game/game/session/end/time'),
+        ];
+
+        /* Execute in batches of 4 to avoid overwhelming the server */
+        const BATCH_SIZE = 4;
+        const BATCH_DELAY = 150; // ms between batches
+        const results: PromiseSettledResult<unknown>[] = [];
+
+        for (let i = 0; i < apiCalls.length; i += BATCH_SIZE) {
+          const batch = apiCalls.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.allSettled(batch.map((fn) => fn()));
+          results.push(...batchResults);
+          if (i + BATCH_SIZE < apiCalls.length) {
+            await new Promise((r) => setTimeout(r, BATCH_DELAY));
+          }
+        }
 
         /* Map results — order matches the Promise.allSettled array above */
         const elements = results[0].status === 'fulfilled' ? results[0].value : null;
