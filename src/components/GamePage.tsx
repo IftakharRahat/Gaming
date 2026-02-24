@@ -1566,6 +1566,7 @@ const GamePage = () => {
 
   const [roundType, setRoundType] = useState<RoundType>('NORMAL');
   const normalRoundsSinceJackpotRef = useRef(0);
+  const transitioningRef = useRef(false); // guard: prevents double SHOWTIME→BETTING transition
 
   const [showResultBoard, setShowResultBoard] = useState(false);
   const [winnerIds, setWinnerIds] = useState<ItemId[] | null>(null);
@@ -1713,6 +1714,8 @@ const GamePage = () => {
   }, [chipValues]);
 
   const beginRound = () => {
+    transitioningRef.current = false; // clear gate so next SHOWTIME can transition
+
     // Decide next round type (placeholder logic)
     const isJackpotNext =
       normalRoundsSinceJackpotRef.current > 0 &&
@@ -2030,6 +2033,9 @@ const GamePage = () => {
     }
 
     if (phase === 'SHOWTIME') {
+      /* Gate: prevent double-processing if dependencies cause re-render during 150ms gap */
+      if (transitioningRef.current) return;
+      transitioningRef.current = true;
       const winner = winnerRef.current;
       const winAmount = pendingWin?.amount ?? 0;
       const balanceBefore = balance;
