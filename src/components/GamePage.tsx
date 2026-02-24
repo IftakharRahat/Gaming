@@ -2786,9 +2786,9 @@ const GamePage = () => {
             <motion.button
               key={it.id}
               type="button"
-              onClick={() => placeBet(it.id)}
+              onPointerDown={(e) => { e.preventDefault(); placeBet(it.id); }}
               className="absolute z-30 border-none bg-transparent p-0"
-              style={{ left: it.left, top: it.top, width: it.width, height: it.height, cursor: canBet ? 'pointer' : 'default' }}
+              style={{ left: it.left, top: it.top, width: it.width, height: it.height, touchAction: 'none', cursor: canBet ? 'pointer' : 'default' }}
               whileTap={canBet ? { scale: 0.95 } : undefined}
               whileHover={canBet ? { scale: 1.03 } : undefined}
               animate={
