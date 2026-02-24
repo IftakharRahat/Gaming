@@ -1992,17 +1992,17 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      /* ── LIVE: poll server for winning element ── */
+      /* ── LIVE: fetch server winner after a short delay ── */
       setPhase('DRAWING');
       setTimeLeft(DRAW_SECONDS);
 
-      // Poll /game/win/elements/list until a NEW result appears
+      // Wait 3s (let server finalize), then fetch winner
       (async () => {
+        await new Promise(r => setTimeout(r, 3000));
         const mBody = JSON.stringify({ regisation: 3, mode: isAdvanceMode ? 1 : 2 });
-        let attempts = 0;
-        const maxAttempts = 30;
-        while (attempts < maxAttempts) {
-          attempts++;
+
+        // Try up to 3 times with 2s interval
+        for (let attempt = 0; attempt < 3; attempt++) {
           try {
             const results = await apiFetch<Array<{
               id: number;
@@ -2013,38 +2013,40 @@ const GamePage = () => {
 
             if (results && results.length > 0) {
               const latest = results[results.length - 1];
-              if (latest.id > lastWinIdRef.current) {
-                lastWinIdRef.current = latest.id;
 
-                if (latest.gjp__jackpot_name && latest.jackport_element_name.length > 0) {
-                  const jackpotIds = latest.jackport_element_name
-                    .map(name => API_NAME_TO_ID[name])
-                    .filter(Boolean) as ItemId[];
-                  setRoundType('JACKPOT');
-                  winnerRef.current = jackpotIds.length > 0 ? jackpotIds : ['honey'];
-                  setWinnerIds(jackpotIds.length > 0 ? jackpotIds : ['honey']);
-                  console.log('[LIVE] Jackpot winner:', jackpotIds);
-                } else if (latest.element__element_name) {
-                  const winnerId = API_NAME_TO_ID[latest.element__element_name] || 'honey';
-                  winnerRef.current = [winnerId];
-                  setWinnerIds([winnerId]);
-                  console.log('[LIVE] Winner:', winnerId, '(' + latest.element__element_name + ')');
-                }
-                break;
+              if (latest.gjp__jackpot_name && latest.jackport_element_name.length > 0) {
+                const jackpotIds = latest.jackport_element_name
+                  .map(name => API_NAME_TO_ID[name])
+                  .filter(Boolean) as ItemId[];
+                setRoundType('JACKPOT');
+                winnerRef.current = jackpotIds.length > 0 ? jackpotIds : ['honey'];
+                setWinnerIds(jackpotIds.length > 0 ? jackpotIds : ['honey']);
+                console.log('[LIVE] Jackpot winner:', jackpotIds);
+              } else if (latest.element__element_name) {
+                const winnerId = API_NAME_TO_ID[latest.element__element_name] || 'honey';
+                winnerRef.current = [winnerId];
+                setWinnerIds([winnerId]);
+                console.log('[LIVE] Winner:', winnerId, '(' + latest.element__element_name + ')');
+              } else {
+                // No name — use fallback
+                const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
+                winnerRef.current = [fallback];
+                setWinnerIds([fallback]);
+                console.log('[LIVE] No element name, using fallback');
               }
+              return; // success — exit
             }
           } catch (e) {
-            console.warn('[LIVE] Poll error:', e);
+            console.warn('[LIVE] Fetch attempt', attempt + 1, 'error:', e);
           }
-          await new Promise(r => setTimeout(r, 1000));
+          if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
         }
 
-        if (attempts >= maxAttempts) {
-          console.warn('[LIVE] Timeout, using fallback');
-          const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
-          winnerRef.current = [fallback];
-          setWinnerIds([fallback]);
-        }
+        // All retries failed — fallback
+        console.warn('[LIVE] All retries failed, using fallback');
+        const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
+        winnerRef.current = [fallback];
+        setWinnerIds([fallback]);
       })();
       return;
     }
@@ -2052,11 +2054,7 @@ const GamePage = () => {
 
     if (phase === 'DRAWING') {
       const winners = winnerRef.current;
-      if (!winners || winners.length === 0) {
-        // Server winner not received yet — keep waiting, poll will set it
-        console.log('[LIVE] Drawing timer expired, waiting for server winner...');
-        return;
-      }
+      if (!winners || winners.length === 0) return; // wait for fetch to complete
 
       const hadAnyBet = totalBet > 0;
 
