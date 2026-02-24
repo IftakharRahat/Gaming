@@ -113,16 +113,7 @@ type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: stri
 type ApiPlayerRecords = { data: { round?: number; element__element_name?: string; bet?: number; win?: number; time?: string }[] };
 
 /* Map API element_name â†’ local ItemId */
-const API_NAME_TO_ID: Record<string, ItemId> = {
-  Honey: 'honey',
-  Tomato: 'tomato',
-  lemon: 'lemon',
-  Milk: 'milk',
-  pumpkin: 'pumpkin',
-  Blur: 'zucchini',
-  Coke: 'cola',
-  Water: 'water',
-};
+
 
 /* Reverse map: local ItemId â†’ API element_name */
 const ID_TO_API_NAME: Record<ItemId, string> = {
