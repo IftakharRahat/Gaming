@@ -16,7 +16,7 @@ const ADVANCE_UNLOCK_BET = 500000;
 
 const DEFAULT_CHIP_VALUES = [10, 100, 500, 1000, 5000] as const;
 
-/* Map chip value → local image path */
+/* Map chip value â†’ local image path */
 const CHIP_IMAGE_MAP: Record<number, string> = {
   10: '/image2/chip_10.png',
   100: '/image2/chip_100.png',
@@ -26,7 +26,7 @@ const CHIP_IMAGE_MAP: Record<number, string> = {
   10000: '/image2/chip_10k.png',
 };
 
-/* Map box value → local chest image */
+/* Map box value â†’ local chest image */
 const BOX_VALUE_TO_CHEST: Record<number, string> = {
   10: '/image2/chest_10k.png',
   20: '/image2/chest_50k.png',
@@ -49,7 +49,7 @@ const JACKPOT_EVERY_N_NORMAL_ROUNDS = 3;
 
 // placeholder until API
 const JACKPOT_BONUS_AMOUNT = 500000;
-/* ── API config ── */
+/* â”€â”€ API config â”€â”€ */
 const API_BASE = ''; // proxied via vite.config.ts
 const API_BODY = JSON.stringify({ regisation: 3 });
 /* Body with mode: 2 = general/basic, 1 = advance */
@@ -112,7 +112,7 @@ type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: 
 type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
 type ApiPlayerRecords = { data: { round?: number; element__element_name?: string; bet?: number; win?: number; time?: string }[] };
 
-/* Map API element_name → local ItemId */
+/* Map API element_name â†’ local ItemId */
 const API_NAME_TO_ID: Record<string, ItemId> = {
   Honey: 'honey',
   Tomato: 'tomato',
@@ -124,7 +124,7 @@ const API_NAME_TO_ID: Record<string, ItemId> = {
   Water: 'water',
 };
 
-/* Reverse map: local ItemId → API element_name */
+/* Reverse map: local ItemId â†’ API element_name */
 const ID_TO_API_NAME: Record<ItemId, string> = {
   honey: 'Honey',
   tomato: 'Tomato',
@@ -271,7 +271,7 @@ type PendingWin = {
 type GameRecord = {
   round: number;
   at: string;
-  winner: ItemId[]; // ✅
+  winner: ItemId[]; // âœ…
   selected: ItemId | 'none';
   selectedAmount: number;
   win: number;
@@ -625,7 +625,7 @@ const ITEMS: ItemSpec[] = [
   },
 ];
 
-/* Default multipliers — overridden by API data at runtime */
+/* Default multipliers â€” overridden by API data at runtime */
 const DEFAULT_MULTIPLIER: Record<ItemId, number> = {
   honey: 8,
   milk: 7,
@@ -637,7 +637,7 @@ const DEFAULT_MULTIPLIER: Record<ItemId, number> = {
   zucchini: 2,
 };
 
-/* Default win weights — overridden by API data at runtime */
+/* Default win weights â€” overridden by API data at runtime */
 const DEFAULT_WIN_WEIGHTS: Record<ItemId, number> = {
   honey: 8,
   milk: 7,
@@ -664,11 +664,11 @@ const INITIAL_RESULT_SRCS = [
 // Around line 340-346 - Update the CHIPS array with larger sizes
 const CHIPS: ChipSpec[] = [
   { src: '/image2/chip_10.png', left: 29 + 17, top: 526 + 24, width: 54, height: 54 },
-  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 85, height: 85, shadow: true },  // ← larger
+  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 85, height: 85, shadow: true },  // â† larger
   { src: '/image2/chip_500_orange.png', left: 29 + 146, top: 523 + 25, width: 55, height: 54, shadow: true },
   { src: '/image2/chip_1k.png', left: 29 + 211, top: 523 + 24, width: 54, height: 53, shadow: true },
   { src: '/image2/chip_5k.png', left: 29 + 275, top: 523 + 24, width: 54, height: 54, shadow: true },
-  { src: '/image2/chip_10k.png', left: 29 + 275, top: 523 + 24, width: 85, height: 85, shadow: true }, // ← add 10k with larger size
+  { src: '/image2/chip_10k.png', left: 29 + 275, top: 523 + 24, width: 85, height: 85, shadow: true }, // â† add 10k with larger size
 ];
 
 const CHESTS = [
@@ -751,7 +751,7 @@ function getWheelFocusRect(item: ItemSpec) {
 
   const pad = clamp(Math.round(base * 0.08), 4, 10);
 
-  // 🔧 SIZE SCALE CONTROL (this is what you adjust)
+  // ðŸ”§ SIZE SCALE CONTROL (this is what you adjust)
   const SCALE_X = .7; // width scale
   const SCALE_Y = 0.6; // height scale
 
@@ -789,9 +789,9 @@ function wheelClipPathForRect(
     ? clamp((itemCenterY - WHEEL.top) / WHEEL.height, 0, 1)
     : 0.5;
 
-  // ✅ Dynamic extras:
-  // Top items (t≈0) need MORE top expansion.
-  // Bottom items (t≈1) need LESS top expansion.
+  // âœ… Dynamic extras:
+  // Top items (tâ‰ˆ0) need MORE top expansion.
+  // Bottom items (tâ‰ˆ1) need LESS top expansion.
   const EXTRA_LEFT = 18;
   const EXTRA_RIGHT = 20;
 
@@ -823,9 +823,9 @@ const PodiumBadge = ({ index, size }: PodiumBadgeProps) => (
   />
 );
 
-/* ═══════════════════════════════════════════════════════════
-   Trophy Win Overlay — chips fly to trophy → trophy explodes → panel pops up
-   ═══════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   Trophy Win Overlay â€” chips fly to trophy â†’ trophy explodes â†’ panel pops up
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 type WinAnimStage = 'FLY_TO_TROPHY' | 'TROPHY_EXPLODE' | 'PANEL';
 
 type TrophyWinOverlayProps = {
@@ -892,10 +892,10 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
   useEffect(() => {
     /*
       Timeline (from start):
-      0.0s  — chips fly to trophy
-      0.7s  — coin explosion + fireworks start
-      2.7s  — leaderboard panel appears (coins + fireworks still going)
-      4.7s  — coin explosion stops (fireworks + panel continue)
+      0.0s  â€” chips fly to trophy
+      0.7s  â€” coin explosion + fireworks start
+      2.7s  â€” leaderboard panel appears (coins + fireworks still going)
+      4.7s  â€” coin explosion stops (fireworks + panel continue)
     */
     const t1 = window.setTimeout(() => { setStage('TROPHY_EXPLODE'); setShowCoins(true); }, 700);
     const t2 = window.setTimeout(() => setStage('PANEL'), 2700);
@@ -905,7 +905,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
 
   return (
     <>
-      {/* ── Stage 1: Chips fly from each bet position → trophy ── */}
+      {/* â”€â”€ Stage 1: Chips fly from each bet position â†’ trophy â”€â”€ */}
       {stage === 'FLY_TO_TROPHY' && betChips.map((chip, i) => (
         <motion.div
           key={chip.id}
@@ -924,10 +924,10 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
         </motion.div>
       ))}
 
-      {/* ── Coins bursting upward from trophy (independent of stage) ── */}
+      {/* â”€â”€ Coins bursting upward from trophy (independent of stage) â”€â”€ */}
       {showCoins && (
         <div className="absolute z-[530] pointer-events-none">
-          {/* Tiny flash — trophy stays visible */}
+          {/* Tiny flash â€” trophy stays visible */}
           <motion.div
             className="absolute rounded-full"
             style={{
@@ -980,7 +980,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
       )}
 
 
-      {/* ── Stage 3: Win panel pops up with spring bounce ── */}
+      {/* â”€â”€ Stage 3: Win panel pops up with spring bounce â”€â”€ */}
       <AnimatePresence>
         {stage === 'PANEL' && (
           <motion.div
@@ -993,7 +993,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
           >
             <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-            {/* ── Content container with consistent padding ── */}
+            {/* â”€â”€ Content container with consistent padding â”€â”€ */}
             {(() => {
               const PX = 28;           // horizontal padding
               const CONTENT_W = 402 - PX * 2; // 346px
@@ -1006,7 +1006,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
 
               return (
                 <>
-                  {/* ── Reward Bar ── */}
+                  {/* â”€â”€ Reward Bar â”€â”€ */}
                   <motion.div
                     className="absolute flex items-center justify-center"
                     style={{
@@ -1059,7 +1059,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                     </div>
                   </motion.div>
 
-                  {/* ── Leaderboard rows (matching no-bet panel alignment) ── */}
+                  {/* â”€â”€ Leaderboard rows (matching no-bet panel alignment) â”€â”€ */}
                   {rankRows.slice(0, 3).map((row, idx) => (
                     <motion.div
                       key={`${row.name}-${idx}`}
@@ -1155,7 +1155,7 @@ const GamePage = () => {
     }, {} as Record<ItemId, ItemSpec>);
   }, []);
 
-  /* ── API state ── */
+  /* â”€â”€ API state â”€â”€ */
   const [apiLoaded, setApiLoaded] = useState(false);
   const [itemMultiplier, setItemMultiplier] = useState<Record<ItemId, number>>(DEFAULT_MULTIPLIER);
   const [winWeights, setWinWeights] = useState<Record<ItemId, number>>(DEFAULT_WIN_WEIGHTS);
@@ -1192,7 +1192,7 @@ const GamePage = () => {
 
         /* Build the list of API calls (they won't execute until we call them) */
         const apiCalls: (() => Promise<unknown>)[] = [
-          /* 0–10: APIs that need mode */
+          /* 0â€“10: APIs that need mode */
           () => apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
           () => apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
           () => apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
@@ -1204,7 +1204,7 @@ const GamePage = () => {
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
           () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
-          /* 11–18: APIs that DON'T need mode */
+          /* 11â€“18: APIs that DON'T need mode */
           () => apiFetch<ApiTrophy>('/game/game/trophy'),
           () => apiFetch<ApiCoin>('/game/game/coin'),
           () => apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
@@ -1213,7 +1213,7 @@ const GamePage = () => {
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
           () => apiFetch<ApiTodayWin>('/game/today/win'),
-          /* session/end/time API is unfinished on backend — skip to avoid 500 noise */
+          /* session/end/time API is unfinished on backend â€” skip to avoid 500 noise */
         ];
 
         /* Warm up the Vercel serverless function to avoid cold-start 500s */
@@ -1239,7 +1239,7 @@ const GamePage = () => {
           }
         }
 
-        /* Map results — order matches the API calls array above */
+        /* Map results â€” order matches the API calls array above */
         const val = <T,>(i: number): T | null =>
           results[i]?.status === 'fulfilled' ? (results[i].value as T) : null;
 
@@ -1262,7 +1262,7 @@ const GamePage = () => {
         const prizeDistrib = val<ApiPrizeDistribution>(16);
         const gameMetadata = val<ApiGameMetadata>(17);
         const todayWinApi = val<ApiTodayWin>(18);
-        const sessionTime = null as ApiSessionTime | null; // session/end/time API is unfinished — skipped
+        const sessionTime = null as ApiSessionTime | null; // session/end/time API is unfinished â€” skipped
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1329,7 +1329,7 @@ const GamePage = () => {
           console.log('[API] Trophy loaded:', imgUrl);
         }
 
-        /* Win history → result strip */
+        /* Win history â†’ result strip */
         if (winHistory && Array.isArray(winHistory) && winHistory.length > 0) {
           const itemSrcMap: Record<string, string> = {};
           for (const item of ITEMS) {
@@ -1393,7 +1393,7 @@ const GamePage = () => {
           console.log('[API] Prize distribution loaded');
         }
 
-        /* Game mode — auto-enable advance if API says so */
+        /* Game mode â€” auto-enable advance if API says so */
         if (gameMode) {
           setAdvanceModeApi(gameMode);
           if (gameMode.advance === true) {
@@ -1403,7 +1403,7 @@ const GamePage = () => {
           console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
         }
 
-        /* Rank today — row-based array: [{mrs_player_id_player_name, mrs_player_id_player_pic, last_balance}] */
+        /* Rank today â€” row-based array: [{mrs_player_id_player_name, mrs_player_id_player_pic, last_balance}] */
         console.log('[API] Rank today RAW:', JSON.stringify(rankToday));
         type RankParsedRow = { name: string; diamonds: number; pic?: string };
 
@@ -1445,7 +1445,7 @@ const GamePage = () => {
           console.log('[API] Rank today loaded:', parsedRankRows.length, 'rows, pics:', parsedRankRows.slice(0, 3).map(r => r.pic));
         }
 
-        /* Top Winners — use API data, fallback to rank today for profile pics */
+        /* Top Winners â€” use API data, fallback to rank today for profile pics */
         console.log('[API] Top Winners RAW:', JSON.stringify(topWinners));
         let topWinnersMapped: ResultBoardRow[] | null = null;
 
@@ -1482,14 +1482,14 @@ const GamePage = () => {
           console.log('[API] Max bets per turn loaded:', (maxFruits as ApiMaxPlayers).max_players);
         }
 
-        /* Rank yesterday — same row-based format */
+        /* Rank yesterday â€” same row-based format */
         const parsedRankYesterday = parseRankRows(rankYesterday);
         if (parsedRankYesterday.length > 0) {
           setRankRowsYesterday(parsedRankYesterday);
           console.log('[API] Rank yesterday loaded:', parsedRankYesterday.length, 'rows');
         }
 
-        /* Session end time → timer */
+        /* Session end time â†’ timer */
         if (sessionTime?.next_run_time) {
           setSessionEndTime(sessionTime.next_run_time);
           console.log('[API] Session end time:', sessionTime.next_run_time);
@@ -1566,7 +1566,7 @@ const GamePage = () => {
 
   const [roundType, setRoundType] = useState<RoundType>('NORMAL');
   const normalRoundsSinceJackpotRef = useRef(0);
-  const transitioningRef = useRef(false); // guard: prevents double SHOWTIME→BETTING transition
+  const transitioningRef = useRef(false); // guard: prevents double SHOWTIMEâ†’BETTING transition
 
   const [showResultBoard, setShowResultBoard] = useState(false);
   const [winnerIds, setWinnerIds] = useState<ItemId[] | null>(null);
@@ -1885,7 +1885,7 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [canBet, pointerStops.length]);
 
-  // ── Sequential lottery-style spinning during DRAWING ──
+  // â”€â”€ Sequential lottery-style spinning during DRAWING â”€â”€
   // Cycles through items in order (like a roulette wheel) with decelerating speed,
   // landing on the winner
   useEffect(() => {
@@ -1894,7 +1894,7 @@ const GamePage = () => {
     const winners = winnerRef.current;
     if (!winners || winners.length === 0) return;
 
-    // during spinning we still “land” on something.
+    // during spinning we still â€œlandâ€ on something.
     // for NORMAL: winners[0]
     // for JACKPOT: choose one representative to land on (e.g. first item)
     const landingId = winners[0];
@@ -1911,7 +1911,7 @@ const GamePage = () => {
     const timers: number[] = [];
 
     for (let i = 0; i < totalSteps; i++) {
-      const progress = i / (totalSteps - 1); // 0 → 1
+      const progress = i / (totalSteps - 1); // 0 â†’ 1
       // Starts at ~100ms, slows to ~600ms near the end
       const delay = 100 + 500 * (progress * progress * progress); // cubic easing
       elapsed += delay;
@@ -1942,7 +1942,7 @@ const GamePage = () => {
     if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
 
     preDrawTimeoutRef.current = window.setTimeout(() => {
-      setShowPreDraw(false); // ✅ after this, BET countdown starts automatically
+      setShowPreDraw(false); // âœ… after this, BET countdown starts automatically
     }, PRE_DRAW_MS);
 
     return () => {
@@ -1986,7 +1986,7 @@ const GamePage = () => {
         const j = computeJackpotWin({ jackpotItems, bets, itemMultiplier, jackpotBonus: jackpotAmount });
         winAmount = j.totalWin;
 
-        // optional: choose a better “primaryId” for header/icon
+        // optional: choose a better â€œprimaryIdâ€ for header/icon
         primaryId = jackpotItems[0];
       } else {
         const winner = winners[0];
@@ -2023,7 +2023,7 @@ const GamePage = () => {
       }
 
       /* For jackpot rounds, keep the 4 highlighted cells visible for 2.5s
-         before showing the result board (chips → trophy). Normal rounds show immediately. */
+         before showing the result board (chips â†’ trophy). Normal rounds show immediately. */
       if (roundType === 'JACKPOT') {
         setTimeout(() => setShowResultBoard(true), 2500);
       } else {
@@ -2276,7 +2276,7 @@ const GamePage = () => {
 
 
 
-        {/* Dynamic diamond balance bar — layered from individual assets */}
+        {/* Dynamic diamond balance bar â€” layered from individual assets */}
         <div
           className="absolute z-30 flex items-center"
           style={{
@@ -2294,7 +2294,7 @@ const GamePage = () => {
               style={{ borderRadius: 14 }}
             />
 
-            {/* Diamond icon — overlapping left edge */}
+            {/* Diamond icon â€” overlapping left edge */}
             <img
               src={coinIconSrc}
               alt=""
@@ -2673,7 +2673,7 @@ const GamePage = () => {
           );
         })()}
 
-        {/* Wooden signboard — always visible */}
+        {/* Wooden signboard â€” always visible */}
         <motion.img
           src="/image2/greedy_sign_board.png"
           alt=""
@@ -2688,7 +2688,7 @@ const GamePage = () => {
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Text overlay — always use local wordmark for consistent display */}
+        {/* Text overlay â€” always use local wordmark for consistent display */}
         <img
           src="/image2/greedy_wordmark.png"
           alt=""
@@ -2829,7 +2829,7 @@ const GamePage = () => {
                 }}
               />
 
-              {/* ── Winner starburst sparkle effect ── */}
+              {/* â”€â”€ Winner starburst sparkle effect â”€â”€ */}
               {isShowWinner && (
                 <div className="pointer-events-none absolute inset-0 z-[-1] overflow-visible" style={{ left: '50%', top: '50%', width: 0, height: 0 }}>
                   {/* Radial light rays */}
@@ -3028,7 +3028,7 @@ const GamePage = () => {
               width: 75,
               height: 72,
               cursor: canBet ? 'pointer' : 'default',
-              opacity: 1,                 // ✅ never fade
+              opacity: 1,                 // âœ… never fade
               pointerEvents: canBet ? 'auto' : 'none',
             }}
           >
@@ -3051,7 +3051,7 @@ const GamePage = () => {
               width: 79,
               height: 68,
               cursor: canBet ? 'pointer' : 'default',
-              opacity: 1,                 // ✅ never fade
+              opacity: 1,                 // âœ… never fade
               pointerEvents: canBet ? 'auto' : 'none',
             }}
           >
@@ -3299,19 +3299,19 @@ const GamePage = () => {
             />
           </div>
 
-          {/* ── Dynamic chests from API ── */}
-          {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
-          {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
-          {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
-          {/* ── Dynamic chests from API (shake + flare when ready, clickable only when ready) ── */}
+          {/* â”€â”€ Dynamic chests from API â”€â”€ */}
+          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
+          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
+          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
+          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
           {boxData.map((box, idx) => {
             const totalBoxes = boxData.length;
             const boxWidth = 56;
             // Align chests exactly with the progress bar (left: 25, width: 343)
             const barLeft = 25;
             const barRight = 25 + 355; // 380
-            const firstChestLeft = barLeft + 20; // 45 — slight inset from bar start
-            const lastChestLeft = barRight - boxWidth; // 324 — last chest flush with bar end
+            const firstChestLeft = barLeft + 20; // 45 â€” slight inset from bar start
+            const lastChestLeft = barRight - boxWidth; // 324 â€” last chest flush with bar end
             const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
             const xPos = firstChestLeft + idx * spacing;
 
@@ -3441,7 +3441,7 @@ const GamePage = () => {
             borderImageSlice: 1
           }} />
 
-          {/* Scrollable result strip — newest at left */}
+          {/* Scrollable result strip â€” newest at left */}
           <div
             className="absolute z-20"
             style={{
@@ -3528,7 +3528,7 @@ const GamePage = () => {
                   alt="Game On"
                   style={{
                     width: ARTBOARD.width, // 402
-                    height: 'auto',        // ✅ keeps ratio (no stretch)
+                    height: 'auto',        // âœ… keeps ratio (no stretch)
                     display: 'block',
                   }}
                 />
@@ -3550,7 +3550,7 @@ const GamePage = () => {
             >
               <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
 
-              {/* ✅ WIN PANEL — Trophy animation */}
+              {/* âœ… WIN PANEL â€” Trophy animation */}
               {resultKind === 'WIN' && winnerIds && winnerIds.length > 0 ? (
                 <TrophyWinOverlay
                   chipSrc={CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png'}
@@ -3562,11 +3562,11 @@ const GamePage = () => {
                   winnerIds={winnerIds}
                 />
               ) : (
-                /* ✅ NO BET + LOSE PANEL */
+                /* âœ… NO BET + LOSE PANEL */
                 <div className="absolute" style={{ left: 26, top: 300, width: 350, height: 340, overflow: 'hidden' }}>
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-                  {/* ── Header: inside the rounded pill-shaped strip ── */}
+                  {/* â”€â”€ Header: inside the rounded pill-shaped strip â”€â”€ */}
                   <div className="absolute flex items-center" style={{ left: 30, top: 72, width: 290, height: 42 }}>
                     <div
                       className="shrink-0 flex items-center justify-center"
@@ -3598,7 +3598,7 @@ const GamePage = () => {
                     </div>
                   </div>
 
-                  {/* ── Leaderboard rows — inside body area below header strip ── */}
+                  {/* â”€â”€ Leaderboard rows â€” inside body area below header strip â”€â”€ */}
                   {topWinnersRows.slice(0, 3).map((row, idx) => (
                     <div
                       key={`${row.name}-${idx}`}
@@ -3765,7 +3765,7 @@ const GamePage = () => {
                 {activeModal === 'RULE' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* ── rules_board.png as the outer frame ── */}
+                    {/* â”€â”€ rules_board.png as the outer frame â”€â”€ */}
                     <img
                       src="/image2/rules_board.png"
                       alt=""
@@ -3773,7 +3773,7 @@ const GamePage = () => {
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
 
-                    {/* ── "Rule" title — same gold style as jackpot board, NO red pill ── */}
+                    {/* â”€â”€ "Rule" title â€” same gold style as jackpot board, NO red pill â”€â”€ */}
                     <div
                       className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
                       style={{
@@ -3802,7 +3802,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* ── Red ✕ close button ── */}
+                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -3821,10 +3821,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close rules"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
                     </button>
 
-                    {/* ── #FFEBBB content mask — hides baked-in board text ── */}
+                    {/* â”€â”€ #FFEBBB content mask â€” hides baked-in board text â”€â”€ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -3839,7 +3839,7 @@ const GamePage = () => {
                         overflow: 'hidden',
                       }}
                     >
-                      {/* ── Scrollable rules list ── */}
+                      {/* â”€â”€ Scrollable rules list â”€â”€ */}
                       <div
                         style={{
                           height: '100%',
@@ -3905,7 +3905,7 @@ const GamePage = () => {
                 {activeModal === 'PRIZE' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* ── Outer board frame ── */}
+                    {/* â”€â”€ Outer board frame â”€â”€ */}
                     <img
                       src="/image2/rules_board.png"
                       alt=""
@@ -3923,7 +3923,7 @@ const GamePage = () => {
                         borderRadius: 8,
                       }}
                     />
-                    {/* ── "Prize distribution" gold title ── */}
+                    {/* â”€â”€ "Prize distribution" gold title â”€â”€ */}
                     <div
                       className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
                       style={{ top: 18, zIndex: 10, whiteSpace: 'nowrap' }}
@@ -3948,7 +3948,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* ── Red ✕ close button ── */}
+                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -3967,10 +3967,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close prize"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
                     </button>
 
-                    {/* ── #FFEBBB content mask ── */}
+                    {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -3987,7 +3987,7 @@ const GamePage = () => {
                         flexDirection: 'column',
                       }}
                     >
-                      {/* ── Scrollable content ── */}
+                      {/* â”€â”€ Scrollable content â”€â”€ */}
                       <div
                         style={{
                           flex: 1,
@@ -3999,7 +3999,7 @@ const GamePage = () => {
                         }}
                       >
 
-                        {/* ── Prize table ── */}
+                        {/* â”€â”€ Prize table â”€â”€ */}
                         <div
                           style={{
                             width: '100%',
@@ -4044,7 +4044,7 @@ const GamePage = () => {
                             </span>
                           </div>
 
-                          {/* Table rows — pull from API or use defaults */}
+                          {/* Table rows â€” pull from API or use defaults */}
                           {(() => {
                             const defaultRows = [
                               { rank: '1', prize: 1000000 },
@@ -4105,10 +4105,10 @@ const GamePage = () => {
                           })()}
                         </div>
 
-                        {/* ── Numbered rules below table ── */}
+                        {/* â”€â”€ Numbered rules below table â”€â”€ */}
                         {(() => {
                           const src = isAdvanceMode ? prizeData?.advance : prizeData?.general;
-                          // If API has a title, show it (not needed per ref — ref has no sub-title)
+                          // If API has a title, show it (not needed per ref â€” ref has no sub-title)
                           const rules = [
                             'The prize diamond will increase after each game round.',
                             'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
@@ -4145,7 +4145,7 @@ const GamePage = () => {
                 {activeModal === 'RECORDS' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* ── game_record_board.png as outer frame ── */}
+                    {/* â”€â”€ game_record_board.png as outer frame â”€â”€ */}
                     <img
                       src="/image2/game_record_board.png"
                       alt=""
@@ -4153,7 +4153,7 @@ const GamePage = () => {
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
 
-                    {/* ── Red ✕ close button ── */}
+                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4172,10 +4172,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close records"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
                     </button>
 
-                    {/* ── #FFEBBB content mask ── */}
+                    {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -4192,7 +4192,7 @@ const GamePage = () => {
                         flexDirection: 'column',
                       }}
                     >
-                      {/* ── Scrollable records list ── */}
+                      {/* â”€â”€ Scrollable records list â”€â”€ */}
                       <div
                         style={{
                           flex: 1,
@@ -4231,7 +4231,7 @@ const GamePage = () => {
                           }
 
                           return displayRecords.map((r: any, idx: number) => {
-                            // Resolve element → ItemSpec for icon
+                            // Resolve element â†’ ItemSpec for icon
                             const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
                             const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
 
@@ -4250,7 +4250,7 @@ const GamePage = () => {
                                   border: '1px solid rgba(180,120,50,0.15)',
                                 }}
                               >
-                                {/* ── Row 1: Round + Time ── */}
+                                {/* â”€â”€ Row 1: Round + Time â”€â”€ */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
@@ -4268,7 +4268,7 @@ const GamePage = () => {
                                   )}
                                 </div>
 
-                                {/* ── Row 2: Selected option ── */}
+                                {/* â”€â”€ Row 2: Selected option â”€â”€ */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
@@ -4293,7 +4293,7 @@ const GamePage = () => {
                                   )}
                                 </div>
 
-                                {/* ── Row 3: Winning items ── */}
+                                {/* â”€â”€ Row 3: Winning items â”€â”€ */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
@@ -4308,7 +4308,7 @@ const GamePage = () => {
                                   )}
                                 </div>
 
-                                {/* ── Row 4: Win diamonds ── */}
+                                {/* â”€â”€ Row 4: Win diamonds â”€â”€ */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
@@ -4332,7 +4332,7 @@ const GamePage = () => {
                                   </div>
                                 </div>
 
-                                {/* ── Row 5: Diamond Balance ── */}
+                                {/* â”€â”€ Row 5: Diamond Balance â”€â”€ */}
                                 {(balBefore != null || balAfter != null) && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{
@@ -4363,7 +4363,7 @@ const GamePage = () => {
                         })()}
                       </div>
 
-                      {/* ── Footer note pinned at bottom ── */}
+                      {/* â”€â”€ Footer note pinned at bottom â”€â”€ */}
                       <div style={{
                         flexShrink: 0,
                         padding: '7px 12px 9px',
@@ -4382,7 +4382,7 @@ const GamePage = () => {
 
                 {activeModal === 'JACKPOT' ? (
                   (() => {
-                    /* ── Jackpot number formatter: pad to 11 digits with leading zeros ── */
+                    /* â”€â”€ Jackpot number formatter: pad to 11 digits with leading zeros â”€â”€ */
                     const jackpotStr = String(jackpotAmount).padStart(11, '0');
 
                     return (
@@ -4390,9 +4390,9 @@ const GamePage = () => {
                         className="relative flex items-center justify-center"
                         style={{ width: 326, height: 430 }}
                       >
-                        {/* ── LAYER 1: Outer orange board background ── */}
-                        {/* jackpot_board_bg: 339×535, #EC9813, borderRadius 17 */}
-                        {/* We scale it to fit the 326×430 modal container */}
+                        {/* â”€â”€ LAYER 1: Outer orange board background â”€â”€ */}
+                        {/* jackpot_board_bg: 339Ã—535, #EC9813, borderRadius 17 */}
+                        {/* We scale it to fit the 326Ã—430 modal container */}
                         <img
                           src="/image2/jackpot_board_bg.png"
                           alt=""
@@ -4400,8 +4400,8 @@ const GamePage = () => {
                           style={{ objectFit: 'fill', borderRadius: 17, zIndex: 0 }}
                         />
 
-                        {/* ── LAYER 2: Inner front panel ── */}
-                        {/* jackpot_front_bg: 323×517, borderRadius 17 */}
+                        {/* â”€â”€ LAYER 2: Inner front panel â”€â”€ */}
+                        {/* jackpot_front_bg: 323Ã—517, borderRadius 17 */}
                         {/* Centered, ~8px inset on each side */}
                         <img
                           src="/image2/jackpot_front_bg.png"
@@ -4417,7 +4417,7 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* ── LAYER 3: Ribbon at top center ── */}
+                        {/* â”€â”€ LAYER 3: Ribbon at top center â”€â”€ */}
                         {/* ribbon.png sits on the top edge, overlapping both panels */}
                         <img
                           src="/image2/ribbon.png"
@@ -4433,7 +4433,7 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* ── LAYER 4: "Jackpot" text on the ribbon ── */}
+                        {/* â”€â”€ LAYER 4: "Jackpot" text on the ribbon â”€â”€ */}
                         {/* Match Game Rank text style: gold with brown border */}
                         <div
                           className="absolute"
@@ -4465,7 +4465,7 @@ const GamePage = () => {
                           </span>
                         </div>
 
-                        {/* ── LAYER 5: Close button ── */}
+                        {/* â”€â”€ LAYER 5: Close button â”€â”€ */}
                         <button
                           type="button"
                           onClick={() => setActiveModal('NONE')}
@@ -4482,11 +4482,11 @@ const GamePage = () => {
                           }}
                           aria-label="Close jackpot"
                         >
-                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
                         </button>
 
-                        {/* ── LAYER 6: Purple diamonds pile ── */}
-                        {/* diamonds.png: 273×131, centered below ribbon */}
+                        {/* â”€â”€ LAYER 6: Purple diamonds pile â”€â”€ */}
+                        {/* diamonds.png: 273Ã—131, centered below ribbon */}
                         <img
                           src="/image2/diamonds.png"
                           alt=""
@@ -4494,7 +4494,7 @@ const GamePage = () => {
                           style={{
                             left: '50%',
                             transform: 'translateX(-50%)',
-                            top: 42, /* Below ribbon — adjust if ribbon top changes */
+                            top: 42, /* Below ribbon â€” adjust if ribbon top changes */
                             width: 260,
                             height: 125,
                             objectFit: 'contain',
@@ -4502,8 +4502,8 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* ── LAYER 7: Red number frame ── */}
-                        {/* jackpot_red_frame: 296×65 */}
+                        {/* â”€â”€ LAYER 7: Red number frame â”€â”€ */}
+                        {/* jackpot_red_frame: 296Ã—65 */}
                         <div
                           className="absolute"
                           style={{
@@ -4535,7 +4535,7 @@ const GamePage = () => {
                               style={{ width: 22, height: 22, flexShrink: 0 }}
                             />
 
-                            {/* Padded jackpot number — leading zeros dimmer, significant digits bright */}
+                            {/* Padded jackpot number â€” leading zeros dimmer, significant digits bright */}
                             <div
                               className="flex items-center"
                               style={{
@@ -4568,7 +4568,7 @@ const GamePage = () => {
                           </div>
                         </div>
 
-                        {/* ── LAYER 8: Description text ── */}
+                        {/* â”€â”€ LAYER 8: Description text â”€â”€ */}
                         <div
                           className="absolute"
                           style={{
@@ -4587,7 +4587,7 @@ const GamePage = () => {
                           the higher your chances.
                         </div>
 
-                        {/* ── LAYER 9: Awards section ── */}
+                        {/* â”€â”€ LAYER 9: Awards section â”€â”€ */}
                         <div
                           className="absolute"
                           style={{
@@ -4598,7 +4598,7 @@ const GamePage = () => {
                           }}
                         >
 
-                          {/* ── "Awards" label — sits ABOVE the prize board strip ── */}
+                          {/* â”€â”€ "Awards" label â€” sits ABOVE the prize board strip â”€â”€ */}
                           <div
                             className="flex items-center justify-center"
                             style={{ marginBottom: 6 }}
@@ -4618,7 +4618,7 @@ const GamePage = () => {
                             <div style={{ flex: 1, height: 1, background: 'rgba(180,110,40,0.4)', marginLeft: 8 }} />
                           </div>
 
-                          {/* ── Prize board strip — column headers ── */}
+                          {/* â”€â”€ Prize board strip â€” column headers â”€â”€ */}
                           <div
                             className="relative flex items-center"
                             style={{ width: '100%', height: 28 }}
@@ -4651,7 +4651,7 @@ const GamePage = () => {
                             ))}
                           </div>
 
-                          {/* ── Awards rows ── */}
+                          {/* â”€â”€ Awards rows â”€â”€ */}
                           <div
                             style={{
                               marginTop: 2,
@@ -4690,7 +4690,7 @@ const GamePage = () => {
                           </div>
                         </div>
 
-                        {/* ── LAYER 10: Footer note ── */}
+                        {/* â”€â”€ LAYER 10: Footer note â”€â”€ */}
                         <div
                           className="absolute"
                           style={{
@@ -4725,14 +4725,14 @@ const GamePage = () => {
                       overflow: 'visible',
                     }}
                   >
-                    {/* ── 1. Gameboard background (ribbon + "Game Rank" baked in) ── */}
+                    {/* â”€â”€ 1. Gameboard background (ribbon + "Game Rank" baked in) â”€â”€ */}
                     <img
                       src="/image2/gameboard.png"
                       alt=""
                       className="absolute inset-0 w-full h-full"
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
-                    {/* ── Title: Game Rank ── */}
+                    {/* â”€â”€ Title: Game Rank â”€â”€ */}
                     <div
                       className="absolute"
                       style={{
@@ -4764,7 +4764,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* ── 2. Close button ── top: 60, right: -5 → move these independently */}
+                    {/* â”€â”€ 2. Close button â”€â”€ top: 60, right: -5 â†’ move these independently */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4783,16 +4783,16 @@ const GamePage = () => {
                       }}
                       aria-label="Close rank"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✕</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
                     </button>
 
-                    {/* ── 3. Timer pill ── left/top independent */}
+                    {/* â”€â”€ 3. Timer pill â”€â”€ left/top independent */}
                     <div
                       className="absolute flex items-center justify-center"
                       style={{
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        top: 102.5,          /* ← change only this to move timer */
+                        top: 102.5,          /* â† change only this to move timer */
                         width: 135,
                         height: 20,
                         borderRadius: 13,
@@ -4806,17 +4806,17 @@ const GamePage = () => {
                         zIndex: 5,
                       }}
                     >
-                      <span style={{ fontSize: 13 }}>⏱</span>
+                      <span style={{ fontSize: 13 }}>â±</span>
                       {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
                     </div>
 
-                    {/* ── 4. Today / Yesterday sliding tab ── left/top independent */}
+                    {/* â”€â”€ 4. Today / Yesterday sliding tab â”€â”€ left/top independent */}
                     <div
                       className="absolute"
                       style={{
                         left: '50.8%',
                         transform: 'translateX(-50%)',
-                        top: 124,         /* ← change only this to move tab row */
+                        top: 124,         /* â† change only this to move tab row */
                         width: 245,
                         height: 38,
                         zIndex: 5,
@@ -4911,7 +4911,7 @@ const GamePage = () => {
                         </button>
                       </div>
 
-                      {/* ? help button — outside the pill, right side */}
+                      {/* ? help button â€” outside the pill, right side */}
                       <button
                         type="button"
                         onClick={() => setActiveModal('PRIZE')}
@@ -4939,13 +4939,13 @@ const GamePage = () => {
                       </button>
                     </div>
 
-                    {/* ── 5. Column headers ── left/top independent */}
+                    {/* â”€â”€ 5. Column headers â”€â”€ left/top independent */}
                     <div
                       className="absolute flex items-center"
                       style={{
                         left: 25,
                         right: 40,
-                        top: 164,         /* ← change only this to move headers */
+                        top: 164,         /* â† change only this to move headers */
                         height: 28,
                         zIndex: 5,
                       }}
@@ -4955,14 +4955,14 @@ const GamePage = () => {
                       <span style={{ width: 100, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Diamonds Play</span>
                     </div>
 
-                    {/* ── 6. Scrollable rank rows ── left/top independent */}
+                    {/* â”€â”€ 6. Scrollable rank rows â”€â”€ left/top independent */}
                     <div
                       className="absolute overflow-y-auto overflow-x-hidden"
                       style={{
                         left: 30,
                         right: 30,
-                        top: 198,         /* ← change only this to move the rows area */
-                        height: 310,      /* ← change only this to adjust rows height */
+                        top: 198,         /* â† change only this to move the rows area */
+                        height: 310,      /* â† change only this to adjust rows height */
                         zIndex: 5,
                         scrollbarWidth: 'none',
                         msOverflowStyle: 'none',
@@ -5063,13 +5063,13 @@ const GamePage = () => {
                       })}
                     </div>
 
-                    {/* ── 7. 99+ sticky bottom row ── left/top independent */}
+                    {/* â”€â”€ 7. 99+ sticky bottom row â”€â”€ left/top independent */}
                     <div
                       className="absolute"
                       style={{
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        top: 530,         /* ← change only this to move the 99+ row */
+                        top: 530,         /* â† change only this to move the 99+ row */
                         width: 340,
                         height: 55,
                         zIndex: 5,
@@ -5103,7 +5103,7 @@ const GamePage = () => {
                         </span>
                         {/* Profile Picture Circle */}
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(180,130,60,0.4)', flexShrink: 0, border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-                          👤
+                          ðŸ‘¤
                         </div>
 
                         {/* "You" Text - Now White with Brown Border */}
