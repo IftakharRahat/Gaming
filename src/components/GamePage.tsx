@@ -213,6 +213,18 @@ const POINTER_HOTSPOT = { x: 25, y: 35 } as const;
 const POINTER_TOUR_ORDER: ItemId[] = ['lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk', 'honey', 'tomato'];
 const DRAW_HIGHLIGHT_ORDER: ItemId[] = ['honey', 'tomato', 'lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk'];
 
+/* Map server-side element names → local item IDs */
+const API_NAME_TO_ID: Record<string, ItemId> = {
+  Honey: 'honey', honey: 'honey',
+  Tomato: 'tomato', tomato: 'tomato',
+  lemon: 'lemon', Lemon: 'lemon',
+  pumpkin: 'pumpkin', Pumpkin: 'pumpkin',
+  Blur: 'zucchini', blur: 'zucchini', Zucchini: 'zucchini', zucchini: 'zucchini',
+  Water: 'water', water: 'water',
+  Coke: 'cola', coke: 'cola', Cola: 'cola', cola: 'cola',
+  Milk: 'milk', milk: 'milk',
+};
+
 type ScaledArtboardProps = {
   width: number;
   height: number;
@@ -1589,6 +1601,7 @@ const GamePage = () => {
   const [floatingBetChips, setFloatingBetChips] = useState<FloatingBetChip[]>([]);
   const [pointerStopIndex, setPointerStopIndex] = useState(0);
   const [drawHighlightIndex, setDrawHighlightIndex] = useState(0);
+  const lastWinIdRef = useRef<number>(0); // tracks last processed win entry ID from server
   const [showFireworks, setShowFireworks] = useState(false);
   const [fireworksSeed, setFireworksSeed] = useState(0);
   const [trophyCoins, setTrophyCoins] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
@@ -1960,18 +1973,60 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      if (roundType === 'JACKPOT') {
-        const jackpotGroup = pickJackpotGroup(); // always 4 items
-        winnerRef.current = jackpotGroup;
-        setWinnerIds(jackpotGroup);
-      } else {
-        const picked = weightedRandomPick(ITEMS, winWeights);
-        winnerRef.current = [picked];
-        setWinnerIds([picked]);
-      }
-
+      /* ── LIVE: poll server for winning element ── */
       setPhase('DRAWING');
       setTimeLeft(DRAW_SECONDS);
+
+      // Poll /game/win/elements/list until a NEW result appears
+      (async () => {
+        const mBody = JSON.stringify({ regisation: 3, mode: isAdvanceMode ? 1 : 2 });
+        let attempts = 0;
+        const maxAttempts = 30;
+        while (attempts < maxAttempts) {
+          attempts++;
+          try {
+            const results = await apiFetch<Array<{
+              id: number;
+              element__element_name: string | null;
+              gjp__jackpot_name: string | null;
+              jackport_element_name: string[];
+            }>>('/game/win/elements/list', 1, mBody);
+
+            if (results && results.length > 0) {
+              const latest = results[results.length - 1];
+              if (latest.id > lastWinIdRef.current) {
+                lastWinIdRef.current = latest.id;
+
+                if (latest.gjp__jackpot_name && latest.jackport_element_name.length > 0) {
+                  const jackpotIds = latest.jackport_element_name
+                    .map(name => API_NAME_TO_ID[name])
+                    .filter(Boolean) as ItemId[];
+                  setRoundType('JACKPOT');
+                  winnerRef.current = jackpotIds.length > 0 ? jackpotIds : ['honey'];
+                  setWinnerIds(jackpotIds.length > 0 ? jackpotIds : ['honey']);
+                  console.log('[LIVE] Jackpot winner:', jackpotIds);
+                } else if (latest.element__element_name) {
+                  const winnerId = API_NAME_TO_ID[latest.element__element_name] || 'honey';
+                  winnerRef.current = [winnerId];
+                  setWinnerIds([winnerId]);
+                  console.log('[LIVE] Winner:', winnerId, '(' + latest.element__element_name + ')');
+                }
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('[LIVE] Poll error:', e);
+          }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        if (attempts >= maxAttempts) {
+          console.warn('[LIVE] Timeout, using fallback');
+          const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
+          winnerRef.current = [fallback];
+          setWinnerIds([fallback]);
+        }
+      })();
       return;
     }
 
