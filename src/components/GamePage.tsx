@@ -1949,6 +1949,22 @@ const GamePage = () => {
     };
   }, [phase, winnerIds]);
 
+  // ── When server winner arrives after DRAWING timer already hit 0, force transition ──
+  useEffect(() => {
+    if (phase !== 'DRAWING') return;
+    if (!winnerIds || winnerIds.length === 0) return;
+    if (timeLeft > 0) return; // timer still running, normal flow will handle it
+
+    // Winner arrived but timer already expired — force re-check after animation
+    console.log('[LIVE] Winner arrived after timer expired, transitioning now');
+    const id = window.setTimeout(() => {
+      // Bump timeLeft to 1 then back to 0 to re-trigger the transition handler
+      setTimeLeft(1);
+      setTimeout(() => setTimeLeft(0), 50);
+    }, 2500); // 2.5s for deceleration animation to finish
+    return () => window.clearTimeout(id);
+  }, [winnerIds, phase, timeLeft]);
+
   useEffect(
     () => () => {
       floatingChipTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
@@ -2036,7 +2052,11 @@ const GamePage = () => {
 
     if (phase === 'DRAWING') {
       const winners = winnerRef.current;
-      if (!winners || winners.length === 0) return;
+      if (!winners || winners.length === 0) {
+        // Server winner not received yet — keep waiting, poll will set it
+        console.log('[LIVE] Drawing timer expired, waiting for server winner...');
+        return;
+      }
 
       const hadAnyBet = totalBet > 0;
 
