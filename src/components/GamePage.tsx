@@ -1870,7 +1870,7 @@ const GamePage = () => {
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [activeModal, showGameOn, showPreDraw]);
+  }, [activeModal, showGameOn, showPreDraw, phase]);
 
 
 
@@ -1903,24 +1903,27 @@ const GamePage = () => {
     const winnerIdx = order.indexOf(landingId);
 
     // Calculate total steps: 3 full loops + extra to land on winner
-    const fullLoops = 3 + Math.floor(Math.random() * 2); // 3-4 full loops
+    const fullLoops = 3;
     const totalSteps = fullLoops * order.length + winnerIdx + 1;
 
-    // Schedule each step with decelerating delay
+    const totalDurationMs = DRAW_SECONDS * 1000 - 100;
+    const rawDelays: number[] = [];
+    for (let i = 0; i < totalSteps; i++) {
+      const p = totalSteps > 1 ? i / (totalSteps - 1) : 0;
+      rawDelays.push(1 + 5 * p * p * p);
+    }
+    const rawSum = rawDelays.reduce((a, b) => a + b, 0);
+    const delays = rawDelays.map(d => d * (totalDurationMs / rawSum));
+
     let elapsed = 0;
     const timers: number[] = [];
 
     for (let i = 0; i < totalSteps; i++) {
-      const progress = i / (totalSteps - 1); // 0 â†’ 1
-      // Starts at ~100ms, slows to ~600ms near the end
-      const delay = 100 + 500 * (progress * progress * progress); // cubic easing
-      elapsed += delay;
-
+      elapsed += delays[i];
       const step = i;
       const timerId = window.setTimeout(() => {
         setDrawHighlightIndex(step % order.length);
       }, elapsed);
-
       timers.push(timerId);
     }
 
