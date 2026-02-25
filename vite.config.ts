@@ -62,8 +62,8 @@ export default defineConfig({
       },
     },
     // Pre-compress assets with gzip and brotli for production
-    compression({ algorithm: 'gzip', exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
-    compression({ algorithm: 'brotliCompress', exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
+    compression({ algorithms: ['gzip'], exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
+    compression({ algorithms: ['brotliCompress'], exclude: [/\.(png|jpg|jpeg|gif|webp|svg)$/i] }),
   ],
   build: {
     // Target modern browsers for smaller output

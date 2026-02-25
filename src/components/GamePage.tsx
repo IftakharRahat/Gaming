@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const MAX_FRAME_WIDTH = 420;
 const DEBUG = false;
@@ -45,8 +45,6 @@ const BOX_LABELS: Record<number, string> = {
 };
 type RoundType = 'NORMAL' | 'JACKPOT';
 
-const JACKPOT_EVERY_N_NORMAL_ROUNDS = 3;
-
 // placeholder until API
 const JACKPOT_BONUS_AMOUNT = 500000;
 /* â”€â”€ API config â”€â”€ */
@@ -85,6 +83,8 @@ type ApiWinElement = {
   id: number;
   element__element_name: string | null;
   element__element_icon: string;
+  gjp__jackpot_name?: string | null;
+  gjp__jackpot_icon?: string | null;
   jackport_element_name?: string[];
 };
 
@@ -110,7 +110,19 @@ type ApiRankRow = {
 type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
 type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
 type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
-type ApiPlayerRecords = { data: { round?: number; element__element_name?: string; bet?: number; win?: number; time?: string }[] };
+type ApiPlayerRecordRow = {
+  round?: number;
+  element__element_name?: string | null;
+  bet?: number;
+  win?: number;
+  time?: string;
+  balance?: number;
+  current_balance?: number;
+  last_balance?: number;
+  balance_after?: number;
+  total_balance?: number;
+};
+type ApiPlayerRecords = { data: ApiPlayerRecordRow[] };
 
 /* Map API element_name â†’ local ItemId */
 
@@ -148,19 +160,18 @@ async function apiFetch<T>(path: string, retries = 2, customBody?: string): Prom
   throw new Error(`API ${path} failed after retries`);
 }
 
-/* Weighted random pick */
-function weightedRandomPick(items: ItemSpec[], weights: Record<ItemId, number>): ItemId {
-  const totalWeight = items.reduce((sum, item) => sum + (weights[item.id] || 1), 0);
-  let r = Math.random() * totalWeight;
-  for (const item of items) {
-    r -= weights[item.id] || 1;
-    if (r <= 0) return item.id;
-  }
-  return items[items.length - 1].id;
-}
-function pickJackpotGroup(): ItemId[] {
-  // placeholder: 50/50
-  return Math.random() < 0.5 ? VEG_ITEMS : DRINK_ITEMS;
+function mapApiPlayerRecord(row: ApiPlayerRecordRow): PlayerRecordView {
+  return {
+    round: row.round,
+    element: row.element__element_name ?? undefined,
+    bet: row.bet,
+    win: row.win,
+    time: row.time,
+    balance: row.balance,
+    currentBalance: row.current_balance ?? row.last_balance,
+    balanceAfter: row.balance_after,
+    totalBalance: row.total_balance,
+  };
 }
 
 function computeJackpotWin(params: {
@@ -245,23 +256,6 @@ type ItemSpec = {
   betLabel?: { left: number; top: number };
 };
 
-type ChipSpec = {
-  src: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  shadow?: boolean;
-};
-
-type ResultPos = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  rotate?: number;
-};
-
 type BetsState = Record<ItemId, number>;
 
 type PendingWin = {
@@ -280,6 +274,19 @@ type GameRecord = {
   win: number;
   balanceBefore: number;
   balanceAfter: number;
+};
+
+type PlayerRecordView = {
+  round?: number;
+  element?: string;
+  bet?: number;
+  win?: number;
+  time?: string;
+  balanceBefore?: number;
+  balance?: number;
+  currentBalance?: number;
+  balanceAfter?: number;
+  totalBalance?: number;
 };
 
 type ResultBoardRow = {
@@ -640,19 +647,7 @@ const DEFAULT_MULTIPLIER: Record<ItemId, number> = {
   zucchini: 2,
 };
 
-/* Default win weights â€” overridden by API data at runtime */
-const DEFAULT_WIN_WEIGHTS: Record<ItemId, number> = {
-  honey: 8,
-  milk: 7,
-  cola: 6,
-  water: 5,
-  tomato: 4,
-  lemon: 1,
-  pumpkin: 3,
-  zucchini: 2,
-};
-
-
+/* Recent winners strip defaults */
 const INITIAL_RESULT_SRCS = [
   '/image2/pumpkin.png',
   '/image2/tomato.png',
@@ -664,24 +659,6 @@ const INITIAL_RESULT_SRCS = [
   '/image2/tomato.png',
 ];
 
-// Around line 340-346 - Update the CHIPS array with larger sizes
-const CHIPS: ChipSpec[] = [
-  { src: '/image2/chip_10.png', left: 29 + 17, top: 526 + 24, width: 54, height: 54 },
-  { src: '/image2/chip_100.png', left: 20 + 81, top: 512 + 26, width: 85, height: 85, shadow: true },  // â† larger
-  { src: '/image2/chip_500_orange.png', left: 29 + 146, top: 523 + 25, width: 55, height: 54, shadow: true },
-  { src: '/image2/chip_1k.png', left: 29 + 211, top: 523 + 24, width: 54, height: 53, shadow: true },
-  { src: '/image2/chip_5k.png', left: 29 + 275, top: 523 + 24, width: 54, height: 54, shadow: true },
-  { src: '/image2/chip_10k.png', left: 29 + 275, top: 523 + 24, width: 85, height: 85, shadow: true }, // â† add 10k with larger size
-];
-
-const CHESTS = [
-  { src: '/image2/chest_10k.png', left: 71, top: 628, width: 48, height: 48 },
-  { src: '/image2/chest_50k.png', left: 137, top: 628, width: 48, height: 48 },
-  { src: '/image2/chest_100k.png', left: 203, top: 628, width: 48, height: 48 },
-  { src: '/image2/chest_500k.png', left: 269, top: 628, width: 48, height: 48 },
-  { src: '/image2/chest_1m.png', left: 335, top: 628, width: 48, height: 48 },
-];
-
 
 const NO_BET_ROWS: ResultBoardRow[] = [
   { name: 'Miller', amount: 129400 },
@@ -689,63 +666,8 @@ const NO_BET_ROWS: ResultBoardRow[] = [
   { name: 'Steven', amount: 94000 },
 ];
 
-const rankBgByIndex = (idx: number) => {
-  if (idx === 0) return '/image2/leaderboard_rank_1.png';
-  if (idx === 1) return '/image2/leaderboard_rank_2.png';
-  if (idx === 2) return '/image2/leaderboard_rank_3.png';
-  return '/image2/leaderboard_rank_4_plus.png';
-};
-
-const podiumBadgeByIndex = (idx: number) => {
-  if (idx === 0) return '/image2/first.png';
-  if (idx === 1) return '/image2/second.png';
-  return '/image2/third.png';
-};
-
-type BlumondIconProps = {
-  size: number;
-  className?: string;
-};
-
-const BlumondIcon = ({ size, className }: BlumondIconProps) => (
-  <span
-    className={className}
-    style={{
-      width: size,
-      height: size,
-      position: 'relative',
-      display: 'inline-block',
-      overflow: 'hidden',
-      clipPath: 'polygon(50% 0%, 100% 42%, 50% 100%, 0% 42%)',
-      WebkitClipPath: 'polygon(50% 0%, 100% 42%, 50% 100%, 0% 42%)',
-    }}
-  >
-    <img
-      src="/image2/blumond.png"
-      alt=""
-      style={{
-        position: 'absolute',
-        left: '50%',
-        top: '50%',
-        width: size * 3,
-        height: size * 3,
-        objectFit: 'cover',
-        transform: 'translate(-50%, -48%)',
-      }}
-    />
-  </span>
-);
-
-type PodiumBadgeProps = {
-  index: number;
-  size: number;
-};
 // Ferris wheel placement (must match your render)
 const WHEEL = { left: 6, top: 101, width: 391, height: 391 } as const;
-
-// Smaller + adaptive pad (wheel box is tighter than item bounds)
-const WHEEL_PAD_MIN = 4;
-const WHEEL_PAD_MAX = 10;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -810,22 +732,6 @@ function wheelClipPathForRect(
 
   return `inset(${localTop}px ${localRight}px ${localBottom}px ${localLeft}px round 10px)`;
 }
-const PodiumBadge = ({ index, size }: PodiumBadgeProps) => (
-  <span
-    style={{
-      width: size,
-      height: size,
-      position: 'relative',
-      display: 'inline-block',
-      backgroundImage: `url(${podiumBadgeByIndex(index)})`,
-      backgroundRepeat: 'no-repeat',
-      backgroundSize: '220% auto',
-      backgroundPosition: '50% 44%',
-      borderRadius: 999,
-    }}
-  />
-);
-
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Trophy Win Overlay â€” chips fly to trophy â†’ trophy explodes â†’ panel pops up
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -850,6 +756,8 @@ type TrophyParticle = {
   angle: number;
   dist: number;
   size: number;
+  coinSize: number;
+  duration: number;
   delay: number;
 };
 
@@ -865,6 +773,8 @@ const buildTrophyExplosion = (): TrophyParticle[] => {
         angle: (i / perWave) * Math.PI * 2 + (Math.random() - 0.5) * 0.4,
         dist: 25 + Math.random() * 55,
         size: 3 + Math.random() * 5,
+        coinSize: 3 + Math.random() * 4,
+        duration: 1.2 + Math.random() * 0.4,
         delay: w * 0.8 + Math.random() * 0.15,
       });
     }
@@ -950,7 +860,6 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
             const spreadX = Math.cos(p.angle) * p.dist * 0.8;
             const peakY = -(45 + p.dist * 0.9);
             const fallY = 40 + p.dist * 0.6;
-            const coinSize = 3 + Math.random() * 4;
             return (
               <motion.div
                 key={p.id}
@@ -958,8 +867,8 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                 style={{
                   left: TROPHY_CENTER.left,
                   top: TROPHY_CENTER.top,
-                  width: coinSize,
-                  height: coinSize,
+                  width: p.coinSize,
+                  height: p.coinSize,
                   background: `radial-gradient(circle at 35% 35%, #FFE066, #FFB800, #E8960C)`,
                   boxShadow: '0 0 3px rgba(255,200,50,0.7)',
                   border: '0.5px solid rgba(255,230,150,0.5)',
@@ -972,7 +881,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                   scale: [0.3, 1, 0.9, 0.4],
                 }}
                 transition={{
-                  duration: 1.2 + Math.random() * 0.4,
+                  duration: p.duration,
                   delay: p.delay,
                   ease: [0.22, 0.68, 0.36, 1],
                 }}
@@ -1159,9 +1068,7 @@ const GamePage = () => {
   }, []);
 
   /* â”€â”€ API state â”€â”€ */
-  const [apiLoaded, setApiLoaded] = useState(false);
   const [itemMultiplier, setItemMultiplier] = useState<Record<ItemId, number>>(DEFAULT_MULTIPLIER);
-  const [winWeights, setWinWeights] = useState<Record<ItemId, number>>(DEFAULT_WIN_WEIGHTS);
   const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
   const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
   const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
@@ -1173,7 +1080,6 @@ const GamePage = () => {
   const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
   const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
   const [jackpotAmount, setJackpotAmount] = useState(JACKPOT_BONUS_AMOUNT);
-  const [sessionEndTime, setSessionEndTime] = useState<string | null>(null);
   const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
   const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
   const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
@@ -1216,7 +1122,6 @@ const GamePage = () => {
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
           () => apiFetch<ApiTodayWin>('/game/today/win'),
-          /* session/end/time API is unfinished on backend â€” skip to avoid 500 noise */
         ];
 
         /* Warm up the Vercel serverless function to avoid cold-start 500s */
@@ -1266,30 +1171,26 @@ const GamePage = () => {
         const prizeDistrib = val<ApiPrizeDistribution>(16);
         const gameMetadata = val<ApiGameMetadata>(17);
         const todayWinApi = val<ApiTodayWin>(18);
-        const sessionTime = null as ApiSessionTime | null; // session/end/time API is unfinished â€” skipped
 
         /* Log failures */
         results.forEach((r, i) => {
           if (r.status === 'rejected') console.warn(`[API] Call ${i} failed:`, r.reason);
         });
 
-        /* Build multiplier + weights + badges from elements API */
+        /* Build multiplier + badges from elements API */
         if (elements) {
           const multipliers = { ...DEFAULT_MULTIPLIER };
-          const weights = { ...DEFAULT_WIN_WEIGHTS };
           const badges: Record<string, string> = {};
 
           for (const el of elements) {
             const id = API_NAME_TO_ID[el.element_name];
             if (id) {
               multipliers[id] = el.paytable;
-              weights[id] = el.win_weights;
               badges[id] = `x${el.paytable}`;
             }
           }
 
           setItemMultiplier(multipliers);
-          setWinWeights(weights);
           setBadgeOverrides(badges as Record<ItemId, string>);
 
           /* Store element database IDs for bet API */
@@ -1335,6 +1236,11 @@ const GamePage = () => {
 
         /* Win history â†’ result strip */
         if (winHistory && Array.isArray(winHistory) && winHistory.length > 0) {
+          const latestWin = winHistory[winHistory.length - 1];
+          if (typeof latestWin?.id === 'number') {
+            lastWinIdRef.current = latestWin.id;
+          }
+
           const itemSrcMap: Record<string, string> = {};
           for (const item of ITEMS) {
             const apiName = ID_TO_API_NAME[item.id];
@@ -1493,12 +1399,6 @@ const GamePage = () => {
           console.log('[API] Rank yesterday loaded:', parsedRankYesterday.length, 'rows');
         }
 
-        /* Session end time â†’ timer */
-        if (sessionTime?.next_run_time) {
-          setSessionEndTime(sessionTime.next_run_time);
-          console.log('[API] Session end time:', sessionTime.next_run_time);
-        }
-
         /* Game Rules */
         if (gameRules?.general?.rules?.length) {
           setApiRules(gameRules.general.rules);
@@ -1527,20 +1427,12 @@ const GamePage = () => {
 
         /* Player Records */
         if (playerRecords?.data?.length) {
-          setApiPlayerRecords(playerRecords.data.map(r => ({
-            round: r.round,
-            element: r.element__element_name,
-            bet: r.bet,
-            win: r.win,
-            time: r.time,
-          })));
+          setApiPlayerRecords(playerRecords.data.map((r) => mapApiPlayerRecord(r)));
           console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
         }
 
-        setApiLoaded(true);
       } catch (err) {
         console.warn('[API] Unexpected error:', err);
-        setApiLoaded(true);
       }
     })();
 
@@ -1569,7 +1461,6 @@ const GamePage = () => {
   const [resultKind, setResultKind] = useState<ResultKind>('LOSE');
 
   const [roundType, setRoundType] = useState<RoundType>('NORMAL');
-  const normalRoundsSinceJackpotRef = useRef(0);
   const transitioningRef = useRef(false); // guard: prevents double SHOWTIMEâ†’BETTING transition
 
   const [showResultBoard, setShowResultBoard] = useState(false);
@@ -1585,7 +1476,7 @@ const GamePage = () => {
   const [apiRulesVersion, setApiRulesVersion] = useState('');
   const [jackpotAwards, setJackpotAwards] = useState<{ round: number; win: number; time: string }[]>([]);
   const [gameName, setGameName] = useState('Gready Market');
-  const [apiPlayerRecords, setApiPlayerRecords] = useState<{ round?: number; element?: string; bet?: number; win?: number; time?: string }[]>([]);
+  const [apiPlayerRecords, setApiPlayerRecords] = useState<PlayerRecordView[]>([]);
   const roundRef = useRef(74612);
 
   const [itemPulse, setItemPulse] = useState<{ id: ItemId | null; key: number }>({ id: null, key: 0 });
@@ -1593,6 +1484,8 @@ const GamePage = () => {
   const [pointerStopIndex, setPointerStopIndex] = useState(0);
   const [drawHighlightIndex, setDrawHighlightIndex] = useState(0);
   const lastWinIdRef = useRef<number>(0); // tracks last processed win entry ID from server
+  const winnerPollTokenRef = useRef(0);
+  const phaseRef = useRef<Phase>('BETTING');
   const [showFireworks, setShowFireworks] = useState(false);
   const [fireworksSeed, setFireworksSeed] = useState(0);
   const [trophyCoins, setTrophyCoins] = useState<{ id: number; x: number; y: number; size: number; delay: number }[]>([]);
@@ -1600,6 +1493,7 @@ const GamePage = () => {
 
   /* Set document title from API game name */
   useEffect(() => { document.title = gameName; }, [gameName]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
   /* Continuous trophy coin explosion during BETTING */
   useEffect(() => {
     if (phase !== 'BETTING') {
@@ -1708,44 +1602,136 @@ const GamePage = () => {
     });
   }, [itemMap]);
 
-  const chipSrcByValue = useMemo(() => {
-    return chipValues.reduce(
-      (acc: Record<number, string>, value: number, idx: number) => {
-        if (CHIPS[idx]) acc[value] = CHIPS[idx].src;
-        return acc;
-      },
-      {} as Record<number, string>
-    );
-  }, [chipValues]);
+  const applyWinnerFromServer = useCallback((entry: ApiWinElement): boolean => {
+    if (entry.gjp__jackpot_name && (entry.jackport_element_name?.length ?? 0) > 0) {
+      const jackpotIds = (entry.jackport_element_name ?? [])
+        .map((name) => API_NAME_TO_ID[name])
+        .filter((id): id is ItemId => Boolean(id));
 
-  const beginRound = () => {
-    transitioningRef.current = false; // clear gate so next SHOWTIME can transition
-
-    // Decide next round type (placeholder logic)
-    const isJackpotNext =
-      normalRoundsSinceJackpotRef.current > 0 &&
-      normalRoundsSinceJackpotRef.current % JACKPOT_EVERY_N_NORMAL_ROUNDS === 0;
-
-    setRoundType(isJackpotNext ? 'JACKPOT' : 'NORMAL');
-
-    setPhase('BETTING');
-
-    /* Sync timer with server session end time when available */
-    let betSeconds = BET_SECONDS;
-    if (sessionEndTime) {
-      const serverEnd = new Date(sessionEndTime).getTime();
-      const now = Date.now();
-      const remaining = Math.max(1, Math.round((serverEnd - now) / 1000));
-      if (remaining > 0 && remaining < 300) { // sanity: max 5 minutes
-        betSeconds = remaining;
-        console.log('[TIMER] Synced with server:', remaining, 'seconds remaining');
+      if (jackpotIds.length > 0) {
+        setRoundType('JACKPOT');
+        winnerRef.current = jackpotIds;
+        setWinnerIds(jackpotIds);
+        console.log('[LIVE] Jackpot winner:', jackpotIds);
+        return true;
       }
-      /* Clear after first use so subsequent rounds use default BET_SECONDS */
-      setSessionEndTime(null);
     }
-    setTimeLeft(betSeconds);
+
+    if (entry.element__element_name) {
+      const winnerId = API_NAME_TO_ID[entry.element__element_name];
+      if (winnerId) {
+        setRoundType('NORMAL');
+        winnerRef.current = [winnerId];
+        setWinnerIds([winnerId]);
+        console.log('[LIVE] Winner:', winnerId, '(' + entry.element__element_name + ')');
+        return true;
+      }
+    }
+
+    console.warn('[LIVE] Unmappable winner payload:', entry);
+    return false;
+  }, []);
+
+  const refreshRoundStateFromServer = useCallback(async () => {
+    const modeNum = isAdvanceMode ? 1 : 2;
+    const pBody = apiBodyPlayer(modeNum);
+    const mBody = apiBodyWithMode(modeNum);
+
+    const [recordsRes, todayWinRes] = await Promise.allSettled([
+      apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, pBody),
+      apiFetch<ApiTodayWin>('/game/today/win', 1, mBody),
+    ]);
+
+    if (recordsRes.status === 'fulfilled') {
+      const rows = recordsRes.value?.data ?? [];
+      setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
+
+      const serverBalance =
+        rows
+          .map((row) => row.current_balance ?? row.balance_after ?? row.last_balance ?? row.balance ?? row.total_balance)
+          .find((value): value is number => typeof value === 'number' && Number.isFinite(value))
+        ?? null;
+
+      if (serverBalance != null) {
+        setBalance(serverBalance);
+      }
+    }
+
+    if (todayWinRes.status === 'fulfilled') {
+      const total = todayWinRes.value?.today_win?.total_balance;
+      if (typeof total === 'number' && Number.isFinite(total)) {
+        setTodayWin(total);
+      }
+    }
+  }, [isAdvanceMode]);
+
+  const pollWinnerUntilNewResult = useCallback(async (token: number) => {
+    const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
+    let latestSeen: ApiWinElement | null = null;
+
+    for (let attempt = 0; attempt < 16; attempt++) {
+      if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
+
+      try {
+        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody);
+        if (Array.isArray(results) && results.length > 0) {
+          const latest = results[results.length - 1];
+          latestSeen = latest;
+
+          if (typeof latest.id === 'number' && latest.id !== lastWinIdRef.current) {
+            lastWinIdRef.current = latest.id;
+            if (applyWinnerFromServer(latest)) return;
+          }
+        }
+      } catch (err) {
+        console.warn('[LIVE] Winner poll failed on attempt', attempt + 1, err);
+      }
+
+      if (attempt < 15) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
+
+    if (latestSeen && typeof latestSeen.id === 'number') {
+      console.warn('[LIVE] No new winner ID detected; using latest known ID:', latestSeen.id);
+      lastWinIdRef.current = latestSeen.id;
+      if (applyWinnerFromServer(latestSeen)) return;
+    }
+
+    // Deterministic last-resort fallback to avoid draw lockups.
+    setRoundType('NORMAL');
+    winnerRef.current = ['honey'];
+    setWinnerIds(['honey']);
+  }, [applyWinnerFromServer, isAdvanceMode]);
+
+  const beginRound = useCallback(async () => {
+    transitioningRef.current = false; // clear gate so next SHOWTIME can transition
+    winnerPollTokenRef.current += 1; // cancel any previous winner poll loop
+
+    setRoundType('NORMAL');
+    setPhase('BETTING');
     setShowPreDraw(true);
-  };
+    setTimeLeft(BET_SECONDS);
+
+    try {
+      const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 2, API_BODY);
+      const serverEnd = Date.parse(session.next_run_time);
+      const remaining = Math.max(1, Math.round((serverEnd - Date.now()) / 1000));
+
+      if (remaining > 0 && remaining < 300) {
+        setTimeLeft(remaining);
+        console.log('[TIMER] Synced with server:', remaining, 'seconds remaining');
+      } else {
+        console.warn('[TIMER] Invalid server session window, using fallback:', session);
+        setTimeLeft(BET_SECONDS);
+      }
+    } catch (err) {
+      console.warn('[TIMER] Session sync failed, using fallback timer:', err);
+      setTimeLeft(BET_SECONDS);
+    }
+  }, []);
 
 
   const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
@@ -1780,7 +1766,6 @@ const GamePage = () => {
       }, idx * 70);
     });
 
-    // 3) Optional: small floating chips (same rules as single bet)
     // 3) Floating chips: ALWAYS during BETTING, from selected chip -> each item
     if (phase === 'BETTING') {
       const chipSrc = CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png';
@@ -1834,14 +1819,14 @@ const GamePage = () => {
             if (res.ok) {
               console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
             }
-            // Small delay between sequential bets to avoid overwhelming the server
             if (ids.length > 1) await new Promise((r) => setTimeout(r, 200));
-          } catch { /* silently ignore bet errors */ }
+          } catch {
+            // ignore per-item write errors to keep UI responsive
+          }
         }
       })();
     }
   };
-
 
   const hasBlockingOverlay =
     activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard || chestPopup !== null;
@@ -1853,19 +1838,16 @@ const GamePage = () => {
       if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
     };
   }, []);
+
   useEffect(() => {
-    beginRound();
-
-  }, []);
-
+    void beginRound();
+  }, [beginRound]);
 
   useEffect(() => {
     if (!showGameOn) return;
     const id = window.setTimeout(() => setShowGameOn(false), GAME_ON_MS);
     return () => window.clearTimeout(id);
   }, [showGameOn]);
-
-
 
   useEffect(() => {
     if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
@@ -1876,8 +1858,6 @@ const GamePage = () => {
 
     return () => window.clearInterval(id);
   }, [activeModal, showGameOn, showPreDraw, phase]);
-
-
 
   useEffect(() => {
     if (!canBet || pointerStops.length === 0) return;
@@ -1902,25 +1882,21 @@ const GamePage = () => {
     const winners = winnerRef.current;
 
     if (!winners || winners.length === 0) {
-      // -- Phase 1: no winner yet, spin fast in a loop --
       drawStartRef.current = Date.now();
       let step = 0;
       const spinInterval = window.setInterval(() => {
         step++;
         setDrawHighlightIndex(step % order.length);
-      }, 100); // fast spin: 100ms per step
+      }, 100);
       return () => window.clearInterval(spinInterval);
     }
 
-    // -- Phase 2: winner arrived, decelerate and land --
     const landingId = winners[0];
     const winnerIdx = order.indexOf(landingId);
 
-    // How much time is left for the animation?
     const elapsed = Date.now() - drawStartRef.current;
     const remainingMs = Math.max(2000, DRAW_SECONDS * 1000 - elapsed - 100);
 
-    // 2 full loops + steps to land on winner
     const fullLoops = 2;
     const totalSteps = fullLoops * order.length + winnerIdx + 1;
 
@@ -1949,19 +1925,15 @@ const GamePage = () => {
     };
   }, [phase, winnerIds]);
 
-  // ── When server winner arrives after DRAWING timer already hit 0, force transition ──
   useEffect(() => {
     if (phase !== 'DRAWING') return;
     if (!winnerIds || winnerIds.length === 0) return;
-    if (timeLeft > 0) return; // timer still running, normal flow will handle it
+    if (timeLeft > 0) return;
 
-    // Winner arrived but timer already expired — force re-check after animation
-    console.log('[LIVE] Winner arrived after timer expired, transitioning now');
     const id = window.setTimeout(() => {
-      // Bump timeLeft to 1 then back to 0 to re-trigger the transition handler
       setTimeLeft(1);
       setTimeout(() => setTimeLeft(0), 50);
-    }, 2500); // 2.5s for deceleration animation to finish
+    }, 2500);
     return () => window.clearTimeout(id);
   }, [winnerIds, phase, timeLeft]);
 
@@ -1972,13 +1944,14 @@ const GamePage = () => {
     },
     []
   );
+
   useEffect(() => {
     if (!showPreDraw) return;
 
     if (preDrawTimeoutRef.current) window.clearTimeout(preDrawTimeoutRef.current);
 
     preDrawTimeoutRef.current = window.setTimeout(() => {
-      setShowPreDraw(false); // âœ… after this, BET countdown starts automatically
+      setShowPreDraw(false);
     }, PRE_DRAW_MS);
 
     return () => {
@@ -1986,87 +1959,35 @@ const GamePage = () => {
     };
   }, [showPreDraw]);
 
-
   useEffect(() => {
     if (activeModal !== 'NONE' || showGameOn) return;
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      /* ── LIVE: fetch server winner after a short delay ── */
       setPhase('DRAWING');
       setTimeLeft(DRAW_SECONDS);
+      setWinnerIds(null);
+      winnerRef.current = null;
 
-      // Wait 3s (let server finalize), then fetch winner
-      (async () => {
-        await new Promise(r => setTimeout(r, 3000));
-        const mBody = JSON.stringify({ regisation: 3, mode: isAdvanceMode ? 1 : 2 });
-
-        // Try up to 3 times with 2s interval
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const results = await apiFetch<Array<{
-              id: number;
-              element__element_name: string | null;
-              gjp__jackpot_name: string | null;
-              jackport_element_name: string[];
-            }>>('/game/win/elements/list', 1, mBody);
-
-            if (results && results.length > 0) {
-              const latest = results[results.length - 1];
-
-              if (latest.gjp__jackpot_name && latest.jackport_element_name.length > 0) {
-                const jackpotIds = latest.jackport_element_name
-                  .map(name => API_NAME_TO_ID[name])
-                  .filter(Boolean) as ItemId[];
-                setRoundType('JACKPOT');
-                winnerRef.current = jackpotIds.length > 0 ? jackpotIds : ['honey'];
-                setWinnerIds(jackpotIds.length > 0 ? jackpotIds : ['honey']);
-                console.log('[LIVE] Jackpot winner:', jackpotIds);
-              } else if (latest.element__element_name) {
-                const winnerId = API_NAME_TO_ID[latest.element__element_name] || 'honey';
-                winnerRef.current = [winnerId];
-                setWinnerIds([winnerId]);
-                console.log('[LIVE] Winner:', winnerId, '(' + latest.element__element_name + ')');
-              } else {
-                // No name — use fallback
-                const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
-                winnerRef.current = [fallback];
-                setWinnerIds([fallback]);
-                console.log('[LIVE] No element name, using fallback');
-              }
-              return; // success — exit
-            }
-          } catch (e) {
-            console.warn('[LIVE] Fetch attempt', attempt + 1, 'error:', e);
-          }
-          if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
-        }
-
-        // All retries failed — fallback
-        console.warn('[LIVE] All retries failed, using fallback');
-        const fallback = ITEMS[Math.floor(Math.random() * ITEMS.length)].id;
-        winnerRef.current = [fallback];
-        setWinnerIds([fallback]);
-      })();
+      const token = Date.now();
+      winnerPollTokenRef.current = token;
+      void pollWinnerUntilNewResult(token);
       return;
     }
 
-
     if (phase === 'DRAWING') {
       const winners = winnerRef.current;
-      if (!winners || winners.length === 0) return; // wait for fetch to complete
+      if (!winners || winners.length === 0) return;
 
       const hadAnyBet = totalBet > 0;
 
       let winAmount = 0;
-      let primaryId: ItemId = winners[0]; // for UI panels that expect one item
+      let primaryId: ItemId = winners[0];
 
       if (roundType === 'JACKPOT') {
-        const jackpotItems = winners; // exactly 4 items from one bucket
+        const jackpotItems = winners;
         const j = computeJackpotWin({ jackpotItems, bets, itemMultiplier, jackpotBonus: jackpotAmount });
         winAmount = j.totalWin;
-
-        // optional: choose a better â€œprimaryIdâ€ for header/icon
         primaryId = jackpotItems[0];
       } else {
         const winner = winners[0];
@@ -2076,11 +1997,9 @@ const GamePage = () => {
       }
 
       setPendingWin({ itemId: primaryId, amount: winAmount, hadAnyBet, totalBet });
-
       setResultKind(!hadAnyBet ? 'NOBET' : winAmount > 0 ? 'WIN' : 'LOSE');
 
       setResultSrcs((prev) => {
-        /* Prepend newest result at index 0 (leftmost) */
         let newSrc: string;
         if (roundType === 'JACKPOT') {
           const isVeg = VEG_ITEMS.includes(primaryId);
@@ -2092,7 +2011,6 @@ const GamePage = () => {
       });
 
       setPhase('SHOWTIME');
-      /* Jackpot needs extra time: 2.5s highlight + full trophy animation */
       setTimeLeft(roundType === 'JACKPOT' ? 10 : SHOW_SECONDS);
 
       if (winAmount > 0) {
@@ -2102,8 +2020,6 @@ const GamePage = () => {
         setShowFireworks(false);
       }
 
-      /* For jackpot rounds, keep the 4 highlighted cells visible for 2.5s
-         before showing the result board (chips â†’ trophy). Normal rounds show immediately. */
       if (roundType === 'JACKPOT') {
         setTimeout(() => setShowResultBoard(true), 2500);
       } else {
@@ -2113,7 +2029,6 @@ const GamePage = () => {
     }
 
     if (phase === 'SHOWTIME') {
-      /* Gate: prevent double-processing if dependencies cause re-render during 150ms gap */
       if (transitioningRef.current) return;
       transitioningRef.current = true;
       const winner = winnerRef.current;
@@ -2146,12 +2061,7 @@ const GamePage = () => {
         setRecords((prev) => [record, ...prev].slice(0, 30));
       }
 
-      // update jackpot counter AFTER a round completes
-      if (roundType === 'JACKPOT') {
-        normalRoundsSinceJackpotRef.current = 0;
-      } else {
-        normalRoundsSinceJackpotRef.current += 1;
-      }
+      void refreshRoundStateFromServer();
 
       setBets(buildEmptyBets());
       setPendingWin(null);
@@ -2160,23 +2070,25 @@ const GamePage = () => {
       setShowResultBoard(false);
       setShowFireworks(false);
 
-      /* Clear winner highlight first so elements smoothly return to scale 1
-         before the next round begins (prevents visible "bump") */
       setWinnerIds(null);
       winnerRef.current = null;
 
-      /* Small delay to let elements settle at scale 1 before starting next round */
-      setTimeout(() => beginRound(), 150);
+      setTimeout(() => void beginRound(), 150);
     }
   }, [
     activeModal,
     balance,
     bets,
+    beginRound,
     itemMap,
+    itemMultiplier,
+    jackpotAmount,
     pendingWin,
     phase,
+    pollWinnerUntilNewResult,
+    refreshRoundStateFromServer,
+    roundType,
     showGameOn,
-
     timeLeft,
     totalBet,
   ]);
@@ -2284,7 +2196,6 @@ const GamePage = () => {
   const rankRows = rankTab === 'TODAY' ? rankRowsToday : rankRowsYesterday;
   const remainingForAdvanceApi = advanceModeApi ? advanceModeApi.remanning_values : remainingForAdvance;
   const winAmountLabel = pendingWin ? formatNum(pendingWin.amount) : '0';
-  const winAmountFontSize = winAmountLabel.length >= 8 ? 18 : winAmountLabel.length >= 6 ? 21 : 24;
   const activePointerStop = pointerStops[pointerStopIndex] ?? POINTER_BASE_POSITION;
   const activeDrawHighlightId = phase === 'DRAWING' ? DRAW_HIGHLIGHT_ORDER[drawHighlightIndex] : null;
 
@@ -2755,7 +2666,7 @@ const GamePage = () => {
 
         {/* Wooden signboard â€” always visible */}
         <motion.img
-          src="/image2/greedy_sign_board.png"
+          src={gameLogoSrc}
           alt=""
           className="absolute z-30 object-contain"
           style={{
@@ -4187,7 +4098,6 @@ const GamePage = () => {
 
                         {/* â”€â”€ Numbered rules below table â”€â”€ */}
                         {(() => {
-                          const src = isAdvanceMode ? prizeData?.advance : prizeData?.general;
                           // If API has a title, show it (not needed per ref â€” ref has no sub-title)
                           const rules = [
                             'The prize diamond will increase after each game round.',
@@ -4310,7 +4220,7 @@ const GamePage = () => {
                             );
                           }
 
-                          return displayRecords.map((r: any, idx: number) => {
+                          return displayRecords.map((r, idx) => {
                             // Resolve element â†’ ItemSpec for icon
                             const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
                             const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
