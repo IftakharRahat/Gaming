@@ -1712,6 +1712,7 @@ const GamePage = () => {
 
     setRoundType('NORMAL');
     setPhase('BETTING');
+    phaseRef.current = 'BETTING';
     setShowPreDraw(true);
     setTimeLeft(BET_SECONDS);
 
@@ -1965,6 +1966,7 @@ const GamePage = () => {
 
     if (phase === 'BETTING') {
       setPhase('DRAWING');
+      phaseRef.current = 'DRAWING';
       setTimeLeft(DRAW_SECONDS);
       setWinnerIds(null);
       winnerRef.current = null;
