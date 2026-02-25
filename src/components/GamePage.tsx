@@ -10,6 +10,8 @@ const BET_SECONDS = 20;
 const DRAW_SECONDS = 8;
 const SHOW_SECONDS = 5;
 const PRE_DRAW_MS = 2000;
+const WINNER_POLL_INTERVAL_MS = 1000;
+const WINNER_POLL_MAX_ATTEMPTS = DRAW_SECONDS + 2;
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
@@ -1484,6 +1486,10 @@ const GamePage = () => {
   const [pointerStopIndex, setPointerStopIndex] = useState(0);
   const [drawHighlightIndex, setDrawHighlightIndex] = useState(0);
   const lastWinIdRef = useRef<number>(0); // tracks last processed win entry ID from server
+  const latestPolledWinRef = useRef<ApiWinElement | null>(null);
+  const participantSubmitFailuresRef = useRef(0);
+  const participantSubmitDisabledRef = useRef(false);
+  const participantSubmitDisabledLoggedRef = useRef(false);
   const winnerPollTokenRef = useRef(0);
   const phaseRef = useRef<Phase>('BETTING');
   const [showFireworks, setShowFireworks] = useState(false);
@@ -1665,18 +1671,81 @@ const GamePage = () => {
     }
   }, [isAdvanceMode]);
 
+  const submitParticipantBet = useCallback(async (params: { itemId: ItemId; bet: number; balanceAfterBet: number }) => {
+    if (!PLAYER_ID || participantSubmitDisabledRef.current) return false;
+
+    const { itemId, bet, balanceAfterBet } = params;
+    const elementId = elementApiIds[itemId] || 0;
+
+    if (!elementId) {
+      console.warn('[API] Skipping bet submit: missing element mapping for', itemId);
+      return false;
+    }
+
+    try {
+      const res = await fetch('/game/player/gaming/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player_id: PLAYER_ID,
+          balance: balanceAfterBet,
+          bet,
+          element: elementId,
+          mode: isAdvanceMode ? 1 : 2,
+        }),
+      });
+
+      if (!res.ok) {
+        participantSubmitFailuresRef.current += 1;
+        const disableNow = res.status >= 500 || participantSubmitFailuresRef.current >= 3;
+
+        if (disableNow) {
+          participantSubmitDisabledRef.current = true;
+          if (!participantSubmitDisabledLoggedRef.current) {
+            participantSubmitDisabledLoggedRef.current = true;
+            console.warn('[API] Participants submit disabled after repeated failures:', {
+              player_id: PLAYER_ID,
+              status: res.status,
+            });
+          }
+        } else {
+          console.warn('[API] Bet submit failed:', { status: res.status, item: itemId, element: elementId });
+        }
+        return false;
+      }
+
+      participantSubmitFailuresRef.current = 0;
+      console.log('[API] Bet submitted:', { item: itemId, bet, element: elementId });
+      return true;
+    } catch {
+      participantSubmitFailuresRef.current += 1;
+      if (participantSubmitFailuresRef.current >= 3) {
+        participantSubmitDisabledRef.current = true;
+        if (!participantSubmitDisabledLoggedRef.current) {
+          participantSubmitDisabledLoggedRef.current = true;
+          console.warn('[API] Participants submit disabled after repeated network failures:', {
+            player_id: PLAYER_ID,
+          });
+        }
+      }
+      return false;
+    }
+  }, [elementApiIds, isAdvanceMode]);
+
   const pollWinnerUntilNewResult = useCallback(async (token: number) => {
     const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
     let latestSeen: ApiWinElement | null = null;
 
-    for (let attempt = 0; attempt < 16; attempt++) {
+    for (let attempt = 0; attempt < WINNER_POLL_MAX_ATTEMPTS; attempt++) {
       if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
 
       try {
         const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody);
+        if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
         if (Array.isArray(results) && results.length > 0) {
           const latest = results[results.length - 1];
           latestSeen = latest;
+          latestPolledWinRef.current = latest;
 
           if (typeof latest.id === 'number' && latest.id !== lastWinIdRef.current) {
             lastWinIdRef.current = latest.id;
@@ -1687,8 +1756,8 @@ const GamePage = () => {
         console.warn('[LIVE] Winner poll failed on attempt', attempt + 1, err);
       }
 
-      if (attempt < 15) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (attempt < WINNER_POLL_MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, WINNER_POLL_INTERVAL_MS));
       }
     }
 
@@ -1711,6 +1780,7 @@ const GamePage = () => {
     winnerPollTokenRef.current += 1; // cancel any previous winner poll loop
 
     setRoundType('NORMAL');
+    latestPolledWinRef.current = null;
     setPhase('BETTING');
     phaseRef.current = 'BETTING';
     setShowPreDraw(true);
@@ -1804,26 +1874,9 @@ const GamePage = () => {
       (async () => {
         for (const itemId of ids) {
           runningBalance -= selectedChip;
-          const elementId = elementApiIds[itemId] || 0;
-          try {
-            const res = await fetch('/game/player/gaming/participants', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                player_id: PLAYER_ID,
-                balance: runningBalance,
-                bet: selectedChip,
-                element: elementId,
-                mode: isAdvanceMode ? 1 : 2,
-              }),
-            });
-            if (res.ok) {
-              console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
-            }
-            if (ids.length > 1) await new Promise((r) => setTimeout(r, 200));
-          } catch {
-            // ignore per-item write errors to keep UI responsive
-          }
+          const ok = await submitParticipantBet({ itemId, bet: selectedChip, balanceAfterBet: runningBalance });
+          if (!ok && participantSubmitDisabledRef.current) break;
+          if (ids.length > 1) await new Promise((r) => setTimeout(r, 200));
         }
       })();
     }
@@ -1928,15 +1981,50 @@ const GamePage = () => {
 
   useEffect(() => {
     if (phase !== 'DRAWING') return;
-    if (!winnerIds || winnerIds.length === 0) return;
     if (timeLeft > 0) return;
+    if (winnerIds && winnerIds.length > 0) return;
 
-    const id = window.setTimeout(() => {
-      setTimeLeft(1);
-      setTimeout(() => setTimeLeft(0), 50);
-    }, 2500);
-    return () => window.clearTimeout(id);
-  }, [winnerIds, phase, timeLeft]);
+    // Drawing timer ended with no winner yet: resolve immediately using latest polled entry.
+    winnerPollTokenRef.current += 1; // invalidate older polling loops
+    let cancelled = false;
+
+    const resolveWinnerNow = async () => {
+      const tryApply = (entry: ApiWinElement | null) => {
+        if (!entry || cancelled || phaseRef.current !== 'DRAWING') return false;
+        if (typeof entry.id === 'number') {
+          lastWinIdRef.current = entry.id;
+        }
+        return applyWinnerFromServer(entry);
+      };
+
+      if (tryApply(latestPolledWinRef.current)) return;
+
+      try {
+        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, apiBodyWithMode(isAdvanceMode ? 1 : 2));
+        if (cancelled || phaseRef.current !== 'DRAWING') return;
+        if (Array.isArray(results) && results.length > 0) {
+          const latest = results[results.length - 1];
+          latestPolledWinRef.current = latest;
+          if (tryApply(latest)) return;
+        }
+      } catch (err) {
+        console.warn('[LIVE] Final winner fetch failed at draw timeout:', err);
+      }
+
+      if (cancelled || phaseRef.current !== 'DRAWING') return;
+
+      // Deterministic last-resort fallback to avoid draw lockups.
+      setRoundType('NORMAL');
+      winnerRef.current = ['honey'];
+      setWinnerIds(['honey']);
+    };
+
+    void resolveWinnerNow();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyWinnerFromServer, isAdvanceMode, phase, timeLeft, winnerIds]);
 
   useEffect(
     () => () => {
@@ -1970,6 +2058,7 @@ const GamePage = () => {
       setTimeLeft(DRAW_SECONDS);
       setWinnerIds(null);
       winnerRef.current = null;
+      latestPolledWinRef.current = null;
 
       const token = Date.now();
       winnerPollTokenRef.current = token;
@@ -2093,6 +2182,7 @@ const GamePage = () => {
     showGameOn,
     timeLeft,
     totalBet,
+    winnerIds,
   ]);
 
   const placeBet = (itemId: ItemId) => {
@@ -2114,23 +2204,8 @@ const GamePage = () => {
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
 
     /* Submit bet to API */
-    const elementId = elementApiIds[itemId] || 0;
     if (PLAYER_ID) {
-      fetch('/game/player/gaming/participants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          player_id: PLAYER_ID,
-          balance: balance - selectedChip,
-          bet: selectedChip,
-          element: elementId,
-          mode: isAdvanceMode ? 1 : 2,
-        }),
-      })
-        .then((res) => {
-          if (res.ok) console.log('[API] Bet submitted:', { item: itemId, bet: selectedChip, element: elementId });
-        })
-        .catch(() => { /* silently ignore bet errors */ });
+      void submitParticipantBet({ itemId, bet: selectedChip, balanceAfterBet: balance - selectedChip });
     }
 
     if (phase === 'BETTING') {
