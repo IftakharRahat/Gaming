@@ -1079,6 +1079,8 @@ const GamePage = () => {
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
+  const elementApiIdsRef = useRef<Record<string, number>>({});
+  const missingElementMapWarnedRef = useRef<Set<ItemId>>(new Set());
   const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
   const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
   const [jackpotAmount, setJackpotAmount] = useState(JACKPOT_BONUS_AMOUNT);
@@ -1202,6 +1204,8 @@ const GamePage = () => {
             if (id) apiIds[id] = el.id;
           });
           setElementApiIds(apiIds);
+          elementApiIdsRef.current = apiIds;
+          missingElementMapWarnedRef.current.clear();
           console.log('[API] Elements loaded:', multipliers);
         }
 
@@ -1500,6 +1504,7 @@ const GamePage = () => {
   /* Set document title from API game name */
   useEffect(() => { document.title = gameName; }, [gameName]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { elementApiIdsRef.current = elementApiIds; }, [elementApiIds]);
   /* Continuous trophy coin explosion during BETTING */
   useEffect(() => {
     if (phase !== 'BETTING') {
@@ -1675,10 +1680,21 @@ const GamePage = () => {
     if (!PLAYER_ID || participantSubmitDisabledRef.current) return false;
 
     const { itemId, bet, balanceAfterBet } = params;
-    const elementId = elementApiIds[itemId] || 0;
+    let elementId = elementApiIdsRef.current[itemId] || 0;
 
     if (!elementId) {
-      console.warn('[API] Skipping bet submit: missing element mapping for', itemId);
+      // Startup race: allow a short wait for /game/game/elements to finish and populate IDs.
+      for (let retry = 0; retry < 6 && !elementId; retry++) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        elementId = elementApiIdsRef.current[itemId] || 0;
+      }
+    }
+
+    if (!elementId) {
+      if (!missingElementMapWarnedRef.current.has(itemId)) {
+        missingElementMapWarnedRef.current.add(itemId);
+        console.warn('[API] Skipping bet submit: missing element mapping for', itemId);
+      }
       return false;
     }
 
@@ -1730,7 +1746,7 @@ const GamePage = () => {
       }
       return false;
     }
-  }, [elementApiIds, isAdvanceMode]);
+  }, [isAdvanceMode]);
 
   const pollWinnerUntilNewResult = useCallback(async (token: number) => {
     const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
