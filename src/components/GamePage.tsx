@@ -667,11 +667,7 @@ const INITIAL_RESULT_SRCS = [
 ];
 
 
-const NO_BET_ROWS: ResultBoardRow[] = [
-  { name: 'Miller', amount: 129400 },
-  { name: 'Aha OG', amount: 194000 },
-  { name: 'Steven', amount: 94000 },
-];
+const NO_BET_ROWS: ResultBoardRow[] = [];
 
 // Ferris wheel placement (must match your render)
 const WHEEL = { left: 6, top: 101, width: 391, height: 391 } as const;
@@ -2055,10 +2051,9 @@ const GamePage = () => {
         apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
       ]);
 
-      /* Jackpot */
-      if (jackpotRes.status === 'fulfilled' && jackpotRes.value?.Jackpot != null) {
+      /* Jackpot — only update if server returns a real value (avoids overwriting details total with 0) */
+      if (jackpotRes.status === 'fulfilled' && jackpotRes.value?.Jackpot != null && jackpotRes.value.Jackpot > 0) {
         setJackpotAmount(jackpotRes.value.Jackpot);
-        console.log('[LIVE] Jackpot refreshed:', jackpotRes.value.Jackpot);
       }
 
       /* Rank today */
