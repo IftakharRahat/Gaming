@@ -1756,86 +1756,40 @@ const GamePage = () => {
 
   const pollWinnerUntilNewResult = useCallback(async (token: number) => {
     const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
-    let latestSeen: ApiWinElement | null = null;
-    const startTime = Date.now();
 
-    for (let attempt = 0; attempt < WINNER_POLL_MAX_ATTEMPTS; attempt++) {
+    /* The server's win/elements/list updates when a new round result is declared.
+       Fetch it and apply the latest entry. Retry a few times if the fetch fails. */
+    for (let attempt = 0; attempt < 3; attempt++) {
       if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
 
       try {
-        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody);
+        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 0, mBody);
         if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
-        if (Array.isArray(results) && results.length > 0) {
-          const latest = results[results.length - 1];
-          latestSeen = latest;
-          latestPolledWinRef.current = latest;
 
-          if (typeof latest.id === 'number' && latest.id !== lastWinIdRef.current) {
-            lastWinIdRef.current = latest.id;
-            if (applyWinnerFromServer(latest)) return;
-          }
-        }
-      } catch (err) {
-        console.warn('[LIVE] Winner poll failed on attempt', attempt + 1, err);
-      }
-
-      if (attempt < WINNER_POLL_MAX_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, WINNER_POLL_INTERVAL_MS));
-      }
-    }
-
-    if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
-
-    if (latestSeen && typeof latestSeen.id === 'number') {
-      console.warn('[LIVE] No new winner ID detected; using latest known ID:', latestSeen.id);
-      lastWinIdRef.current = latestSeen.id;
-      if (applyWinnerFromServer(latestSeen)) return;
-    }
-
-    /* Extended retry: keep polling beyond draw timer until winner arrives (max WINNER_MAX_WAIT_MS) */
-    console.warn('[LIVE] Normal polling exhausted, entering extended retry...');
-    while (Date.now() - startTime < WINNER_MAX_WAIT_MS) {
-      if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
-
-      await new Promise((resolve) => setTimeout(resolve, WINNER_POLL_INTERVAL_MS));
-
-      try {
-        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody);
-        if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
         if (Array.isArray(results) && results.length > 0) {
           const latest = results[results.length - 1];
           latestPolledWinRef.current = latest;
-          if (typeof latest.id === 'number' && latest.id !== lastWinIdRef.current) {
-            lastWinIdRef.current = latest.id;
-            if (applyWinnerFromServer(latest)) return;
-          }
-          /* Accept the latest entry even if ID matches (server may reuse IDs across modes) */
-          if (typeof latest.id === 'number') {
-            lastWinIdRef.current = latest.id;
-            if (applyWinnerFromServer(latest)) return;
-          }
+          if (typeof latest.id === 'number') lastWinIdRef.current = latest.id;
+          if (applyWinnerFromServer(latest)) return;
         }
       } catch {
-        /* keep retrying */
+        /* retry */
+      }
+
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
     }
 
-    /* Absolute last resort after 15s of trying — use whatever latest data we have */
+    /* If we still don't have a winner, skip the round */
     if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
-    if (latestSeen) {
-      console.warn('[LIVE] Extended retry exhausted; forcing latest seen result');
-      if (typeof latestSeen.id === 'number') lastWinIdRef.current = latestSeen.id;
-      applyWinnerFromServer(latestSeen);
-    } else {
-      console.error('[LIVE] No winner data received after', WINNER_MAX_WAIT_MS, 'ms — skipping round');
-      /* Skip to next round instead of showing wrong winner */
-      setPhase('SHOWTIME');
-      phaseRef.current = 'SHOWTIME';
-      setTimeLeft(1); // minimal showtime before next round
-      setPendingWin(null);
-      setResultKind('NOBET');
-      setShowResultBoard(false);
-    }
+    console.warn('[LIVE] Could not get winner — skipping round');
+    setPhase('SHOWTIME');
+    phaseRef.current = 'SHOWTIME';
+    setTimeLeft(1);
+    setPendingWin(null);
+    setResultKind('NOBET');
+    setShowResultBoard(false);
   }, [applyWinnerFromServer, isAdvanceMode]);
 
   const currentSessionEndRef = useRef<string>('');
