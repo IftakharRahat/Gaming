@@ -2281,41 +2281,17 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      /* Verify with server before transitioning */
-      const confirmAndTransition = async () => {
-        try {
-          const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: SESSION_BODY,
-          });
-          if (res.ok) {
-            const session = await res.json() as ApiSessionTime;
-            const serverEnd = Date.parse(session.next_run_time);
-            const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
+      /* Timer sync keeps countdown accurate; transition immediately to DRAWING */
+      setPhase('DRAWING');
+      phaseRef.current = 'DRAWING';
+      setTimeLeft(DRAW_SECONDS);
+      setWinnerIds(null);
+      winnerRef.current = null;
+      latestPolledWinRef.current = null;
 
-            if (remaining > 2) {
-              setTimeLeft(remaining);
-              return;
-            }
-          }
-        } catch {
-          /* Server unreachable — proceed with local timer's decision */
-        }
-
-        setPhase('DRAWING');
-        phaseRef.current = 'DRAWING';
-        setTimeLeft(DRAW_SECONDS);
-        setWinnerIds(null);
-        winnerRef.current = null;
-        latestPolledWinRef.current = null;
-
-        const token = Date.now();
-        winnerPollTokenRef.current = token;
-        void pollWinnerUntilNewResult(token);
-      };
-
-      void confirmAndTransition();
+      const token = Date.now();
+      winnerPollTokenRef.current = token;
+      void pollWinnerUntilNewResult(token);
       return;
     }
 
