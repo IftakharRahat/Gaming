@@ -1836,6 +1836,8 @@ const GamePage = () => {
     }
   }, [applyWinnerFromServer, isAdvanceMode]);
 
+  const currentSessionEndRef = useRef<string>('');
+
   const beginRound = useCallback(async () => {
     transitioningRef.current = false; // clear gate so next SHOWTIME can transition
     winnerPollTokenRef.current += 1; // cancel any previous winner poll loop
@@ -1877,6 +1879,7 @@ const GamePage = () => {
 
       if (remaining > 0 && remaining < 300) {
         setTimeLeft(remaining);
+        currentSessionEndRef.current = session.next_run_time;
       } else {
         setTimeLeft(BET_SECONDS);
       }
@@ -2020,6 +2023,13 @@ const GamePage = () => {
           return;
         }
         const session = await res.json() as ApiSessionTime;
+
+        /* Only sync if this is the SAME session we started with */
+        if (currentSessionEndRef.current && session.next_run_time !== currentSessionEndRef.current) {
+          /* Server returned a different session — don't update timer */
+          return;
+        }
+
         const serverEnd = Date.parse(session.next_run_time);
         const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
