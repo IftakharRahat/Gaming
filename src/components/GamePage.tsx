@@ -2032,13 +2032,22 @@ const GamePage = () => {
           return;
         }
 
+        /* Store session ref on first successful sync (if beginRound failed to get it) */
+        if (!currentSessionEndRef.current) {
+          currentSessionEndRef.current = session.next_run_time;
+        }
+
         const serverEnd = Date.parse(session.next_run_time);
         const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
-        if (remaining >= 0 && remaining < 300) {
-          setTimeLeft(remaining);
-          timerSyncFailCountRef.current = 0;
-        }
+        /* Only adjust timer DOWNWARD — never increase it */
+        setTimeLeft(prev => {
+          if (remaining >= 0 && remaining < 300 && remaining <= prev) {
+            timerSyncFailCountRef.current = 0;
+            return remaining;
+          }
+          return prev;
+        });
       } catch {
         timerSyncFailCountRef.current += 1;
       }
