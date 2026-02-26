@@ -1680,7 +1680,7 @@ const GamePage = () => {
   }, [isAdvanceMode]);
 
   const submitParticipantBet = useCallback(async (params: { itemId: ItemId; bet: number; balanceAfterBet: number }) => {
-    if (!PLAYER_ID || participantSubmitDisabledRef.current) return false;
+    if (!PLAYER_ID || participantSubmitDisabledRef.current) return 'server_error';
 
     const { itemId, bet, balanceAfterBet } = params;
     let elementId = elementApiIdsRef.current[itemId] || 0;
@@ -1698,7 +1698,7 @@ const GamePage = () => {
         missingElementMapWarnedRef.current.add(itemId);
         console.warn('[API] Skipping bet submit: missing element mapping for', itemId);
       }
-      return false;
+      return 'server_error';
     }
 
     try {
@@ -1716,7 +1716,8 @@ const GamePage = () => {
 
       if (!res.ok) {
         participantSubmitFailuresRef.current += 1;
-        const disableNow = res.status >= 500 || participantSubmitFailuresRef.current >= 3;
+        const isServerError = res.status >= 500;
+        const disableNow = isServerError || participantSubmitFailuresRef.current >= 3;
 
         if (disableNow) {
           participantSubmitDisabledRef.current = true;
@@ -1730,12 +1731,13 @@ const GamePage = () => {
         } else {
           console.warn('[API] Bet submit failed:', { status: res.status, item: itemId, element: elementId });
         }
-        return false;
+        /* Return 'rejected' for client errors (4xx), 'server_error' for 5xx */
+        return isServerError ? 'server_error' : 'rejected';
       }
 
       participantSubmitFailuresRef.current = 0;
       console.log('[API] Bet submitted:', { item: itemId, bet, element: elementId });
-      return true;
+      return 'ok';
     } catch {
       participantSubmitFailuresRef.current += 1;
       if (participantSubmitFailuresRef.current >= 3) {
@@ -1747,7 +1749,7 @@ const GamePage = () => {
           });
         }
       }
-      return false;
+      return 'server_error';
     }
   }, [isAdvanceMode]);
 
@@ -1952,8 +1954,8 @@ const GamePage = () => {
       (async () => {
         for (const itemId of ids) {
           runningBalance -= selectedChip;
-          const ok = await submitParticipantBet({ itemId, bet: selectedChip, balanceAfterBet: runningBalance });
-          if (!ok && participantSubmitDisabledRef.current) break;
+          const result = await submitParticipantBet({ itemId, bet: selectedChip, balanceAfterBet: runningBalance });
+          if (result !== 'ok' && participantSubmitDisabledRef.current) break;
           if (ids.length > 1) await new Promise((r) => setTimeout(r, 200));
         }
       })();
@@ -1991,22 +1993,38 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [activeModal, showGameOn, showPreDraw, phase]);
 
-  /* ── Periodic timer sync during BETTING ── */
+  /* ── Periodic timer sync during BETTING (with backoff) ── */
+  const timerSyncFailCountRef = useRef(0);
   useEffect(() => {
-    if (phase !== 'BETTING') return;
+    if (phase !== 'BETTING') {
+      timerSyncFailCountRef.current = 0; // reset on phase change
+      return;
+    }
 
     const syncTimer = async () => {
+      /* Back off after 3 consecutive failures — stop spamming broken endpoint */
+      if (timerSyncFailCountRef.current >= 3) return;
+
       try {
-        const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 1, API_BODY);
+        const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: API_BODY,
+        });
+        if (!res.ok) {
+          timerSyncFailCountRef.current += 1;
+          return;
+        }
+        const session = await res.json() as ApiSessionTime;
         const serverEnd = Date.parse(session.next_run_time);
         const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
         if (remaining >= 0 && remaining < 300) {
           setTimeLeft(remaining);
-          console.log('[TIMER] Periodic sync:', remaining, 's remaining');
+          timerSyncFailCountRef.current = 0;
         }
       } catch {
-        /* silent — local timer continues */
+        timerSyncFailCountRef.current += 1;
       }
     };
 
@@ -2426,13 +2444,13 @@ const GamePage = () => {
 
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
 
-    /* Submit bet to API and revert if server rejects */
+    /* Submit bet to API — only revert on client-side rejection (4xx), not server errors */
     if (PLAYER_ID) {
       const chipAmount = selectedChip;
-      submitParticipantBet({ itemId, bet: chipAmount, balanceAfterBet: balance - chipAmount }).then((accepted) => {
-        if (!accepted) {
-          /* Server rejected the bet — revert balance and bet */
-          console.warn('[API] Bet rejected, reverting:', { itemId, bet: chipAmount });
+      submitParticipantBet({ itemId, bet: chipAmount, balanceAfterBet: balance - chipAmount }).then((status) => {
+        if (status === 'rejected') {
+          /* Server explicitly rejected the bet (insufficient balance, betting closed, etc.) */
+          console.warn('[API] Bet rejected by server, reverting:', { itemId, bet: chipAmount });
           setBalance((prev) => prev + chipAmount);
           setLifetimeBet((prev) => prev - chipAmount);
           setBets((prev) => ({
@@ -2440,6 +2458,7 @@ const GamePage = () => {
             [itemId]: Math.max(0, prev[itemId] - chipAmount),
           }));
         }
+        /* 'server_error' and 'ok' — don't revert (server may have accepted but returned error) */
       });
     }
 
