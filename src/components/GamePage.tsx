@@ -54,11 +54,10 @@ type RoundType = 'NORMAL' | 'JACKPOT';
 const JACKPOT_BONUS_AMOUNT = 500000;
 /* â”€â”€ API config â”€â”€ */
 const API_BASE = ''; // proxied via vite.config.ts
-const API_BODY = JSON.stringify({ regisation: 3 });
-const SESSION_BODY = JSON.stringify({ registration: 3 });
+const API_BODY = JSON.stringify({ registration: 3 });
 /* Body with mode: 2 = general/basic, 1 = advance */
-const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
-const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
+const apiBodyWithMode = (mode: number) => JSON.stringify({ registration: 3, mode });
+const apiBodyPlayer = (mode: number) => JSON.stringify({ registration: 3, player_id: PLAYER_ID, mode });
 
 type ApiElement = {
   id: number;
@@ -1849,7 +1848,7 @@ const GamePage = () => {
       const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: SESSION_BODY,
+        body: API_BODY,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const session = await res.json() as ApiSessionTime;
@@ -2013,7 +2012,7 @@ const GamePage = () => {
         const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: SESSION_BODY,
+          body: API_BODY,
         });
         if (!res.ok) {
           timerSyncFailCountRef.current += 1;
