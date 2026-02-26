@@ -150,21 +150,23 @@ const URL_PARAMS = new URLSearchParams(window.location.search);
 const RAW_PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
 const PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
 
-async function apiFetch<T>(path: string, retries = 2, customBody?: string): Promise<T> {
+async function apiFetch<T>(path: string, retries = 0, customBody?: string): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: customBody ?? API_BODY,
-    });
-    if (res.ok) return res.json();
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: customBody ?? API_BODY,
+      });
+      if (res.ok) return res.json();
+    } catch {
+      /* network error — suppress browser console noise */
+    }
     if (attempt < retries) {
       await new Promise((r) => setTimeout(r, 300));
-      continue;
     }
-    throw new Error(`API ${path} failed: ${res.status}`);
   }
-  throw new Error(`API ${path} failed after retries`);
+  throw new Error(`API ${path} failed`);
 }
 
 function mapApiPlayerRecord(row: ApiPlayerRecordRow): PlayerRecordView {
