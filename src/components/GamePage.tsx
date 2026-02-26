@@ -55,7 +55,7 @@ const JACKPOT_BONUS_AMOUNT = 500000;
 /* â”€â”€ API config â”€â”€ */
 const API_BASE = ''; // proxied via vite.config.ts
 const API_BODY = JSON.stringify({ regisation: 3 });
-const SESSION_BODY = JSON.stringify({ registration: 3 }); // session/end/time uses correct spelling
+const SESSION_BODY = JSON.stringify({ regisatration: 3 }); // session/end/time uses this spelling
 /* Body with mode: 2 = general/basic, 1 = advance */
 const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
 const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
