@@ -10,8 +10,11 @@ const BET_SECONDS = 20;
 const DRAW_SECONDS = 8;
 const SHOW_SECONDS = 5;
 const PRE_DRAW_MS = 2000;
-const WINNER_POLL_INTERVAL_MS = 1000;
-const WINNER_POLL_MAX_ATTEMPTS = DRAW_SECONDS + 2;
+const WINNER_POLL_INTERVAL_MS = 800;
+const WINNER_POLL_MAX_ATTEMPTS = 20;
+const TIMER_SYNC_INTERVAL_MS = 5000;
+const LIVE_REFRESH_INTERVAL_MS = 10000;
+const WINNER_MAX_WAIT_MS = 15000;
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
@@ -1751,6 +1754,7 @@ const GamePage = () => {
   const pollWinnerUntilNewResult = useCallback(async (token: number) => {
     const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
     let latestSeen: ApiWinElement | null = null;
+    const startTime = Date.now();
 
     for (let attempt = 0; attempt < WINNER_POLL_MAX_ATTEMPTS; attempt++) {
       if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
@@ -1785,10 +1789,50 @@ const GamePage = () => {
       if (applyWinnerFromServer(latestSeen)) return;
     }
 
-    // Deterministic last-resort fallback to avoid draw lockups.
-    setRoundType('NORMAL');
-    winnerRef.current = ['honey'];
-    setWinnerIds(['honey']);
+    /* Extended retry: keep polling beyond draw timer until winner arrives (max WINNER_MAX_WAIT_MS) */
+    console.warn('[LIVE] Normal polling exhausted, entering extended retry...');
+    while (Date.now() - startTime < WINNER_MAX_WAIT_MS) {
+      if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
+
+      await new Promise((resolve) => setTimeout(resolve, WINNER_POLL_INTERVAL_MS));
+
+      try {
+        const results = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody);
+        if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
+        if (Array.isArray(results) && results.length > 0) {
+          const latest = results[results.length - 1];
+          latestPolledWinRef.current = latest;
+          if (typeof latest.id === 'number' && latest.id !== lastWinIdRef.current) {
+            lastWinIdRef.current = latest.id;
+            if (applyWinnerFromServer(latest)) return;
+          }
+          /* Accept the latest entry even if ID matches (server may reuse IDs across modes) */
+          if (typeof latest.id === 'number') {
+            lastWinIdRef.current = latest.id;
+            if (applyWinnerFromServer(latest)) return;
+          }
+        }
+      } catch {
+        /* keep retrying */
+      }
+    }
+
+    /* Absolute last resort after 15s of trying — use whatever latest data we have */
+    if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
+    if (latestSeen) {
+      console.warn('[LIVE] Extended retry exhausted; forcing latest seen result');
+      if (typeof latestSeen.id === 'number') lastWinIdRef.current = latestSeen.id;
+      applyWinnerFromServer(latestSeen);
+    } else {
+      console.error('[LIVE] No winner data received after', WINNER_MAX_WAIT_MS, 'ms — skipping round');
+      /* Skip to next round instead of showing wrong winner */
+      setPhase('SHOWTIME');
+      phaseRef.current = 'SHOWTIME';
+      setTimeLeft(1); // minimal showtime before next round
+      setPendingWin(null);
+      setResultKind('NOBET');
+      setShowResultBoard(false);
+    }
   }, [applyWinnerFromServer, isAdvanceMode]);
 
   const beginRound = useCallback(async () => {
@@ -1797,15 +1841,30 @@ const GamePage = () => {
 
     setRoundType('NORMAL');
     latestPolledWinRef.current = null;
-    setPhase('BETTING');
-    phaseRef.current = 'BETTING';
-    setShowPreDraw(true);
-    setTimeLeft(BET_SECONDS);
 
     try {
       const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 2, API_BODY);
       const serverEnd = Date.parse(session.next_run_time);
-      const remaining = Math.max(1, Math.round((serverEnd - Date.now()) / 1000));
+      const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
+
+      if (remaining <= 0) {
+        /* Session already expired — skip to DRAWING immediately */
+        console.log('[TIMER] Session already expired, skipping to DRAWING');
+        setPhase('DRAWING');
+        phaseRef.current = 'DRAWING';
+        setTimeLeft(DRAW_SECONDS);
+        setWinnerIds(null);
+        winnerRef.current = null;
+
+        const token = Date.now();
+        winnerPollTokenRef.current = token;
+        void pollWinnerUntilNewResult(token);
+        return;
+      }
+
+      setPhase('BETTING');
+      phaseRef.current = 'BETTING';
+      setShowPreDraw(true);
 
       if (remaining > 0 && remaining < 300) {
         setTimeLeft(remaining);
@@ -1816,9 +1875,12 @@ const GamePage = () => {
       }
     } catch (err) {
       console.warn('[TIMER] Session sync failed, using fallback timer:', err);
+      setPhase('BETTING');
+      phaseRef.current = 'BETTING';
+      setShowPreDraw(true);
       setTimeLeft(BET_SECONDS);
     }
-  }, []);
+  }, [pollWinnerUntilNewResult]);
 
 
   const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
@@ -1929,6 +1991,106 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [activeModal, showGameOn, showPreDraw, phase]);
 
+  /* ── Periodic timer sync during BETTING ── */
+  useEffect(() => {
+    if (phase !== 'BETTING') return;
+
+    const syncTimer = async () => {
+      try {
+        const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 1, API_BODY);
+        const serverEnd = Date.parse(session.next_run_time);
+        const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
+
+        if (remaining >= 0 && remaining < 300) {
+          setTimeLeft(remaining);
+          console.log('[TIMER] Periodic sync:', remaining, 's remaining');
+        }
+      } catch {
+        /* silent — local timer continues */
+      }
+    };
+
+    const id = window.setInterval(syncTimer, TIMER_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  /* ── Periodic live data refresh during BETTING ── */
+  useEffect(() => {
+    if (phase !== 'BETTING') return;
+
+    const refreshLiveData = async () => {
+      const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
+      const pBody = apiBodyPlayer(isAdvanceMode ? 1 : 2);
+
+      const [jackpotRes, rankRes, topRes, winHistRes] = await Promise.allSettled([
+        apiFetch<ApiJackpot>('/game/jackpot', 1, mBody),
+        apiFetch<ApiRankRow[]>('/game/game/rank/today', 1, mBody),
+        apiFetch<ApiTopWinnerResponse>('/game/top/winers', 1, pBody),
+        apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
+      ]);
+
+      /* Jackpot */
+      if (jackpotRes.status === 'fulfilled' && jackpotRes.value?.Jackpot != null) {
+        setJackpotAmount(jackpotRes.value.Jackpot);
+        console.log('[LIVE] Jackpot refreshed:', jackpotRes.value.Jackpot);
+      }
+
+      /* Rank today */
+      if (rankRes.status === 'fulfilled' && Array.isArray(rankRes.value) && rankRes.value.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parsed = rankRes.value.map((row: any) => ({
+          name: row.mrs_player_id_player_name ?? row.player_name ?? row.name ?? 'Unknown',
+          diamonds: row.last_balance ?? row.balance ?? 0,
+          pic: (row.mrs_player_id_player_pic ?? row.player_pic ?? null)
+            ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
+            : undefined,
+        }));
+        if (parsed.length > 0) {
+          setRankRowsToday(parsed);
+        }
+      }
+
+      /* Top winners */
+      if (topRes.status === 'fulfilled' && Array.isArray(topRes.value) && topRes.value.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = topRes.value.slice(0, 3).map((r: any) => ({
+          name: r.mrs_player_id_player_name,
+          amount: r.last_balance,
+          pic: r.mrs_player_id_player_pic
+            ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
+            : undefined,
+        }));
+        setTopWinnersRows(mapped);
+      }
+
+      /* Result strip (win history) */
+      if (winHistRes.status === 'fulfilled' && Array.isArray(winHistRes.value) && winHistRes.value.length > 0) {
+        const latestWin = winHistRes.value[winHistRes.value.length - 1];
+        if (typeof latestWin?.id === 'number') {
+          lastWinIdRef.current = latestWin.id;
+          latestPolledWinRef.current = latestWin;
+        }
+
+        const itemSrcMap: Record<string, string> = {};
+        for (const item of ITEMS) {
+          const apiName = ID_TO_API_NAME[item.id];
+          if (apiName) itemSrcMap[apiName] = item.src;
+        }
+
+        const srcs = winHistRes.value
+          .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
+          .filter(Boolean) as string[];
+
+        if (srcs.length > 0) {
+          setResultSrcs(srcs.reverse());
+        }
+      }
+    };
+
+    const id = window.setInterval(refreshLiveData, LIVE_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [phase, isAdvanceMode]);
+
   useEffect(() => {
     if (!canBet || pointerStops.length === 0) return;
 
@@ -2029,10 +2191,34 @@ const GamePage = () => {
 
       if (cancelled || phaseRef.current !== 'DRAWING') return;
 
-      // Deterministic last-resort fallback to avoid draw lockups.
-      setRoundType('NORMAL');
-      winnerRef.current = ['honey'];
-      setWinnerIds(['honey']);
+      /* Extended retry: keep trying for up to WINNER_MAX_WAIT_MS instead of hardcoding a fallback */
+      console.warn('[LIVE] Draw timeout with no winner, entering extended retry...');
+      const extStart = Date.now();
+      while (Date.now() - extStart < WINNER_MAX_WAIT_MS) {
+        await new Promise((resolve) => setTimeout(resolve, WINNER_POLL_INTERVAL_MS));
+        if (cancelled || phaseRef.current !== 'DRAWING') return;
+
+        try {
+          const retryResults = await apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, apiBodyWithMode(isAdvanceMode ? 1 : 2));
+          if (cancelled || phaseRef.current !== 'DRAWING') return;
+          if (Array.isArray(retryResults) && retryResults.length > 0) {
+            const latest = retryResults[retryResults.length - 1];
+            latestPolledWinRef.current = latest;
+            if (tryApply(latest)) return;
+          }
+        } catch { /* keep retrying */ }
+      }
+
+      if (cancelled || phaseRef.current !== 'DRAWING') return;
+
+      /* Absolute last resort: skip round entirely rather than show wrong winner */
+      console.error('[LIVE] No winner after extended retry \u2014 skipping round');
+      setPhase('SHOWTIME');
+      phaseRef.current = 'SHOWTIME';
+      setTimeLeft(1);
+      setPendingWin(null);
+      setResultKind('NOBET');
+      setShowResultBoard(false);
     };
 
     void resolveWinnerNow();
@@ -2069,16 +2255,37 @@ const GamePage = () => {
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
-      setPhase('DRAWING');
-      phaseRef.current = 'DRAWING';
-      setTimeLeft(DRAW_SECONDS);
-      setWinnerIds(null);
-      winnerRef.current = null;
-      latestPolledWinRef.current = null;
+      /* Verify with server before transitioning */
+      const confirmAndTransition = async () => {
+        try {
+          const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 1, API_BODY);
+          const serverEnd = Date.parse(session.next_run_time);
+          const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
-      const token = Date.now();
-      winnerPollTokenRef.current = token;
-      void pollWinnerUntilNewResult(token);
+          if (remaining > 2) {
+            /* Server says there's still time — adjust timer instead of transitioning */
+            setTimeLeft(remaining);
+            console.log('[TIMER] Server still has', remaining, 's — adjusting instead of transitioning');
+            return;
+          }
+        } catch {
+          /* Server unreachable — proceed with local timer's decision */
+          console.warn('[TIMER] Server confirmation failed, proceeding with transition');
+        }
+
+        setPhase('DRAWING');
+        phaseRef.current = 'DRAWING';
+        setTimeLeft(DRAW_SECONDS);
+        setWinnerIds(null);
+        winnerRef.current = null;
+        latestPolledWinRef.current = null;
+
+        const token = Date.now();
+        winnerPollTokenRef.current = token;
+        void pollWinnerUntilNewResult(token);
+      };
+
+      void confirmAndTransition();
       return;
     }
 
@@ -2219,9 +2426,21 @@ const GamePage = () => {
 
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
 
-    /* Submit bet to API */
+    /* Submit bet to API and revert if server rejects */
     if (PLAYER_ID) {
-      void submitParticipantBet({ itemId, bet: selectedChip, balanceAfterBet: balance - selectedChip });
+      const chipAmount = selectedChip;
+      submitParticipantBet({ itemId, bet: chipAmount, balanceAfterBet: balance - chipAmount }).then((accepted) => {
+        if (!accepted) {
+          /* Server rejected the bet — revert balance and bet */
+          console.warn('[API] Bet rejected, reverting:', { itemId, bet: chipAmount });
+          setBalance((prev) => prev + chipAmount);
+          setLifetimeBet((prev) => prev - chipAmount);
+          setBets((prev) => ({
+            ...prev,
+            [itemId]: Math.max(0, prev[itemId] - chipAmount),
+          }));
+        }
+      });
     }
 
     if (phase === 'BETTING') {

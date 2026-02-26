@@ -74,7 +74,6 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-motion': ['framer-motion'],
-          'vendor-socket': ['socket.io-client'],
           'vendor-utils': ['canvas-confetti', 'howler', 'clsx', 'tailwind-merge'],
         },
       },
