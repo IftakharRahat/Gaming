@@ -146,7 +146,8 @@ const ID_TO_API_NAME: Record<ItemId, string> = {
 
 /* Read player_id from URL query param, e.g. ?player_id=2610 */
 const URL_PARAMS = new URLSearchParams(window.location.search);
-const PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
+const RAW_PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
+const PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
 
 async function apiFetch<T>(path: string, retries = 2, customBody?: string): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -1711,6 +1712,7 @@ const GamePage = () => {
           bet,
           element: elementId,
           mode: isAdvanceMode ? 1 : 2,
+          registration: 3,
         }),
       });
 
@@ -1840,6 +1842,8 @@ const GamePage = () => {
   const beginRound = useCallback(async () => {
     transitioningRef.current = false; // clear gate so next SHOWTIME can transition
     winnerPollTokenRef.current += 1; // cancel any previous winner poll loop
+    participantSubmitDisabledRef.current = false; // re-enable bet submissions each round
+    participantSubmitFailuresRef.current = 0;
 
     setRoundType('NORMAL');
     latestPolledWinRef.current = null;
