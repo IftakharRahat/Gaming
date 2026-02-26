@@ -1274,11 +1274,12 @@ const GamePage = () => {
           console.log('[API] Coin icon loaded:', imgUrl);
         }
 
-        /* Game logo icon */
+        /* Game logo icon — keep the local signboard; the API icon lacks
+           the wooden background and food decorations */
         if (gameIcon?.icon) {
           const imgUrl = `https://gameadmin.nanovisionltd.com${gameIcon.icon}`;
-          setGameLogoSrc(imgUrl);
-          console.log('[API] Game logo loaded:', imgUrl);
+          // setGameLogoSrc(imgUrl);  — intentionally disabled to preserve local signboard
+          console.log('[API] Game logo loaded (not applied — using local signboard):', imgUrl);
         }
 
         /* Today's win */
