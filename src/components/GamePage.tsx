@@ -50,8 +50,7 @@ const BOX_LABELS: Record<number, string> = {
 };
 type RoundType = 'NORMAL' | 'JACKPOT';
 
-// placeholder until API
-const JACKPOT_BONUS_AMOUNT = 500000;
+/* Jackpot amount is loaded from /game/jackpot/details (jackpot_total) */
 /* â”€â”€ API config â”€â”€ */
 const API_BASE = ''; // proxied via vite.config.ts
 const API_BODY = JSON.stringify({ regisation: 3 });
@@ -1086,7 +1085,7 @@ const GamePage = () => {
   const missingElementMapWarnedRef = useRef<Set<ItemId>>(new Set());
   const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
   const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
-  const [jackpotAmount, setJackpotAmount] = useState(JACKPOT_BONUS_AMOUNT);
+  const [jackpotAmount, setJackpotAmount] = useState(0);
   const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
   const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
   const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
@@ -1487,7 +1486,7 @@ const GamePage = () => {
   const [jackpotAwards, setJackpotAwards] = useState<{ round: number; win: number; time: string }[]>([]);
   const [gameName, setGameName] = useState('Gready Market');
   const [apiPlayerRecords, setApiPlayerRecords] = useState<PlayerRecordView[]>([]);
-  const roundRef = useRef(74612);
+  const roundRef = useRef(0);
 
   const [itemPulse, setItemPulse] = useState<{ id: ItemId | null; key: number }>({ id: null, key: 0 });
   const [floatingBetChips, setFloatingBetChips] = useState<FloatingBetChip[]>([]);
