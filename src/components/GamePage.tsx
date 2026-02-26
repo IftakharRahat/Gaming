@@ -1845,7 +1845,13 @@ const GamePage = () => {
     latestPolledWinRef.current = null;
 
     try {
-      const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 2, API_BODY);
+      const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: API_BODY,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const session = await res.json() as ApiSessionTime;
       const serverEnd = Date.parse(session.next_run_time);
       const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
@@ -1870,13 +1876,10 @@ const GamePage = () => {
 
       if (remaining > 0 && remaining < 300) {
         setTimeLeft(remaining);
-        console.log('[TIMER] Synced with server:', remaining, 'seconds remaining');
       } else {
-        console.warn('[TIMER] Invalid server session window, using fallback:', session);
         setTimeLeft(BET_SECONDS);
       }
-    } catch (err) {
-      console.warn('[TIMER] Session sync failed, using fallback timer:', err);
+    } catch {
       setPhase('BETTING');
       phaseRef.current = 'BETTING';
       setShowPreDraw(true);
@@ -2276,19 +2279,23 @@ const GamePage = () => {
       /* Verify with server before transitioning */
       const confirmAndTransition = async () => {
         try {
-          const session = await apiFetch<ApiSessionTime>('/game/game/session/end/time', 1, API_BODY);
-          const serverEnd = Date.parse(session.next_run_time);
-          const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
+          const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: API_BODY,
+          });
+          if (res.ok) {
+            const session = await res.json() as ApiSessionTime;
+            const serverEnd = Date.parse(session.next_run_time);
+            const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
 
-          if (remaining > 2) {
-            /* Server says there's still time — adjust timer instead of transitioning */
-            setTimeLeft(remaining);
-            console.log('[TIMER] Server still has', remaining, 's — adjusting instead of transitioning');
-            return;
+            if (remaining > 2) {
+              setTimeLeft(remaining);
+              return;
+            }
           }
         } catch {
           /* Server unreachable — proceed with local timer's decision */
-          console.warn('[TIMER] Server confirmation failed, proceeding with transition');
         }
 
         setPhase('DRAWING');
