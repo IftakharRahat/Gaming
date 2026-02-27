@@ -3727,7 +3727,7 @@ const GamePage = () => {
                 className="absolute z-20 p-0 border-none bg-transparent"
                 style={{
                   left: xPos,
-                  top: 175,
+                  top: 188,
                   width: boxWidth,
                   height: boxWidth + 20,
                   cursor: ready ? 'pointer' : 'default',
@@ -3787,25 +3787,7 @@ const GamePage = () => {
                   transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
                 />
 
-                {/* Label below chest */}
-                <span
-                  className="absolute text-center pointer-events-none"
-                  style={{
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    bottom: 0,
-                    width: 60,
-                    color: '#FFD866',
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontWeight: 700,
-                    fontSize: 10,
-                    lineHeight: '12px',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                    zIndex: 2,
-                  }}
-                >
-                  {box.label}
-                </span>
+                {/* Label removed — using API labels only from progress bar markers */}
               </button>
             );
           })}
