@@ -1606,8 +1606,13 @@ const GamePage = () => {
     // mark opened
     setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
 
-    // show popup
+    // credit reward to balance
     const amount = CHEST_REWARD_AMOUNT_BY_THRESHOLD[threshold] ?? 0;
+    if (amount > 0) {
+      setBalance((prev) => prev + amount);
+    }
+
+    // show popup
     setChestPopup({ threshold, amount });
   };
   // FIXED: Pointer stops now correctly point to the center of each item
