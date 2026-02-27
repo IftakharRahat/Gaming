@@ -3727,9 +3727,9 @@ const GamePage = () => {
                 className="absolute z-20 p-0 border-none bg-transparent"
                 style={{
                   left: xPos,
-                  top: 180,
+                  top: 175,
                   width: boxWidth,
-                  height: boxWidth,
+                  height: boxWidth + 20,
                   cursor: ready ? 'pointer' : 'default',
                   pointerEvents: ready ? 'auto' : 'none',
                 }}
@@ -3793,13 +3793,13 @@ const GamePage = () => {
                   style={{
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    top: boxWidth - 10,
-                    width: 70,
+                    bottom: 0,
+                    width: 60,
                     color: '#FFD866',
                     fontFamily: 'Inter, system-ui, sans-serif',
                     fontWeight: 700,
-                    fontSize: 11,
-                    lineHeight: '13px',
+                    fontSize: 10,
+                    lineHeight: '12px',
                     textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                     zIndex: 2,
                   }}
