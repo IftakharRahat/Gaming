@@ -1230,10 +1230,10 @@ const GamePage = () => {
         if (boxes && boxes.length > 0) {
           const bd = boxes.map((b) => ({
             src: b.box_image_close
-              ? `http://funint.site/${b.box_image_close}`
+              ? `/${b.box_image_close}`
               : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
             openSrc: b.box_image_open
-              ? `http://funint.site/${b.box_image_open}`
+              ? `/${b.box_image_open}`
               : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
@@ -1276,7 +1276,7 @@ const GamePage = () => {
 
         /* Coin icon */
         if (coin?.icon) {
-          const imgUrl = `http://funint.site${coin.icon}`;
+          const imgUrl = `/media${coin.icon.startsWith('/') ? '' : '/'}${coin.icon}`;
           setCoinIconSrc(imgUrl);
           console.log('[API] Coin icon loaded:', imgUrl);
         }
@@ -1284,7 +1284,7 @@ const GamePage = () => {
         /* Game logo icon — keep the local signboard; the API icon lacks
            the wooden background and food decorations */
         if (gameIcon?.icon) {
-          const imgUrl = `http://funint.site${gameIcon.icon}`;
+          const imgUrl = `/media${gameIcon.icon.startsWith('/') ? '' : '/'}${gameIcon.icon}`;
           // setGameLogoSrc(imgUrl);  — intentionally disabled to preserve local signboard
           console.log('[API] Game logo loaded (not applied — using local signboard):', imgUrl);
         }
@@ -2159,7 +2159,7 @@ const GamePage = () => {
           name: r.mrs_player_id_player_name,
           amount: r.last_balance,
           pic: r.mrs_player_id_player_pic
-            ? encodeURI(`http://funint.site/media/${r.mrs_player_id_player_pic}`)
+            ? encodeURI(`/media/${r.mrs_player_id_player_pic}`)
             : undefined,
         }));
         setTopWinnersRows(mapped);

@@ -14,6 +14,27 @@ const API_HOST = 'funint.site'
  *    and this middleware re-issues it as GET)
  */
 function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () => void) {
+  // --- Media proxy: /media/* → http://funint.site/media/* ---
+  if (req.url?.startsWith('/media/')) {
+    const options: http.RequestOptions = {
+      hostname: API_HOST,
+      path: req.url,
+      method: 'GET',
+      headers: { 'Accept': 'image/*,*/*' },
+    }
+    const proxyReq = http.request(options, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers)
+      proxyRes.pipe(res, { end: true })
+    })
+    proxyReq.on('error', (err) => {
+      console.error('[media-proxy] Error:', err.message)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message }))
+    })
+    proxyReq.end()
+    return
+  }
+
   if (!req.url?.startsWith('/game')) return next()
 
   // Collect request body

@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/media/:path*",
+      "destination": "/api/media?path=:path*"
+    },
+    {
       "source": "/game",
       "destination": "/api/game"
     },
