@@ -1229,12 +1229,8 @@ const GamePage = () => {
         /* Build box/chest data from boxes API */
         if (boxes && boxes.length > 0) {
           const bd = boxes.map((b) => ({
-            src: b.box_image_close
-              ? `/${b.box_image_close}`
-              : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
-            openSrc: b.box_image_open
-              ? `/${b.box_image_open}`
-              : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
+            src: BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png',
+            openSrc: CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png',
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
           setBoxData(bd);
@@ -1245,7 +1241,7 @@ const GamePage = () => {
 
         /* Trophy image */
         if (trophy?.icon) {
-          const imgUrl = `http://funint.site${trophy.icon}`;
+          const imgUrl = trophy.icon.startsWith('/') ? trophy.icon : `/${trophy.icon}`;
           setTrophySrc(imgUrl);
           console.log('[API] Trophy loaded:', imgUrl);
         }
@@ -1361,7 +1357,7 @@ const GamePage = () => {
             return {
               name,
               diamonds: balance,
-              pic: pic ? encodeURI(`http://funint.site/media/${pic}`) : undefined,
+              pic: pic ? encodeURI(`/media/${pic}`) : undefined,
             };
           });
         };
@@ -1382,7 +1378,7 @@ const GamePage = () => {
             name: r.mrs_player_id_player_name,
             amount: r.last_balance,
             pic: r.mrs_player_id_player_pic
-              ? encodeURI(`http://funint.site/media/${r.mrs_player_id_player_pic}`)
+              ? encodeURI(`/media/${r.mrs_player_id_player_pic}`)
               : undefined,
           }));
           console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
@@ -2144,7 +2140,7 @@ const GamePage = () => {
           name: row.mrs_player_id_player_name ?? row.player_name ?? row.name ?? 'Unknown',
           diamonds: row.last_balance ?? row.balance ?? 0,
           pic: (row.mrs_player_id_player_pic ?? row.player_pic ?? null)
-            ? encodeURI(`http://funint.site/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
+            ? encodeURI(`/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
             : undefined,
         }));
         if (parsed.length > 0) {
