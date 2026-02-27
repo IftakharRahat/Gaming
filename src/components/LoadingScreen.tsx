@@ -56,19 +56,66 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
         const total = CRITICAL_IMAGES.length;
         let loaded = 0;
 
+        /* Prefetch critical API data so GamePage doesn't show hardcoded defaults */
+        const prefetchApis = async () => {
+            const API_BASE = '';
+            const API_BODY = JSON.stringify({ regisation: 3 });
+            const mBody = JSON.stringify({ regisation: 3, mode: 2 });
+
+            const endpoints = [
+                { key: 'elements', path: '/game/game/elements' },
+                { key: 'buttons', path: '/game/sorce/buttons' },
+                { key: 'boxes', path: '/game/magic/boxs' },
+                { key: 'jackpotDetails', path: '/game/jackpot/details', body: mBody },
+                { key: 'gameMode', path: '/game/game/mode', body: mBody },
+                { key: 'winHistory', path: '/game/win/elements/list', body: mBody },
+                { key: 'trophy', path: '/game/game/trophy', body: API_BODY },
+                { key: 'coin', path: '/game/game/coin', body: API_BODY },
+                { key: 'gameIcon', path: '/game/icon/during/gaming', body: API_BODY },
+                { key: 'jackpot', path: '/game/jackpot', body: mBody },
+                { key: 'prizeDistribution', path: '/game/game/rank/today', body: mBody },
+            ];
+
+            const results: Record<string, unknown> = {};
+            await Promise.allSettled(
+                endpoints.map(async ({ key, path, body }) => {
+                    try {
+                        const res = await fetch(`${API_BASE}${path}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: body ?? API_BODY,
+                        });
+                        if (res.ok) {
+                            results[key] = await res.json();
+                        }
+                    } catch {
+                        /* non-critical — GamePage will retry */
+                    }
+                })
+            );
+
+            /* Store in window for GamePage to consume */
+            (window as unknown as Record<string, unknown>).__PREFETCHED_API__ = results;
+        };
+
         const loadAll = async () => {
-            // Load all images concurrently (they're small enough)
-            const promises = CRITICAL_IMAGES.map((src) =>
+            // Load images and APIs concurrently
+            const imagePromises = CRITICAL_IMAGES.map((src) =>
                 preloadImage(src).then(() => {
                     loaded++;
                     if (!cancelled) {
-                        const pct = Math.min(95, Math.round(10 + (loaded / total) * 85));
+                        const pct = Math.min(90, Math.round(10 + (loaded / total) * 80));
                         setProgress(pct);
                     }
                 })
             );
 
-            await Promise.all(promises);
+            const apiPromise = prefetchApis().then(() => {
+                if (!cancelled) setProgress((p) => Math.max(p, 92));
+            });
+
+            await Promise.all([...imagePromises, apiPromise]);
+
             if (!cancelled) {
                 setProgress(100);
                 // Short delay before transitioning
@@ -78,14 +125,14 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
             }
         };
 
-        // Timeout fallback — proceed after 6 seconds no matter what
+        // Timeout fallback — proceed after 8 seconds no matter what
         const timeout = setTimeout(() => {
             if (!cancelled) {
                 cancelled = true;
                 setProgress(100);
                 setTimeout(() => onLoadingComplete(), 200);
             }
-        }, 6000);
+        }, 8000);
 
         setProgress(5);
         loadAll();

@@ -1105,24 +1105,28 @@ const GamePage = () => {
         const mBody = apiBodyWithMode(modeNum);
         const pBody = apiBodyPlayer(modeNum);
 
+        /* Check if LoadingScreen already prefetched API data */
+        const prefetched = (window as unknown as Record<string, unknown>).__PREFETCHED_API__ as
+          Record<string, unknown> | undefined;
+
         /* Build the list of API calls (they won't execute until we call them) */
         const apiCalls: (() => Promise<unknown>)[] = [
           /* 0â€“10: APIs that need mode */
-          () => apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
-          () => apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
-          () => apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
-          () => apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
+          () => prefetched?.elements ? Promise.resolve(prefetched.elements) : apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
+          () => prefetched?.buttons ? Promise.resolve(prefetched.buttons) : apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
+          () => prefetched?.boxes ? Promise.resolve(prefetched.boxes) : apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
+          () => prefetched?.winHistory ? Promise.resolve(prefetched.winHistory) : apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
           () => apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
-          () => apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
-          () => apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
-          () => apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
+          () => prefetched?.jackpot ? Promise.resolve(prefetched.jackpot) : apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
+          () => prefetched?.jackpotDetails ? Promise.resolve(prefetched.jackpotDetails) : apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
+          () => prefetched?.gameMode ? Promise.resolve(prefetched.gameMode) : apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
           () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
           /* 11â€“18: APIs that DON'T need mode */
-          () => apiFetch<ApiTrophy>('/game/game/trophy'),
-          () => apiFetch<ApiCoin>('/game/game/coin'),
-          () => apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
+          () => prefetched?.trophy ? Promise.resolve(prefetched.trophy) : apiFetch<ApiTrophy>('/game/game/trophy'),
+          () => prefetched?.coin ? Promise.resolve(prefetched.coin) : apiFetch<ApiCoin>('/game/game/coin'),
+          () => prefetched?.gameIcon ? Promise.resolve(prefetched.gameIcon) : apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
           () => apiFetch<ApiMaxPlayers>('/game/maximum/fruits/per/turn'),
           () => apiFetch<ApiGameRule>('/game/game/rule'),
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
@@ -1130,27 +1134,26 @@ const GamePage = () => {
           () => apiFetch<ApiTodayWin>('/game/today/win'),
         ];
 
-        /* Warm up the Vercel serverless function to avoid cold-start 500s */
-        try {
-          await fetch('/game/game/trophy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: API_BODY,
-          });
-        } catch { /* warm-up done */ }
-        await new Promise(r => setTimeout(r, 500)); // let serverless instance stay warm
-
-        /* Execute in batches of 3 with delay to avoid overwhelming the server */
-        const BATCH_SIZE = 2;
-        const BATCH_DELAY = 300; // ms between batches
+        /* If prefetched data exists, all calls resolve fast; otherwise batch them */
         const results: PromiseSettledResult<unknown>[] = [];
 
-        for (let i = 0; i < apiCalls.length; i += BATCH_SIZE) {
-          const batch = apiCalls.slice(i, i + BATCH_SIZE);
-          const batchResults = await Promise.allSettled(batch.map((fn) => fn()));
+        if (prefetched && Object.keys(prefetched).length > 0) {
+          /* Fast path: most data is already cached from LoadingScreen */
+          const batchResults = await Promise.allSettled(apiCalls.map((fn) => fn()));
           results.push(...batchResults);
-          if (i + BATCH_SIZE < apiCalls.length) {
-            await new Promise((r) => setTimeout(r, BATCH_DELAY));
+          /* Clean up prefetched data */
+          delete (window as unknown as Record<string, unknown>).__PREFETCHED_API__;
+        } else {
+          /* Slow path: no prefetch, batch to avoid overwhelming server */
+          const BATCH_SIZE = 2;
+          const BATCH_DELAY = 300;
+          for (let i = 0; i < apiCalls.length; i += BATCH_SIZE) {
+            const batch = apiCalls.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.allSettled(batch.map((fn) => fn()));
+            results.push(...batchResults);
+            if (i + BATCH_SIZE < apiCalls.length) {
+              await new Promise((r) => setTimeout(r, BATCH_DELAY));
+            }
           }
         }
 
