@@ -2062,8 +2062,9 @@ const GamePage = () => {
         setTopWinnersRows(mapped);
       }
 
-      /* Result strip (win history) — only update during BETTING to avoid
-         wiping the current round's winner during DRAWING/SHOWTIME */
+      /* Result strip (win history) — only update during BETTING, and only if
+         the server has caught up (more entries than current state) to avoid
+         wiping locally-added winners with stale server data */
       if (phase === 'BETTING' && winHistRes.status === 'fulfilled' && Array.isArray(winHistRes.value) && winHistRes.value.length > 0) {
         const latestWin = winHistRes.value[winHistRes.value.length - 1];
         if (typeof latestWin?.id === 'number') {
@@ -2082,7 +2083,10 @@ const GamePage = () => {
           .filter(Boolean) as string[];
 
         if (srcs.length > 0) {
-          setResultSrcs(srcs.reverse());
+          const serverResults = srcs.reverse();
+          /* Only replace if server has at least as many results — avoids wiping
+             locally-added winners when server data is stale */
+          setResultSrcs((prev) => serverResults.length >= prev.length ? serverResults : prev);
         }
       }
     };
