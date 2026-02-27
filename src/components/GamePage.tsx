@@ -3665,6 +3665,7 @@ const GamePage = () => {
                     }}
                     animate={{
                       scale: active ? 0.88 : 1,
+                      y: active ? -8 : 0,
                     }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                   />
@@ -5185,7 +5186,7 @@ const GamePage = () => {
                         left: '50%',
                         transform: 'translateX(-50%)',
                         top: 102.5,          /* â† change only this to move timer */
-                        width: rankTab === 'YESTERDAY' ? 170 : 135,
+                        width: rankTab === 'YESTERDAY' ? 190 : 135,
                         height: 20,
                         borderRadius: 13,
                         background: 'rgba(140,90,30,0.22)',
@@ -5207,7 +5208,7 @@ const GamePage = () => {
                         <>
 
                           <span style={{ fontSize: 13 }}>⌛</span>
-                      {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
+                          {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
 
                         </>
 
