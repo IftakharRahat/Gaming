@@ -18,7 +18,7 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
   if (req.url?.startsWith('/media/')) {
     const options: http.RequestOptions = {
       hostname: API_HOST,
-      path: req.url,
+      path: req.url,  // Already starts with /media/
       method: 'GET',
       headers: { 'Accept': 'image/*,*/*' },
     }

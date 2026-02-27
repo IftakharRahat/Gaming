@@ -14,7 +14,7 @@ export default async function handler(req, res) {
             return;
         }
 
-        const remotePath = '/' + mediaPath.replace(/^\/+/, '');
+        const remotePath = '/media/' + mediaPath.replace(/^\/+/, '');
 
         const proxyReq = http.request(
             {

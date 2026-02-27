@@ -1276,7 +1276,7 @@ const GamePage = () => {
 
         /* Coin icon */
         if (coin?.icon) {
-          const imgUrl = `/media${coin.icon.startsWith('/') ? '' : '/'}${coin.icon}`;
+          const imgUrl = coin.icon.startsWith('/') ? coin.icon : `/${coin.icon}`;
           setCoinIconSrc(imgUrl);
           console.log('[API] Coin icon loaded:', imgUrl);
         }
@@ -1284,7 +1284,7 @@ const GamePage = () => {
         /* Game logo icon — keep the local signboard; the API icon lacks
            the wooden background and food decorations */
         if (gameIcon?.icon) {
-          const imgUrl = `/media${gameIcon.icon.startsWith('/') ? '' : '/'}${gameIcon.icon}`;
+          const imgUrl = gameIcon.icon.startsWith('/') ? gameIcon.icon : `/${gameIcon.icon}`;
           // setGameLogoSrc(imgUrl);  — intentionally disabled to preserve local signboard
           console.log('[API] Game logo loaded (not applied — using local signboard):', imgUrl);
         }
