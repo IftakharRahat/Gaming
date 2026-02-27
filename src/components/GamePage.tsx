@@ -3703,9 +3703,9 @@ const GamePage = () => {
             const boxWidth = 56;
             // Align chests exactly with the progress bar (left: 25, width: 343)
             const barLeft = 25;
-            const barRight = 25 + 355; // 380
-            const firstChestLeft = barLeft + 20; // 45 â€” slight inset from bar start
-            const lastChestLeft = barRight - boxWidth; // 324 â€” last chest flush with bar end
+            const barRight = 25 + 330; // 355 — tighter to prevent overflow
+            const firstChestLeft = barLeft + 15; // 40
+            const lastChestLeft = barRight - boxWidth; // 299 — last chest fully inside
             const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
             const xPos = firstChestLeft + idx * spacing;
 
