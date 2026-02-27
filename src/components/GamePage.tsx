@@ -3679,7 +3679,7 @@ const GamePage = () => {
             style={{
               left: 25,
               top: 203,
-              width: 310,
+              width: 340,
               height: 18,
               borderRadius: 20,
               background: isAdvanceMode ? '#D95B48' : '#0F6095',
@@ -3703,9 +3703,9 @@ const GamePage = () => {
             const boxWidth = 56;
             // Align chests exactly with the progress bar (left: 25, width: 343)
             const barLeft = 25;
-            const barRight = 25 + 330; // 355 — tighter to prevent overflow
+            const barRight = 25 + 345; // 370 — aligned with chip container right edge
             const firstChestLeft = barLeft + 15; // 40
-            const lastChestLeft = barRight - boxWidth; // 299 — last chest fully inside
+            const lastChestLeft = barRight - boxWidth; // 314 — last chest right edge at 370
             const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
             const xPos = firstChestLeft + idx * spacing;
 
