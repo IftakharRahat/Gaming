@@ -3679,7 +3679,7 @@ const GamePage = () => {
             style={{
               left: 25,
               top: 203,
-              width: 343,
+              width: 310,
               height: 18,
               borderRadius: 20,
               background: isAdvanceMode ? '#D95B48' : '#0F6095',
