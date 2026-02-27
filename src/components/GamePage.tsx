@@ -5487,13 +5487,19 @@ const GamePage = () => {
                         color: '#be6a31',
                       }}
                     >
-                      <div>Users who have placed bets exceeding 500,000 coins in the past 7 days can unlock the premium mode.</div>
+                      <div>Users who have placed bets exceeding the required threshold in the past 7 days can unlock premium mode.</div>
 
-                      <div style={{ marginTop: 18 }}>
-                        Keep going! Only{' '}
-                        <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvanceApi)}</span>{' '}
-                        diamonds to unlock!
-                      </div>
+                      {remainingForAdvanceApi > 0 ? (
+                        <div style={{ marginTop: 18 }}>
+                          Keep going! Only{' '}
+                          <span style={{ color: '#E92407', fontWeight: 900 }}>{formatNum(remainingForAdvanceApi)}</span>{' '}
+                          diamonds to unlock!
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 18, color: '#25C640', fontWeight: 700 }}>
+                          You have unlocked Advanced Mode!
+                        </div>
+                      )}
                     </div>
 
                     <img
@@ -5506,7 +5512,9 @@ const GamePage = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setMode('ADVANCE');
+                        if (advanceModeApi?.advance === true || remainingForAdvanceApi <= 0) {
+                          setMode('ADVANCE');
+                        }
                         setActiveModal('NONE');
                       }}
                       className="absolute left-1/2 -translate-x-1/2"
