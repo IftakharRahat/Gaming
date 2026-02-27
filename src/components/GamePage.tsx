@@ -3966,7 +3966,7 @@ const GamePage = () => {
                       style={{ width: 44, height: 44 }}
                     >
                       <img
-                        src={winnerItem ? winnerItem.src : '/image2/lemon.png'}
+                        src={roundType === 'JACKPOT' ? '/image2/bucket.png' : (winnerItem ? winnerItem.src : '/image2/lemon.png')}
                         alt=""
                         className="h-[34px] w-[34px] object-contain drop-shadow-md"
                       />
