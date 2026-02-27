@@ -2062,8 +2062,9 @@ const GamePage = () => {
         setTopWinnersRows(mapped);
       }
 
-      /* Result strip (win history) */
-      if (winHistRes.status === 'fulfilled' && Array.isArray(winHistRes.value) && winHistRes.value.length > 0) {
+      /* Result strip (win history) — only update during BETTING to avoid
+         wiping the current round's winner during DRAWING/SHOWTIME */
+      if (phase === 'BETTING' && winHistRes.status === 'fulfilled' && Array.isArray(winHistRes.value) && winHistRes.value.length > 0) {
         const latestWin = winHistRes.value[winHistRes.value.length - 1];
         if (typeof latestWin?.id === 'number') {
           lastWinIdRef.current = latestWin.id;
@@ -2128,8 +2129,12 @@ const GamePage = () => {
     const elapsed = Date.now() - drawStartRef.current;
     const remainingMs = Math.max(2000, DRAW_SECONDS * 1000 - elapsed - 100);
 
+    /* Continue from where the fast-spin left off instead of restarting from 0 */
+    const currentStep = drawHighlightIndex;
     const fullLoops = 2;
-    const totalSteps = fullLoops * order.length + winnerIdx + 1;
+    /* Calculate how many steps from current position to winner, going forward */
+    const stepsToWinner = ((winnerIdx - currentStep) % order.length + order.length) % order.length;
+    const totalSteps = fullLoops * order.length + stepsToWinner + 1;
 
     const rawDelays: number[] = [];
     for (let i = 0; i < totalSteps; i++) {
@@ -2146,7 +2151,7 @@ const GamePage = () => {
       cumulative += delays[i];
       const step = i;
       const timerId = window.setTimeout(() => {
-        setDrawHighlightIndex(step % order.length);
+        setDrawHighlightIndex((currentStep + step) % order.length);
       }, cumulative);
       timers.push(timerId);
     }
