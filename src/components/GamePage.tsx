@@ -1075,9 +1075,7 @@ const GamePage = () => {
   const [itemMultiplier, setItemMultiplier] = useState<Record<ItemId, number>>(DEFAULT_MULTIPLIER);
   const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
   const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
-  const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
-    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: src.replace('.png', '_open.png'), label: BOX_LABELS[Number(val)] || '' }))
-  );
+  const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>([]);
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
