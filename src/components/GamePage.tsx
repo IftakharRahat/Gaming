@@ -3602,7 +3602,7 @@ const GamePage = () => {
 
               const isLargeChip = value === 100 || value === 10000;
               const baseSize = isLargeChip ? 67 : 54;
-              const chipSize = active ? baseSize * 0.88 : baseSize;
+              const chipSize = baseSize;
               const marginTop = isLargeChip ? -5 : 0;
 
               // Manual gap control - adjust each value as needed
@@ -3664,8 +3664,7 @@ const GamePage = () => {
                       height: chipSize,
                     }}
                     animate={{
-                      scale: active ? 0.88 : 1,
-                      y: active ? -8 : 0,
+                      scale: active ? 1.15 : 1,
                     }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                   />
