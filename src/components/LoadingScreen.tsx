@@ -63,9 +63,9 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
             const mBody = JSON.stringify({ regisation: 3, mode: 2 });
 
             const endpoints = [
-                { key: 'elements', path: '/game/game/elements' },
-                { key: 'buttons', path: '/game/sorce/buttons' },
-                { key: 'boxes', path: '/game/magic/boxs' },
+                { key: 'elements', path: '/game/game/elements', body: mBody },
+                { key: 'buttons', path: '/game/sorce/buttons', body: mBody },
+                { key: 'boxes', path: '/game/magic/boxs', body: mBody },
                 { key: 'jackpotDetails', path: '/game/jackpot/details', body: mBody },
                 { key: 'gameMode', path: '/game/game/mode', body: mBody },
                 { key: 'winHistory', path: '/game/win/elements/list', body: mBody },
