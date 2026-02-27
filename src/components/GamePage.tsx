@@ -13,6 +13,7 @@ const PRE_DRAW_MS = 2000;
 const WINNER_POLL_INTERVAL_MS = 800;
 const WINNER_POLL_MAX_ATTEMPTS = 20;
 const TIMER_SYNC_INTERVAL_MS = 5000;
+const BETTING_TICK_INTERVAL_MS = 250;
 const LIVE_REFRESH_INTERVAL_MS = 10000;
 const WINNER_MAX_WAIT_MS = 15000;
 
@@ -464,6 +465,10 @@ const formatRoundTime = (date: Date) => {
   const mm = `${date.getMinutes()}`.padStart(2, '0');
   const ss = `${date.getSeconds()}`.padStart(2, '0');
   return `${d}/${m}/${y} ${hh}:${mm}:${ss}`;
+};
+
+const computeRemainingSecondsFromEndMs = (endMs: number, nowMs = Date.now()) => {
+  return Math.max(0, Math.ceil((endMs - nowMs) / 1000));
 };
 
 const buildEmptyBets = (): BetsState => ({
@@ -1796,6 +1801,84 @@ const GamePage = () => {
   }, [applyWinnerFromServer, isAdvanceMode]);
 
   const currentSessionEndRef = useRef<string>('');
+  const bettingEndMsRef = useRef<number>(0);
+  const serverClockOffsetMsRef = useRef<number>(0);
+  const getAlignedNowMs = useCallback(() => Date.now() + serverClockOffsetMsRef.current, []);
+  const updateServerClockOffsetFromResponse = useCallback((res: Response) => {
+    const serverDateHeader = res.headers.get('date');
+    if (!serverDateHeader) return;
+
+    const serverNowMs = Date.parse(serverDateHeader);
+    if (!Number.isFinite(serverNowMs)) return;
+
+    serverClockOffsetMsRef.current = serverNowMs - Date.now();
+  }, []);
+  const fetchSessionClock = useCallback(async (): Promise<{ session: ApiSessionTime; response: Response } | null> => {
+    try {
+      const response = await fetch(`${API_BASE}/game/game/session/end/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: SESSION_BODY,
+      });
+      if (!response.ok) return null;
+
+      const session = await response.json() as ApiSessionTime;
+      if (!session?.next_run_time) return null;
+      if (!Number.isFinite(Date.parse(session.next_run_time))) return null;
+
+      return { session, response };
+    } catch {
+      return null;
+    }
+  }, []);
+  const fetchBestSessionClock = useCallback(async (sampleCount = 3): Promise<{ session: ApiSessionTime; response: Response } | null> => {
+    const samplePromises = Array.from({ length: sampleCount }, () => fetchSessionClock());
+    const sampled = await Promise.all(samplePromises);
+    const valid = sampled.filter((entry): entry is { session: ApiSessionTime; response: Response } => Boolean(entry));
+    if (valid.length === 0) return null;
+
+    let best = valid[0];
+    let bestEndMs = Date.parse(best.session.next_run_time);
+    for (let i = 1; i < valid.length; i++) {
+      const candidate = valid[i];
+      const candidateEndMs = Date.parse(candidate.session.next_run_time);
+      if (candidateEndMs > bestEndMs) {
+        best = candidate;
+        bestEndMs = candidateEndMs;
+      }
+    }
+    return best;
+  }, [fetchSessionClock]);
+  const applyServerSessionClock = useCallback((
+    session: ApiSessionTime,
+    options?: { allowForwardJump?: boolean; maxForwardSeconds?: number; maxBackwardSeconds?: number }
+  ): number | null => {
+    const serverEndMs = Date.parse(session.next_run_time);
+    if (!Number.isFinite(serverEndMs)) return null;
+
+    const nowMs = getAlignedNowMs();
+    const nextRemaining = computeRemainingSecondsFromEndMs(serverEndMs, nowMs);
+    const hasCurrentEnd = bettingEndMsRef.current > 0;
+    const allowForwardJump = options?.allowForwardJump ?? true;
+    const maxForwardSeconds = options?.maxForwardSeconds ?? 1;
+    const maxBackwardSeconds = options?.maxBackwardSeconds;
+
+    if (!allowForwardJump && hasCurrentEnd) {
+      const currentRemaining = computeRemainingSecondsFromEndMs(bettingEndMsRef.current, nowMs);
+      if (nextRemaining > currentRemaining + maxForwardSeconds) {
+        /* Ignore backend session jumps that would restart the countdown mid-round. */
+        return currentRemaining;
+      }
+      if (typeof maxBackwardSeconds === 'number' && nextRemaining < currentRemaining - maxBackwardSeconds) {
+        /* Ignore stale backend nodes that would abruptly cut the countdown. */
+        return currentRemaining;
+      }
+    }
+
+    currentSessionEndRef.current = session.next_run_time;
+    bettingEndMsRef.current = serverEndMs;
+    return nextRemaining;
+  }, [getAlignedNowMs]);
 
   const beginRound = useCallback(async () => {
     transitioningRef.current = false; // clear gate so next SHOWTIME can transition
@@ -1807,19 +1890,19 @@ const GamePage = () => {
     latestPolledWinRef.current = null;
 
     try {
-      const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: SESSION_BODY,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const session = await res.json() as ApiSessionTime;
-      const serverEnd = Date.parse(session.next_run_time);
-      const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
+      const bestSession = await fetchBestSessionClock(3);
+      if (!bestSession) throw new Error('No valid session clock response');
+
+      updateServerClockOffsetFromResponse(bestSession.response);
+      const session = bestSession.session;
+      const remaining = applyServerSessionClock(session);
+      if (remaining == null) throw new Error('Invalid session next_run_time');
 
       if (remaining <= 0) {
         /* Session already expired — skip to DRAWING immediately */
         console.log('[TIMER] Session already expired, skipping to DRAWING');
+        currentSessionEndRef.current = '';
+        bettingEndMsRef.current = 0;
         setPhase('DRAWING');
         phaseRef.current = 'DRAWING';
         setTimeLeft(DRAW_SECONDS);
@@ -1835,20 +1918,16 @@ const GamePage = () => {
       setPhase('BETTING');
       phaseRef.current = 'BETTING';
       setShowPreDraw(true);
-
-      if (remaining > 0 && remaining < 300) {
-        setTimeLeft(remaining);
-        currentSessionEndRef.current = session.next_run_time;
-      } else {
-        setTimeLeft(BET_SECONDS);
-      }
+      setTimeLeft(remaining);
     } catch {
+      currentSessionEndRef.current = '';
+      bettingEndMsRef.current = 0;
       setPhase('BETTING');
       phaseRef.current = 'BETTING';
       setShowPreDraw(true);
       setTimeLeft(BET_SECONDS);
     }
-  }, [pollWinnerUntilNewResult]);
+  }, [applyServerSessionClock, fetchBestSessionClock, pollWinnerUntilNewResult, updateServerClockOffsetFromResponse]);
 
 
   const [chestPopup, setChestPopup] = useState<null | { threshold: number; amount: number }>(null);
@@ -1950,7 +2029,7 @@ const GamePage = () => {
   }, [showGameOn]);
 
   useEffect(() => {
-    if (activeModal !== 'NONE' || showGameOn || showPreDraw) return;
+    if (phase === 'BETTING' || activeModal !== 'NONE' || showGameOn || showPreDraw) return;
 
     const id = window.setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
@@ -1958,6 +2037,19 @@ const GamePage = () => {
 
     return () => window.clearInterval(id);
   }, [activeModal, showGameOn, showPreDraw, phase]);
+
+  useEffect(() => {
+    if (phase !== 'BETTING') return;
+
+    const tickBettingClock = () => {
+      if (!bettingEndMsRef.current) return;
+      setTimeLeft(computeRemainingSecondsFromEndMs(bettingEndMsRef.current, getAlignedNowMs()));
+    };
+
+    tickBettingClock();
+    const id = window.setInterval(tickBettingClock, BETTING_TICK_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [getAlignedNowMs, phase]);
 
   /* ── Periodic timer sync during BETTING (with backoff) ── */
   const timerSyncFailCountRef = useRef(0);
@@ -1968,8 +2060,9 @@ const GamePage = () => {
     }
 
     const syncTimer = async () => {
-      /* Back off after 3 consecutive failures — stop spamming broken endpoint */
+      /* Back off after 3 consecutive failures - stop spamming broken endpoint */
       if (timerSyncFailCountRef.current >= 3) return;
+      if (phaseRef.current !== 'BETTING') return;
 
       try {
         const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
@@ -1977,42 +2070,47 @@ const GamePage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: SESSION_BODY,
         });
+        if (phaseRef.current !== 'BETTING') return;
         if (!res.ok) {
           timerSyncFailCountRef.current += 1;
           return;
         }
-        const session = await res.json() as ApiSessionTime;
 
-        /* Only sync if this is the SAME session we started with */
-        if (currentSessionEndRef.current && session.next_run_time !== currentSessionEndRef.current) {
-          /* Server returned a different session — don't update timer */
+        updateServerClockOffsetFromResponse(res);
+        const session = await res.json() as ApiSessionTime;
+        if (phaseRef.current !== 'BETTING') return;
+        const remaining = applyServerSessionClock(session, {
+          allowForwardJump: false,
+          maxForwardSeconds: 1,
+          maxBackwardSeconds: 2,
+        });
+        if (remaining == null) {
+          timerSyncFailCountRef.current += 1;
           return;
         }
 
-        /* Store session ref on first successful sync (if beginRound failed to get it) */
-        if (!currentSessionEndRef.current) {
-          currentSessionEndRef.current = session.next_run_time;
-        }
-
-        const serverEnd = Date.parse(session.next_run_time);
-        const remaining = Math.max(0, Math.round((serverEnd - Date.now()) / 1000));
-
-        /* Only adjust timer DOWNWARD — never increase it */
-        setTimeLeft(prev => {
-          if (remaining >= 0 && remaining < 300 && remaining <= prev) {
-            timerSyncFailCountRef.current = 0;
-            return remaining;
-          }
-          return prev;
-        });
+        if (phaseRef.current !== 'BETTING') return;
+        timerSyncFailCountRef.current = 0;
+        setTimeLeft(remaining);
       } catch {
         timerSyncFailCountRef.current += 1;
       }
     };
 
+    void syncTimer();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncTimer();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
     const id = window.setInterval(syncTimer, TIMER_SYNC_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [phase]);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.clearInterval(id);
+    };
+  }, [applyServerSessionClock, phase, updateServerClockOffsetFromResponse]);
 
   /* ── Periodic live data refresh during BETTING ── */
   useEffect(() => {
@@ -2259,11 +2357,12 @@ const GamePage = () => {
   }, [showPreDraw]);
 
   useEffect(() => {
-    if (activeModal !== 'NONE' || showGameOn) return;
     if (timeLeft > 0) return;
 
     if (phase === 'BETTING') {
       /* Timer sync keeps countdown accurate; transition immediately to DRAWING */
+      currentSessionEndRef.current = '';
+      bettingEndMsRef.current = 0;
       setPhase('DRAWING');
       phaseRef.current = 'DRAWING';
       setTimeLeft(DRAW_SECONDS);
@@ -2276,6 +2375,8 @@ const GamePage = () => {
       void pollWinnerUntilNewResult(token);
       return;
     }
+
+    if (activeModal !== 'NONE' || showGameOn) return;
 
     if (phase === 'DRAWING') {
       const winners = winnerRef.current;
@@ -4094,7 +4195,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
+                    {/* â”€â”€ Red × close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4113,7 +4214,7 @@ const GamePage = () => {
                       }}
                       aria-label="Close rules"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
                     </button>
 
                     {/* â”€â”€ #FFEBBB content mask â€” hides baked-in board text â”€â”€ */}
@@ -4240,7 +4341,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
+                    {/* â”€â”€ Red × close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4259,7 +4360,7 @@ const GamePage = () => {
                       }}
                       aria-label="Close prize"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
                     </button>
 
                     {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
@@ -4444,7 +4545,7 @@ const GamePage = () => {
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
 
-                    {/* â”€â”€ Red âœ• close button â”€â”€ */}
+                    {/* â”€â”€ Red × close button â”€â”€ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4463,7 +4564,7 @@ const GamePage = () => {
                       }}
                       aria-label="Close records"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
                     </button>
 
                     {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
@@ -4773,7 +4874,7 @@ const GamePage = () => {
                           }}
                           aria-label="Close jackpot"
                         >
-                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
+                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
                         </button>
 
                         {/* â”€â”€ LAYER 6: Purple diamonds pile â”€â”€ */}
@@ -5074,7 +5175,7 @@ const GamePage = () => {
                       }}
                       aria-label="Close rank"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>âœ•</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
                     </button>
 
                     {/* â”€â”€ 3. Timer pill â”€â”€ left/top independent */}
@@ -5084,7 +5185,7 @@ const GamePage = () => {
                         left: '50%',
                         transform: 'translateX(-50%)',
                         top: 102.5,          /* â† change only this to move timer */
-                        width: 135,
+                        width: rankTab === 'YESTERDAY' ? 170 : 135,
                         height: 20,
                         borderRadius: 13,
                         background: 'rgba(140,90,30,0.22)',
@@ -5097,8 +5198,20 @@ const GamePage = () => {
                         zIndex: 5,
                       }}
                     >
-                      <span style={{ fontSize: 13 }}>â±</span>
+                      {rankTab === 'YESTERDAY' ? (
+
+                        <span>Yesterday  Ranking</span>
+
+                      ) : (
+
+                        <>
+
+                          <span style={{ fontSize: 13 }}>⌛</span>
                       {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
+
+                        </>
+
+                      )}
                     </div>
 
                     {/* â”€â”€ 4. Today / Yesterday sliding tab â”€â”€ left/top independent */}
