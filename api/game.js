@@ -1,4 +1,4 @@
-import https from 'node:https';
+import http from 'node:http';
 
 const API_HOST = 'funint.site';
 
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
         ? toBuffer(req.body)
         : await readRawBody(req);
 
-    const proxyReq = https.request(
+    const proxyReq = http.request(
       {
         hostname: API_HOST,
         path: requestPath,

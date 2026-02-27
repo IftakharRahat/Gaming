@@ -1,4 +1,4 @@
-import https from 'https';
+import http from 'http';
 
 const BASE = 'funint.site';
 const BODY = JSON.stringify({ regisation: '3' });
@@ -39,7 +39,7 @@ async function testEndpoint(ep) {
             },
         };
 
-        const req = https.request(options, (res) => {
+        const req = http.request(options, (res) => {
             let data = '';
             res.on('data', (chunk) => (data += chunk));
             res.on('end', () => {
