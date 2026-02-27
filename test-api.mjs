@@ -1,7 +1,7 @@
 import https from 'https';
 import fs from 'fs';
 
-const BASE = 'gameadmin.nanovisionltd.com';
+const BASE = 'funint.site';
 const BODY = JSON.stringify({ regisation: "3" });
 
 const endpoints = [

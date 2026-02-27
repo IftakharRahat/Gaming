@@ -4,7 +4,7 @@ import { compression } from 'vite-plugin-compression2'
 import https from 'node:https'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-const API_HOST = 'gameadmin.nanovisionltd.com'
+const API_HOST = 'funint.site'
 
 /**
  * Custom middleware that proxies /game/* requests.

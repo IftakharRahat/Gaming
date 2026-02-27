@@ -1225,10 +1225,10 @@ const GamePage = () => {
         if (boxes && boxes.length > 0) {
           const bd = boxes.map((b) => ({
             src: b.box_image_close
-              ? `https://gameadmin.nanovisionltd.com/${b.box_image_close}`
+              ? `https://funint.site/${b.box_image_close}`
               : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
             openSrc: b.box_image_open
-              ? `https://gameadmin.nanovisionltd.com/${b.box_image_open}`
+              ? `https://funint.site/${b.box_image_open}`
               : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
@@ -1240,7 +1240,7 @@ const GamePage = () => {
 
         /* Trophy image */
         if (trophy?.icon) {
-          const imgUrl = `https://gameadmin.nanovisionltd.com${trophy.icon}`;
+          const imgUrl = `https://funint.site${trophy.icon}`;
           setTrophySrc(imgUrl);
           console.log('[API] Trophy loaded:', imgUrl);
         }
@@ -1271,7 +1271,7 @@ const GamePage = () => {
 
         /* Coin icon */
         if (coin?.icon) {
-          const imgUrl = `https://gameadmin.nanovisionltd.com${coin.icon}`;
+          const imgUrl = `https://funint.site${coin.icon}`;
           setCoinIconSrc(imgUrl);
           console.log('[API] Coin icon loaded:', imgUrl);
         }
@@ -1279,7 +1279,7 @@ const GamePage = () => {
         /* Game logo icon — keep the local signboard; the API icon lacks
            the wooden background and food decorations */
         if (gameIcon?.icon) {
-          const imgUrl = `https://gameadmin.nanovisionltd.com${gameIcon.icon}`;
+          const imgUrl = `https://funint.site${gameIcon.icon}`;
           // setGameLogoSrc(imgUrl);  — intentionally disabled to preserve local signboard
           console.log('[API] Game logo loaded (not applied — using local signboard):', imgUrl);
         }
@@ -1356,7 +1356,7 @@ const GamePage = () => {
             return {
               name,
               diamonds: balance,
-              pic: pic ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${pic}`) : undefined,
+              pic: pic ? encodeURI(`https://funint.site/media/${pic}`) : undefined,
             };
           });
         };
@@ -1377,7 +1377,7 @@ const GamePage = () => {
             name: r.mrs_player_id_player_name,
             amount: r.last_balance,
             pic: r.mrs_player_id_player_pic
-              ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
+              ? encodeURI(`https://funint.site/media/${r.mrs_player_id_player_pic}`)
               : undefined,
           }));
           console.log('[API] Top Winners from API:', topWinnersMapped.length, 'rows');
@@ -2041,7 +2041,7 @@ const GamePage = () => {
           name: row.mrs_player_id_player_name ?? row.player_name ?? row.name ?? 'Unknown',
           diamonds: row.last_balance ?? row.balance ?? 0,
           pic: (row.mrs_player_id_player_pic ?? row.player_pic ?? null)
-            ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
+            ? encodeURI(`https://funint.site/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
             : undefined,
         }));
         if (parsed.length > 0) {
@@ -2056,7 +2056,7 @@ const GamePage = () => {
           name: r.mrs_player_id_player_name,
           amount: r.last_balance,
           pic: r.mrs_player_id_player_pic
-            ? encodeURI(`https://gameadmin.nanovisionltd.com/media/${r.mrs_player_id_player_pic}`)
+            ? encodeURI(`https://funint.site/media/${r.mrs_player_id_player_pic}`)
             : undefined,
         }));
         setTopWinnersRows(mapped);

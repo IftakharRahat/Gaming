@@ -1,6 +1,6 @@
 import https from 'https';
 
-const BASE = 'gameadmin.nanovisionltd.com';
+const BASE = 'funint.site';
 const BODY = JSON.stringify({ regisation: '3' });
 const BODY_PLAYER = JSON.stringify({ regisation: 3, player_id: 1065465 });
 

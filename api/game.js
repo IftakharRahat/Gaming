@@ -1,6 +1,6 @@
 import https from 'node:https';
 
-const API_HOST = 'gameadmin.nanovisionltd.com';
+const API_HOST = 'funint.site';
 
 function toBuffer(body) {
   if (body == null) return Buffer.alloc(0);
