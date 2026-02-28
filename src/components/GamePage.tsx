@@ -1890,44 +1890,65 @@ const GamePage = () => {
     setRoundType('NORMAL');
     latestPolledWinRef.current = null;
 
-    try {
-      const bestSession = await fetchBestSessionClock(3);
-      if (!bestSession) throw new Error('No valid session clock response');
+    /* Try up to 3 times to sync with server session clock */
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[TIMER] beginRound attempt ${attempt}/3`);
+        const bestSession = await fetchBestSessionClock(3);
+        if (!bestSession) {
+          console.warn(`[TIMER] Attempt ${attempt}: No valid session clock response`);
+          if (attempt < 3) { await new Promise(r => setTimeout(r, 500)); continue; }
+          throw new Error('No valid session clock response after 3 attempts');
+        }
 
-      updateServerClockOffsetFromResponse(bestSession.response);
-      const session = bestSession.session;
-      const remaining = applyServerSessionClock(session);
-      if (remaining == null) throw new Error('Invalid session next_run_time');
+        updateServerClockOffsetFromResponse(bestSession.response);
+        const session = bestSession.session;
+        console.log('[TIMER] Server session:', session.next_run_time);
+        const remaining = applyServerSessionClock(session);
+        console.log('[TIMER] Computed remaining:', remaining, 'seconds');
+        if (remaining == null) {
+          console.warn(`[TIMER] Attempt ${attempt}: Invalid remaining`);
+          if (attempt < 3) { await new Promise(r => setTimeout(r, 500)); continue; }
+          throw new Error('Invalid session next_run_time after 3 attempts');
+        }
 
-      if (remaining <= 0) {
-        /* Session already expired — skip to DRAWING immediately */
-        console.log('[TIMER] Session already expired, skipping to DRAWING');
-        currentSessionEndRef.current = '';
-        bettingEndMsRef.current = 0;
-        setPhase('DRAWING');
-        phaseRef.current = 'DRAWING';
-        setTimeLeft(DRAW_SECONDS);
-        setWinnerIds(null);
-        winnerRef.current = null;
+        if (remaining <= 0) {
+          /* Session already expired — skip to DRAWING immediately */
+          console.log('[TIMER] Session already expired, skipping to DRAWING');
+          currentSessionEndRef.current = '';
+          bettingEndMsRef.current = 0;
+          setPhase('DRAWING');
+          phaseRef.current = 'DRAWING';
+          setTimeLeft(DRAW_SECONDS);
+          setWinnerIds(null);
+          winnerRef.current = null;
 
-        const token = Date.now();
-        winnerPollTokenRef.current = token;
-        void pollWinnerUntilNewResult(token);
-        return;
+          const token = Date.now();
+          winnerPollTokenRef.current = token;
+          void pollWinnerUntilNewResult(token);
+          return;
+        }
+
+        console.log(`[TIMER] Synced! Starting BETTING with ${remaining}s remaining`);
+        setPhase('BETTING');
+        phaseRef.current = 'BETTING';
+        setShowPreDraw(true);
+        setTimeLeft(remaining);
+        return; // success — exit the retry loop
+      } catch (err) {
+        console.error(`[TIMER] beginRound attempt ${attempt} failed:`, err);
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 500)); continue; }
       }
-
-      setPhase('BETTING');
-      phaseRef.current = 'BETTING';
-      setShowPreDraw(true);
-      setTimeLeft(remaining);
-    } catch {
-      currentSessionEndRef.current = '';
-      bettingEndMsRef.current = 0;
-      setPhase('BETTING');
-      phaseRef.current = 'BETTING';
-      setShowPreDraw(true);
-      setTimeLeft(BET_SECONDS);
     }
+
+    /* All 3 attempts failed — fallback to local timer */
+    console.warn('[TIMER] All session sync attempts failed, falling back to BET_SECONDS =', BET_SECONDS);
+    currentSessionEndRef.current = '';
+    bettingEndMsRef.current = 0;
+    setPhase('BETTING');
+    phaseRef.current = 'BETTING';
+    setShowPreDraw(true);
+    setTimeLeft(BET_SECONDS);
   }, [applyServerSessionClock, fetchBestSessionClock, pollWinnerUntilNewResult, updateServerClockOffsetFromResponse]);
 
 
