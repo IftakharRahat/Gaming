@@ -7,15 +7,15 @@ const DEBUG = false;
 const ARTBOARD = { width: 402, height: 735 } as const;
 
 const BET_SECONDS = 20;
-const DRAW_SECONDS = 8;
-const SHOW_SECONDS = 5;
-const PRE_DRAW_MS = 2000;
-const WINNER_POLL_INTERVAL_MS = 800;
-const WINNER_POLL_MAX_ATTEMPTS = 20;
+const DRAW_SECONDS = 4;       // was 8 — compressed to fit 30s round
+const SHOW_SECONDS = 3;       // was 5 — compressed to fit 30s round
+const PRE_DRAW_MS = 800;      // was 2000 — faster pre-draw flash
+const WINNER_POLL_INTERVAL_MS = 600;   // was 800 — poll faster
+const WINNER_POLL_MAX_ATTEMPTS = 12;   // was 20 — fewer attempts since less time
 const TIMER_SYNC_INTERVAL_MS = 5000;
 const BETTING_TICK_INTERVAL_MS = 250;
 const LIVE_REFRESH_INTERVAL_MS = 10000;
-const WINNER_MAX_WAIT_MS = 15000;
+const WINNER_MAX_WAIT_MS = 6000;       // was 15000 — can't wait this long in a 30s round
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
@@ -2415,7 +2415,7 @@ const GamePage = () => {
       });
 
       setPhase('SHOWTIME');
-      setTimeLeft(roundType === 'JACKPOT' ? 10 : SHOW_SECONDS);
+      setTimeLeft(roundType === 'JACKPOT' ? 5 : SHOW_SECONDS);
 
       if (winAmount > 0) {
         setShowFireworks(true);
