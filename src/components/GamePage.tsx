@@ -55,7 +55,6 @@ type RoundType = 'NORMAL' | 'JACKPOT';
 /* â”€â”€ API config â”€â”€ */
 const API_BASE = ''; // proxied via vite.config.ts
 const API_BODY = JSON.stringify({ regisation: 3 });
-const SESSION_BODY = JSON.stringify({ regisatration: 3 }); // session/end/time uses this spelling
 /* Body with mode: 2 = general/basic, 1 = advance */
 const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
 const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
@@ -1819,7 +1818,7 @@ const GamePage = () => {
       const response = await fetch(`${API_BASE}/game/game/session/end/time`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: SESSION_BODY,
+        body: API_BODY,
       });
       if (!response.ok) return null;
 
@@ -2093,7 +2092,7 @@ const GamePage = () => {
         const res = await fetch(`${API_BASE}/game/game/session/end/time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: SESSION_BODY,
+          body: API_BODY,
         });
         if (phaseRef.current !== 'BETTING') return;
         if (!res.ok) {
