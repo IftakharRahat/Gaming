@@ -1838,16 +1838,19 @@ const GamePage = () => {
     const valid = sampled.filter((entry): entry is { session: ApiSessionTime; response: Response } => Boolean(entry));
     if (valid.length === 0) return null;
 
+    // Pick the EARLIEST (soonest) next_run_time — ensures all clients
+    // join the same current round even if the load balancer hits different servers
     let best = valid[0];
     let bestEndMs = Date.parse(best.session.next_run_time);
     for (let i = 1; i < valid.length; i++) {
       const candidate = valid[i];
       const candidateEndMs = Date.parse(candidate.session.next_run_time);
-      if (candidateEndMs > bestEndMs) {
+      if (candidateEndMs < bestEndMs) {
         best = candidate;
         bestEndMs = candidateEndMs;
       }
     }
+    console.log(`[TIMER] Sampled ${valid.length}/${sampleCount} sessions, picked earliest:`, best.session.next_run_time);
     return best;
   }, [fetchSessionClock]);
   const applyServerSessionClock = useCallback((
