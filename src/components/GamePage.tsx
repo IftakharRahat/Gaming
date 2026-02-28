@@ -1634,15 +1634,22 @@ const GamePage = () => {
 
   const applyWinnerFromServer = useCallback((entry: ApiWinElement): boolean => {
     if (entry.gjp__jackpot_name && (entry.jackport_element_name?.length ?? 0) > 0) {
-      const jackpotIds = (entry.jackport_element_name ?? [])
+      const allJackpotIds = (entry.jackport_element_name ?? [])
         .map((name) => API_NAME_TO_ID[name])
         .filter((id): id is ItemId => Boolean(id));
 
-      if (jackpotIds.length > 0) {
+      if (allJackpotIds.length > 0) {
+        // Ensure jackpot highlights only one category (veg OR drinks) — same behavior in both modes
+        const firstId = allJackpotIds[0];
+        const isVegCategory = VEG_ITEMS.includes(firstId);
+        const jackpotIds = allJackpotIds.filter((id) =>
+          isVegCategory ? VEG_ITEMS.includes(id) : DRINK_ITEMS.includes(id)
+        );
+
         setRoundType('JACKPOT');
-        winnerRef.current = jackpotIds;
-        setWinnerIds(jackpotIds);
-        console.log('[LIVE] Jackpot winner:', jackpotIds);
+        winnerRef.current = jackpotIds.length > 0 ? jackpotIds : allJackpotIds;
+        setWinnerIds(jackpotIds.length > 0 ? jackpotIds : allJackpotIds);
+        console.log('[LIVE] Jackpot winner:', jackpotIds, '(filtered from', allJackpotIds, ')');
         return true;
       }
     }
