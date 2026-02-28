@@ -1,4 +1,4 @@
-import http from 'node:http';
+import https from 'node:https';
 
 const API_HOST = 'funint.site';
 
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
         const remotePath = '/media/' + mediaPath.replace(/^\/+/, '');
 
-        const proxyReq = http.request(
+        const proxyReq = https.request(
             {
                 hostname: API_HOST,
                 path: remotePath,
