@@ -3643,13 +3643,14 @@ const GamePage = () => {
               const imgSrc = CHIP_IMAGE_MAP[value] || '/image2/chip_10.png';
 
               const isLargeChip = value === 100 || value === 10000;
-              const baseSize = isLargeChip ? 67 : 54;
+              const hasMany = chipValues.length > 5;
+              const baseSize = hasMany ? (isLargeChip ? 54 : 46) : (isLargeChip ? 67 : 54);
               const chipSize = baseSize;
-              const marginTop = isLargeChip ? -5 : 0;
+              const marginTop = isLargeChip && !hasMany ? -5 : 0;
 
               // Manual gap control - adjust each value as needed
-              const gaps = [0, 4, 7, 11, 11, 4.5]; // gap before each chip (index 0 is first chip)
-              const marginLeft = idx === 0 ? 0 : (gaps[idx] ?? 10);
+              const gaps = hasMany ? [0, 3, 4, 5, 5, 3] : [0, 4, 7, 11, 11, 4.5]; // gap before each chip (index 0 is first chip)
+              const marginLeft = idx === 0 ? 0 : (gaps[idx] ?? (hasMany ? 4 : 10));
 
               return (
                 <motion.button
