@@ -1123,7 +1123,7 @@ const GamePage = () => {
           () => apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
           () => prefetched?.jackpot ? Promise.resolve(prefetched.jackpot) : apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
           () => prefetched?.jackpotDetails ? Promise.resolve(prefetched.jackpotDetails) : apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
-          () => prefetched?.gameMode ? Promise.resolve(prefetched.gameMode) : apiFetch<ApiGameMode>('/game/game/mode', 2, mBody),
+          () => prefetched?.gameMode ? Promise.resolve(prefetched.gameMode) : apiFetch<ApiGameMode>('/game/game/mode', 2, pBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
           () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
@@ -1890,6 +1890,7 @@ const GamePage = () => {
     participantSubmitFailuresRef.current = 0;
 
     setRoundType('NORMAL');
+    setItemPulse({ id: null, key: 0 }); // clear stale pulse from previous round
     latestPolledWinRef.current = null;
 
     /* Try up to 3 times to sync with server session clock */
@@ -2499,6 +2500,7 @@ const GamePage = () => {
 
       setWinnerIds(null);
       winnerRef.current = null;
+      setItemPulse({ id: null, key: 0 }); // clear stale pulse so last-bet item doesn't bump next round
 
       setTimeout(() => void beginRound(), 150);
     }
