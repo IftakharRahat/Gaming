@@ -1259,7 +1259,15 @@ const GamePage = () => {
           }
 
           const srcs = winHistory
-            .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
+            .map((w) => {
+              if (w.element__element_name) return itemSrcMap[w.element__element_name];
+              // Jackpot entry: pick vegetables or drinks bucket based on first jackpot item
+              if (w.gjp__jackpot_name && w.jackport_element_name?.length) {
+                const firstId = API_NAME_TO_ID[w.jackport_element_name[0]];
+                if (firstId) return VEG_ITEMS.includes(firstId) ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png';
+              }
+              return undefined;
+            })
             .filter(Boolean) as string[];
 
           if (srcs.length > 0) {
@@ -2202,7 +2210,15 @@ const GamePage = () => {
         }
 
         const srcs = winHistRes.value
-          .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
+          .map((w) => {
+            if (w.element__element_name) return itemSrcMap[w.element__element_name];
+            // Jackpot entry: pick vegetables or drinks bucket based on first jackpot item
+            if (w.gjp__jackpot_name && w.jackport_element_name?.length) {
+              const firstId = API_NAME_TO_ID[w.jackport_element_name[0]];
+              if (firstId) return VEG_ITEMS.includes(firstId) ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png';
+            }
+            return undefined;
+          })
           .filter(Boolean) as string[];
 
         if (srcs.length > 0) {
@@ -3974,7 +3990,9 @@ const GamePage = () => {
                       style={{ width: 44, height: 44 }}
                     >
                       <img
-                        src={roundType === 'JACKPOT' ? '/image2/bucket.png' : (winnerItem ? winnerItem.src : '/image2/lemon.png')}
+                        src={roundType === 'JACKPOT'
+                          ? (winnerIds && winnerIds.length > 0 && VEG_ITEMS.includes(winnerIds[0]) ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png')
+                          : (winnerItem ? winnerItem.src : '/image2/lemon.png')}
                         alt=""
                         className="h-[34px] w-[34px] object-contain drop-shadow-md"
                       />
