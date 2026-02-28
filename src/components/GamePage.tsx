@@ -3980,7 +3980,7 @@ const GamePage = () => {
                 />
               ) : (
                 /* âœ… NO BET + LOSE PANEL */
-                <div className="absolute" style={{ left: 26, top: 300, width: 350, height: 340, overflow: 'hidden' }}>
+                <div className="absolute" style={{ left: 26, top: 330, width: 350, height: 340, overflow: 'hidden' }}>
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
                   {/* â”€â”€ Header: inside the rounded pill-shaped strip â”€â”€ */}
