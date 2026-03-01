@@ -1090,6 +1090,10 @@ const GamePage = () => {
   const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
     Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: src.replace('.png', '_open.png'), label: BOX_LABELS[Number(val)] || '' }))
   );
+  /* box_source → threshold mapping */
+  const BOX_SOURCE_TO_THRESHOLD: Record<number, number> = { 10: 10000, 20: 50000, 30: 100000, 40: 500000, 50: 1000000 };
+  /* Dynamic chest rewards from API (threshold → reward amount) */
+  const boxRewardsRef = useRef<Record<number, number>>({ 10000: 100, 50000: 200, 100000: 300, 500000: 400, 1000000: 500 });
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
@@ -1245,6 +1249,18 @@ const GamePage = () => {
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
           setBoxData(bd);
+          /* Store reward amounts from API */
+          const rewards: Record<number, number> = {};
+          for (const b of boxes) {
+            const threshold = BOX_SOURCE_TO_THRESHOLD[b.box_source];
+            if (threshold && typeof b.box_win_weights === 'number') {
+              rewards[threshold] = b.box_win_weights;
+            }
+          }
+          if (Object.keys(rewards).length > 0) {
+            boxRewardsRef.current = { ...boxRewardsRef.current, ...rewards };
+            console.log('[API] Box rewards from API:', rewards);
+          }
           console.log('[API] Boxes loaded:', bd);
         }
 
@@ -1604,7 +1620,18 @@ const GamePage = () => {
             label: BOX_LABELS[b.box_source] || `${b.box_source}`,
           }));
           setBoxData(bd);
-          console.log('[MODE] Boxes reloaded:', bd.length, 'boxes');
+          /* Store reward amounts from API */
+          const rewards: Record<number, number> = {};
+          for (const b of boxRes.value) {
+            const threshold = BOX_SOURCE_TO_THRESHOLD[b.box_source];
+            if (threshold && typeof b.box_win_weights === 'number') {
+              rewards[threshold] = b.box_win_weights;
+            }
+          }
+          if (Object.keys(rewards).length > 0) {
+            boxRewardsRef.current = { ...boxRewardsRef.current, ...rewards };
+          }
+          console.log('[MODE] Boxes reloaded:', bd.length, 'boxes, rewards:', rewards);
         }
 
         /* Win history */
@@ -1686,13 +1713,7 @@ const GamePage = () => {
   });
   // IMPORTANT: set your real reward amounts here (example values).
   // The popup in your screenshot shows 500, so adjust as needed per chest.
-  const CHEST_REWARD_AMOUNT_BY_THRESHOLD: Record<number, number> = {
-    10000: 100,
-    50000: 200,
-    100000: 300,
-    500000: 400,
-    1000000: 500,
-  };
+  /* Use API-driven rewards (boxRewardsRef) instead of hardcoded values */
   const isChestReady = (threshold: number) => todayWin >= threshold && !openedChests[threshold];
   const progressRatio = useMemo(() => {
     if (todayWin <= 0) return 0;
@@ -1715,7 +1736,7 @@ const GamePage = () => {
     setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
 
     // credit reward to balance
-    const amount = CHEST_REWARD_AMOUNT_BY_THRESHOLD[threshold] ?? 0;
+    const amount = boxRewardsRef.current[threshold] ?? 0;
     if (amount > 0) {
       setBalance((prev) => prev + amount);
     }
