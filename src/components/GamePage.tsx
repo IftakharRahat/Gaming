@@ -3176,13 +3176,13 @@ const GamePage = () => {
           const dimWheel = isSpinning || isShow;
 
           // Build focus ids:
-          // - DRAWING + JACKPOT => when spinner lands on a category item, highlight ALL items in that category
-          // - DRAWING + NORMAL => 1 (activeDrawHighlightId)
+          // - DRAWING + JACKPOT (after winner known) => highlight ALL items in winning category
+          // - DRAWING (fast spin / normal) => 1 item at a time
           // - SHOWTIME => winnerIds (1 for normal, 4 for jackpot)
           const focusIds: ItemId[] = (() => {
             if (isSpinning && activeDrawHighlightId) {
-              if (roundType === 'JACKPOT') {
-                // Highlight all 4 items from the same category as the currently highlighted item
+              // Only expand to full category once winner is determined
+              if (roundType === 'JACKPOT' && winnerIds && winnerIds.length > 1) {
                 if (VEG_ITEMS.includes(activeDrawHighlightId)) return [...VEG_ITEMS];
                 if (DRINK_ITEMS.includes(activeDrawHighlightId)) return [...DRINK_ITEMS];
               }
