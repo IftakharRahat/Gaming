@@ -2664,6 +2664,13 @@ const GamePage = () => {
 
       void refreshRoundStateFromServer();
 
+      /* Persist balance change to server */
+      const totalBetThisRound = pendingWin?.totalBet ?? 0;
+      const netChange = winAmount - totalBetThisRound;
+      if (netChange !== 0) {
+        void updateBalanceOnServer(netChange);
+      }
+
       setBets(buildEmptyBets());
       setPendingWin(null);
       setDrawHighlightIndex(0);
