@@ -1571,13 +1571,15 @@ const GamePage = () => {
             const id = API_NAME_TO_ID[el.element_name];
             if (id) {
               multipliers[id] = el.paytable;
-              if (el.element_icon) badges[id] = `https://funint.site/media/${el.element_icon}`;
+              badges[id] = `x${el.paytable}`;
               apiIds[id] = el.id;
             }
           }
           setItemMultiplier(multipliers);
           setBadgeOverrides(badges as Record<ItemId, string>);
           setElementApiIds(apiIds);
+          elementApiIdsRef.current = apiIds;
+          missingElementMapWarnedRef.current.clear();
           console.log('[MODE] Elements reloaded for', mode);
         }
 
