@@ -1744,17 +1744,15 @@ const GamePage = () => {
         .filter((id): id is ItemId => Boolean(id));
 
       if (allJackpotIds.length > 0) {
-        // Ensure jackpot highlights only one category (veg OR drinks) — same behavior in both modes
+        // Always use the FULL category (all 4 items) based on the first matched element
         const firstId = allJackpotIds[0];
         const isVegCategory = VEG_ITEMS.includes(firstId);
-        const jackpotIds = allJackpotIds.filter((id) =>
-          isVegCategory ? VEG_ITEMS.includes(id) : DRINK_ITEMS.includes(id)
-        );
+        const jackpotIds = isVegCategory ? [...VEG_ITEMS] : [...DRINK_ITEMS];
 
         setRoundType('JACKPOT');
-        winnerRef.current = jackpotIds.length > 0 ? jackpotIds : allJackpotIds;
-        setWinnerIds(jackpotIds.length > 0 ? jackpotIds : allJackpotIds);
-        console.log('[LIVE] Jackpot winner:', jackpotIds, '(filtered from', allJackpotIds, ')');
+        winnerRef.current = jackpotIds;
+        setWinnerIds(jackpotIds);
+        console.log('[LIVE] Jackpot winner category:', isVegCategory ? 'VEG' : 'DRINKS', jackpotIds, '(server sent:', allJackpotIds, ')');
         return true;
       }
     }
