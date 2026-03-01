@@ -1479,10 +1479,15 @@ const GamePage = () => {
           console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
         }
 
-        /* User Info / Balance — authoritative balance from server */
+        /* User Info / Balance — only use API value on first visit (no localStorage yet) */
         if (userInfo && typeof userInfo.balance === 'number') {
-          setBalance(userInfo.balance);
-          console.log('[API] User info loaded — balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+          const savedBalance = readLS(`gm_balance_${PLAYER_ID}`);
+          if (savedBalance == null || savedBalance === 0) {
+            setBalance(userInfo.balance);
+            console.log('[API] User info loaded — balance SET from API:', userInfo.balance, 'user_id:', userInfo.user_id);
+          } else {
+            console.log('[API] User info loaded — balance FROM localStorage:', savedBalance, '(API has:', userInfo.balance, ')');
+          }
         }
 
       } catch (err) {
@@ -1504,9 +1509,24 @@ const GamePage = () => {
 
   const [selectedChip, setSelectedChip] = useState<number>(100);
 
-  const [balance, setBalance] = useState(0);
-  const [todayWin, setTodayWin] = useState(0);
+  /* ── localStorage persistence for balance & todayWin (backend doesn't persist properly yet) ── */
+  const LS_KEY_BALANCE = `gm_balance_${PLAYER_ID}`;
+  const LS_KEY_TODAY_WIN = `gm_todaywin_${PLAYER_ID}`;
+
+  const readLS = (key: string): number | null => {
+    try { const v = localStorage.getItem(key); return v != null ? Number(v) : null; } catch { return null; }
+  };
+  const writeLS = (key: string, val: number) => {
+    try { localStorage.setItem(key, String(val)); } catch { /* quota */ }
+  };
+
+  const [balance, setBalance] = useState(() => readLS(LS_KEY_BALANCE) ?? 0);
+  const [todayWin, setTodayWin] = useState(() => readLS(LS_KEY_TODAY_WIN) ?? 0);
   const [lifetimeBet, setLifetimeBet] = useState(0);
+
+  /* Persist to localStorage whenever balance or todayWin changes */
+  useEffect(() => { writeLS(LS_KEY_BALANCE, balance); }, [balance, LS_KEY_BALANCE]);
+  useEffect(() => { writeLS(LS_KEY_TODAY_WIN, todayWin); }, [todayWin, LS_KEY_TODAY_WIN]);
 
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
