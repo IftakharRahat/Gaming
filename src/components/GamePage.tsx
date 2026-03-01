@@ -1479,15 +1479,10 @@ const GamePage = () => {
           console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
         }
 
-        /* User Info / Balance — only use API value on first visit (no localStorage yet) */
+        /* User Info / Balance — authoritative from server */
         if (userInfo && typeof userInfo.balance === 'number') {
-          const savedBalance = readLS(`gm_balance_${PLAYER_ID}`);
-          if (savedBalance == null || savedBalance === 0) {
-            setBalance(userInfo.balance);
-            console.log('[API] User info loaded — balance SET from API:', userInfo.balance, 'user_id:', userInfo.user_id);
-          } else {
-            console.log('[API] User info loaded — balance FROM localStorage:', savedBalance, '(API has:', userInfo.balance, ')');
-          }
+          setBalance(userInfo.balance);
+          console.log('[API] User info loaded — balance:', userInfo.balance, 'user_id:', userInfo.user_id);
         }
 
       } catch (err) {
@@ -1825,40 +1820,60 @@ const GamePage = () => {
         JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
     ]);
 
-    /* Player records — update for leaderboard display only, do NOT overwrite balance */
-    if (userInfoRes.status === 'fulfilled' && typeof userInfoRes.value?.balance === 'number') {
-      console.log('[LIVE] Server balance:', userInfoRes.value.balance, '(not overwriting local)');
-    }
-
+    /* Player records */
     if (recordsRes.status === 'fulfilled') {
       const rows = recordsRes.value?.data ?? [];
       setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
     }
 
-    /* TodayWin — only update if server value is HIGHER than local (never go backwards) */
+    /* TodayWin — trust server value from today/win API */
     if (todayWinRes.status === 'fulfilled') {
       const total = todayWinRes.value?.today_win?.total_balance;
-      if (typeof total === 'number' && Number.isFinite(total) && total > 0) {
-        setTodayWin((prev) => Math.max(prev, total));
+      if (typeof total === 'number' && Number.isFinite(total)) {
+        setTodayWin(total);
+        console.log('[LIVE] TodayWin from API:', total);
       }
+    }
+
+    /* Balance — trust user info API (called AFTER balance/update has saved) */
+    if (userInfoRes.status === 'fulfilled' && typeof userInfoRes.value?.balance === 'number') {
+      setBalance(userInfoRes.value.balance);
+      console.log('[LIVE] Balance from user info:', userInfoRes.value.balance);
     }
   }, [isAdvanceMode]);
 
-  /* POST balance update to server after each match */
-  const updateBalanceOnServer = useCallback(async (amount: number) => {
+  /* POST balance update to server, then fetch confirmed balance from user info */
+  const updateBalanceOnServer = useCallback(async (newBalance: number) => {
     if (!PLAYER_ID) return;
     try {
+      /* Step 1: POST the new absolute balance */
       const res = await fetch(`${API_BASE}/game/user/balance/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registration_id: 3, player_id: PLAYER_ID, amount }),
+        body: JSON.stringify({ registration_id: 3, player_id: PLAYER_ID, amount: newBalance }),
       });
       if (!res.ok) {
         console.warn('[API] Balance update failed:', res.status);
         return;
       }
       const data = await res.json();
-      console.log('[API] Balance updated on server:', data);
+      console.log('[API] Balance update sent (amount:', newBalance, '):', data);
+
+      /* Step 2: Fetch confirmed balance from user info */
+      try {
+        const infoRes = await fetch(`${API_BASE}/game/game/balance/and/user/info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regisation: 3, player_id: PLAYER_ID }),
+        });
+        if (infoRes.ok) {
+          const info: ApiUserInfo = await infoRes.json();
+          if (typeof info.balance === 'number') {
+            setBalance(info.balance);
+            console.log('[API] Confirmed balance from server:', info.balance);
+          }
+        }
+      } catch { /* non-critical */ }
     } catch (err) {
       console.warn('[API] Balance update error:', err);
     }
@@ -2676,12 +2691,8 @@ const GamePage = () => {
 
       void refreshRoundStateFromServer();
 
-      /* Persist balance change to server */
-      const totalBetThisRound = pendingWin?.totalBet ?? 0;
-      const netChange = winAmount - totalBetThisRound;
-      if (netChange !== 0) {
-        void updateBalanceOnServer(netChange);
-      }
+      /* Persist new absolute balance to server, then fetch confirmed value */
+      void updateBalanceOnServer(balanceAfter);
 
       setBets(buildEmptyBets());
       setPendingWin(null);
