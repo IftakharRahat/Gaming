@@ -1575,7 +1575,7 @@ const GamePage = () => {
               apiIds[id] = el.id;
             }
           }
-          setMultiplier(multipliers);
+          setItemMultiplier(multipliers);
           setBadgeOverrides(badges as Record<ItemId, string>);
           setElementApiIds(apiIds);
           console.log('[MODE] Elements reloaded for', mode);
@@ -1583,7 +1583,7 @@ const GamePage = () => {
 
         /* Buttons */
         if (btnRes.status === 'fulfilled' && btnRes.value?.length) {
-          const vals = btnRes.value.map((b) => b.source_value).filter(Boolean).sort((a, b) => a - b);
+          const vals = btnRes.value.map((b) => b.source).filter(Boolean).sort((a, b) => a - b);
           if (vals.length > 0) {
             setChipValues(vals);
             console.log('[MODE] Buttons reloaded:', vals);
@@ -3174,14 +3174,21 @@ const GamePage = () => {
           const dimWheel = isSpinning || isShow;
 
           // Build focus ids:
-          // - DRAWING => 1 (activeDrawHighlightId)
+          // - DRAWING + JACKPOT => when spinner lands on a category item, highlight ALL items in that category
+          // - DRAWING + NORMAL => 1 (activeDrawHighlightId)
           // - SHOWTIME => winnerIds (1 for normal, 4 for jackpot)
-          const focusIds: ItemId[] =
-            isSpinning && activeDrawHighlightId
-              ? [activeDrawHighlightId]
-              : isShow && winnerIds && winnerIds.length > 0
-                ? winnerIds
-                : [];
+          const focusIds: ItemId[] = (() => {
+            if (isSpinning && activeDrawHighlightId) {
+              if (roundType === 'JACKPOT') {
+                // Highlight all 4 items from the same category as the currently highlighted item
+                if (VEG_ITEMS.includes(activeDrawHighlightId)) return [...VEG_ITEMS];
+                if (DRINK_ITEMS.includes(activeDrawHighlightId)) return [...DRINK_ITEMS];
+              }
+              return [activeDrawHighlightId];
+            }
+            if (isShow && winnerIds && winnerIds.length > 0) return winnerIds;
+            return [];
+          })();
 
           // Precompute rects + centerY for clip math
           const focusRects = focusIds
