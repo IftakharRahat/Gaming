@@ -1537,6 +1537,91 @@ const GamePage = () => {
   useEffect(() => { document.title = gameName; }, [gameName]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { elementApiIdsRef.current = elementApiIds; }, [elementApiIds]);
+
+  /* ── When mode changes (Basic ↔ Advance), clear bets & re-fetch mode-specific data ── */
+  const prevModeRef = useRef<Mode>(mode);
+  useEffect(() => {
+    if (prevModeRef.current === mode) return; // skip initial mount
+    prevModeRef.current = mode;
+
+    console.log('[MODE] Switched to', mode, '— clearing bets & refreshing data');
+
+    /* 1. Clear all bets */
+    setBets(buildEmptyBets());
+
+    /* 2. Re-fetch mode-specific data (boxes, elements, buttons, win history) */
+    const modeNum = mode === 'ADVANCE' ? 1 : 2;
+    const mBody = apiBodyWithMode(modeNum);
+
+    (async () => {
+      try {
+        const [elemRes, btnRes, boxRes, winRes] = await Promise.allSettled([
+          apiFetch<ApiElement[]>('/game/game/elements', 1, mBody),
+          apiFetch<ApiButton[]>('/game/sorce/buttons', 1, mBody),
+          apiFetch<ApiBox[]>('/game/magic/boxs', 1, mBody),
+          apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
+        ]);
+
+        /* Elements — update multipliers & badges */
+        if (elemRes.status === 'fulfilled' && elemRes.value?.length) {
+          const multipliers = { ...DEFAULT_MULTIPLIER };
+          const badges: Record<string, string> = {};
+          const apiIds: Record<string, number> = {};
+          for (const el of elemRes.value) {
+            const id = API_NAME_TO_ID[el.element_name];
+            if (id) {
+              multipliers[id] = el.paytable;
+              if (el.element_icon) badges[id] = `https://funint.site/media/${el.element_icon}`;
+              apiIds[id] = el.id;
+            }
+          }
+          setMultiplier(multipliers);
+          setBadgeOverrides(badges as Record<ItemId, string>);
+          setElementApiIds(apiIds);
+          console.log('[MODE] Elements reloaded for', mode);
+        }
+
+        /* Buttons */
+        if (btnRes.status === 'fulfilled' && btnRes.value?.length) {
+          const vals = btnRes.value.map((b) => b.source_value).filter(Boolean).sort((a, b) => a - b);
+          if (vals.length > 0) {
+            setChipValues(vals);
+            console.log('[MODE] Buttons reloaded:', vals);
+          }
+        }
+
+        /* Boxes */
+        if (boxRes.status === 'fulfilled' && boxRes.value?.length) {
+          const bd = boxRes.value.map((b) => ({
+            src: b.box_image_close
+              ? `https://funint.site/${b.box_image_close}`
+              : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
+            openSrc: b.box_image_open
+              ? `https://funint.site/${b.box_image_open}`
+              : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
+            label: BOX_LABELS[b.box_source] || `${b.box_source}`,
+          }));
+          setBoxData(bd);
+          console.log('[MODE] Boxes reloaded:', bd.length, 'boxes');
+        }
+
+        /* Win history */
+        if (winRes.status === 'fulfilled' && winRes.value?.length) {
+          const itemSrcMap: Record<string, string> = {};
+          for (const item of ITEMS) {
+            const apiName = ID_TO_API_NAME[item.id];
+            if (apiName) itemSrcMap[apiName] = item.src;
+          }
+          const srcs = winRes.value
+            .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
+            .filter(Boolean) as string[];
+          if (srcs.length > 0) setResultSrcs(srcs.reverse());
+        }
+      } catch (err) {
+        console.warn('[MODE] Re-fetch failed:', err);
+      }
+    })();
+  }, [mode]);
   /* Continuous trophy coin explosion during BETTING */
   useEffect(() => {
     if (phase !== 'BETTING') {
