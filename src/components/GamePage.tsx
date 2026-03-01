@@ -1490,7 +1490,49 @@ const GamePage = () => {
       }
     })();
 
-    return () => { /* cleanup */ };
+    /* Fetch background music URL and create Audio element */
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/game/game/music`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regisation: 3 }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.music) {
+            const url = `https://funint.site${data.music}`;
+            musicUrlRef.current = url;
+            const audio = new Audio(url);
+            audio.loop = true;
+            audio.volume = 0.3;
+            musicAudioRef.current = audio;
+            console.log('[API] Music loaded:', url);
+            /* Try to autoplay (may be blocked by browser until user interaction) */
+            audio.play().catch(() => {
+              /* Retry on first user click */
+              const handler = () => {
+                if (musicAudioRef.current && musicUrlRef.current) {
+                  musicAudioRef.current.play().catch(() => { });
+                }
+                document.removeEventListener('click', handler);
+              };
+              document.addEventListener('click', handler, { once: true });
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[API] Music fetch error:', err);
+      }
+    })();
+
+    return () => {
+      /* cleanup — pause music on unmount */
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current = null;
+      }
+    };
   }, []);
 
   const [mode, setMode] = useState<Mode>('BASIC');
@@ -1539,6 +1581,19 @@ const GamePage = () => {
   const [activeModal, setActiveModal] = useState<ModalType>('NONE');
   const [rankTab, setRankTab] = useState<RankTab>('TODAY');
   const [musicOn, setMusicOn] = useState(true);
+  const musicUrlRef = useRef<string>('');
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  /* Play/pause music when musicOn changes */
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio || !musicUrlRef.current) return;
+    if (musicOn) {
+      audio.play().catch(() => { /* autoplay blocked, will retry on user interaction */ });
+    } else {
+      audio.pause();
+    }
+  }, [musicOn]);
 
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [apiRules, setApiRules] = useState<string[]>([]);
