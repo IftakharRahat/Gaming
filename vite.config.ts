@@ -42,8 +42,8 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
   req.on('data', (c: Buffer) => chunks.push(c))
   req.on('end', () => {
     const body = Buffer.concat(chunks)
-    const isPlayerEndpoint = req.url!.startsWith('/game/player')
-    const method = isPlayerEndpoint ? 'POST' : 'GET'
+    const isPostEndpoint = req.url!.startsWith('/game/player') || req.url!.startsWith('/game/user')
+    const method = isPostEndpoint ? 'POST' : 'GET'
 
     const options: https.RequestOptions = {
       hostname: API_HOST,

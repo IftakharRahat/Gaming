@@ -129,6 +129,14 @@ type ApiPlayerRecordRow = {
 };
 type ApiPlayerRecords = { data: ApiPlayerRecordRow[] };
 
+/* User info / balance API */
+type ApiUserInfo = {
+  registration_id: number;
+  balance: number;
+  user_id: number;
+  user_photo: string;
+};
+
 /* Map API element_name â†’ local ItemId */
 
 
@@ -1136,6 +1144,9 @@ const GamePage = () => {
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
           () => apiFetch<ApiTodayWin>('/game/today/win'),
+          /* 18: User info / balance */
+          () => apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 2,
+            JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
         ];
 
         /* If prefetched data exists, all calls resolve fast; otherwise batch them */
@@ -1184,6 +1195,7 @@ const GamePage = () => {
         const prizeDistrib = val<ApiPrizeDistribution>(16);
         const gameMetadata = val<ApiGameMetadata>(17);
         const todayWinApi = val<ApiTodayWin>(18);
+        const userInfo = val<ApiUserInfo>(19);
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -1451,6 +1463,12 @@ const GamePage = () => {
           console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
         }
 
+        /* User Info / Balance — authoritative balance from server */
+        if (userInfo && typeof userInfo.balance === 'number') {
+          setBalance(userInfo.balance);
+          console.log('[API] User info loaded — balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+        }
+
       } catch (err) {
         console.warn('[API] Unexpected error:', err);
       }
@@ -1470,9 +1488,9 @@ const GamePage = () => {
 
   const [selectedChip, setSelectedChip] = useState<number>(100);
 
-  const [balance, setBalance] = useState(129454);
+  const [balance, setBalance] = useState(0);
   const [todayWin, setTodayWin] = useState(0);
-  const [lifetimeBet, setLifetimeBet] = useState(21380);
+  const [lifetimeBet, setLifetimeBet] = useState(0);
 
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
@@ -1674,12 +1692,18 @@ const GamePage = () => {
     const pBody = apiBodyPlayer(modeNum);
     const mBody = apiBodyWithMode(modeNum);
 
-    const [recordsRes, todayWinRes] = await Promise.allSettled([
+    const [recordsRes, todayWinRes, userInfoRes] = await Promise.allSettled([
       apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, pBody),
       apiFetch<ApiTodayWin>('/game/today/win', 1, mBody),
+      apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 1,
+        JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
     ]);
 
-    if (recordsRes.status === 'fulfilled') {
+    /* User Info balance — authoritative, takes priority */
+    if (userInfoRes.status === 'fulfilled' && typeof userInfoRes.value?.balance === 'number') {
+      setBalance(userInfoRes.value.balance);
+      console.log('[LIVE] Balance from user info:', userInfoRes.value.balance);
+    } else if (recordsRes.status === 'fulfilled') {
       const rows = recordsRes.value?.data ?? [];
       setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
 
@@ -1701,6 +1725,26 @@ const GamePage = () => {
       }
     }
   }, [isAdvanceMode]);
+
+  /* POST balance update to server after each match */
+  const updateBalanceOnServer = useCallback(async (amount: number) => {
+    if (!PLAYER_ID) return;
+    try {
+      const res = await fetch(`${API_BASE}/game/user/balance/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registration_id: 3, player_id: PLAYER_ID, amount }),
+      });
+      if (!res.ok) {
+        console.warn('[API] Balance update failed:', res.status);
+        return;
+      }
+      const data = await res.json();
+      console.log('[API] Balance updated on server:', data);
+    } catch (err) {
+      console.warn('[API] Balance update error:', err);
+    }
+  }, []);
 
   const submitParticipantBet = useCallback(async (params: { itemId: ItemId; bet: number; balanceAfterBet: number }) => {
     if (!PLAYER_ID || participantSubmitDisabledRef.current) return 'server_error';

@@ -31,8 +31,8 @@ export default async function handler(req, res) {
     const gamePath = normalizedPath
       ? `/game/${normalizedPath}${hasTrailingSlash ? '/' : ''}`
       : '/game';
-    const isPlayerEndpoint = gamePath.startsWith('/game/player');
-    const method = isPlayerEndpoint ? 'POST' : 'GET';
+    const isPostEndpoint = gamePath.startsWith('/game/player') || gamePath.startsWith('/game/user');
+    const method = isPostEndpoint ? 'POST' : 'GET';
 
     const qs = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
