@@ -1403,6 +1403,19 @@ const GamePage = () => {
           console.log('[API] Rank today loaded:', parsedRankRows.length, 'rows, pics:', parsedRankRows.slice(0, 3).map(r => r.pic));
         }
 
+        /* Extract day-reset countdown timer from rank/today response */
+        if (rankToday && typeof rankToday === 'object' && 'time' in (rankToday as object)) {
+          const timeStr = (rankToday as { time?: string }).time;
+          if (timeStr) {
+            const parts = timeStr.split(':').map(Number);
+            const totalSec = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+            if (totalSec > 0) {
+              setDayResetSeconds(totalSec);
+              console.log('[API] Day reset timer:', timeStr, '=', totalSec, 'seconds');
+            }
+          }
+        }
+
         /* Top Winners â€” use API data, fallback to rank today for profile pics */
         console.log('[API] Top Winners RAW:', JSON.stringify(topWinners));
         let topWinnersMapped: ResultBoardRow[] | null = null;
@@ -1581,6 +1594,32 @@ const GamePage = () => {
   const [activeModal, setActiveModal] = useState<ModalType>('NONE');
   const [rankTab, setRankTab] = useState<RankTab>('TODAY');
   const [musicOn, setMusicOn] = useState(true);
+
+  /* ── Daily reset countdown (from rank/today API "time" field) ── */
+  const [dayResetSeconds, setDayResetSeconds] = useState(0);
+
+  /* 1-second countdown interval for day reset */
+  useEffect(() => {
+    if (dayResetSeconds <= 0) return;
+    const id = setInterval(() => {
+      setDayResetSeconds((prev) => {
+        if (prev <= 1) {
+          /* Timer expired — reset today's data */
+          setTodayWin(0);
+          setOpenedChests({ 10000: false, 50000: false, 100000: false, 500000: false, 1000000: false });
+          /* Move today records to yesterday */
+          setRankRowsYesterday(rankRowsToday);
+          setRankRowsToday([]);
+          /* Re-fetch fresh data */
+          void refreshRoundStateFromServer();
+          console.log('[TIMER] Day reset — todayWin, boxes, and rank reset');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [dayResetSeconds > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const musicUrlRef = useRef<string>('');
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -5476,7 +5515,7 @@ const GamePage = () => {
                         <>
 
                           <span style={{ fontSize: 13 }}>⌛</span>
-                          {`${String(Math.floor(timeLeft / 3600)).padStart(2, '0')}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`}
+                          {`${String(Math.floor(dayResetSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((dayResetSeconds % 3600) / 60)).padStart(2, '0')}:${String(dayResetSeconds % 60).padStart(2, '0')}`}
 
                         </>
 
