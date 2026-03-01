@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { compression } from 'vite-plugin-compression2'
-import http from 'node:http'
+import https from 'node:https'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const API_HOST = 'funint.site'
@@ -9,20 +9,20 @@ const API_HOST = 'funint.site'
 /**
  * Custom middleware that proxies /game/* requests.
  * - /game/player/* → forwarded as POST (bet submission)
- * - all other /game/* → forwarded as GET-with-body using Node http
+ * - all other /game/* → forwarded as GET-with-body using Node https
  *   (browsers can't send GET with body, so the frontend sends POST
  *    and this middleware re-issues it as GET)
  */
 function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () => void) {
   // --- Media proxy: /media/* → http://funint.site/media/* ---
   if (req.url?.startsWith('/media/')) {
-    const options: http.RequestOptions = {
+    const options: https.RequestOptions = {
       hostname: API_HOST,
       path: req.url,  // Already starts with /media/
       method: 'GET',
       headers: { 'Accept': 'image/*,*/*' },
     }
-    const proxyReq = http.request(options, (proxyRes) => {
+    const proxyReq = https.request(options, (proxyRes) => {
       res.writeHead(proxyRes.statusCode || 200, proxyRes.headers)
       proxyRes.pipe(res, { end: true })
     })
@@ -45,7 +45,7 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
     const isPlayerEndpoint = req.url!.startsWith('/game/player')
     const method = isPlayerEndpoint ? 'POST' : 'GET'
 
-    const options: http.RequestOptions = {
+    const options: https.RequestOptions = {
       hostname: API_HOST,
       path: req.url,
       method,
@@ -55,7 +55,7 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
       },
     }
 
-    const proxyReq = http.request(options, (proxyRes) => {
+    const proxyReq = https.request(options, (proxyRes) => {
       // Relay status + headers + body back to the browser
       res.writeHead(proxyRes.statusCode || 200, proxyRes.headers)
       proxyRes.pipe(res, { end: true })
