@@ -1805,29 +1805,21 @@ const GamePage = () => {
         JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
     ]);
 
-    /* User Info balance — authoritative, takes priority */
+    /* Player records — update for leaderboard display only, do NOT overwrite balance */
     if (userInfoRes.status === 'fulfilled' && typeof userInfoRes.value?.balance === 'number') {
-      setBalance(userInfoRes.value.balance);
-      console.log('[LIVE] Balance from user info:', userInfoRes.value.balance);
-    } else if (recordsRes.status === 'fulfilled') {
-      const rows = recordsRes.value?.data ?? [];
-      setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
-
-      const serverBalance =
-        rows
-          .map((row) => row.current_balance ?? row.balance_after ?? row.last_balance ?? row.balance ?? row.total_balance)
-          .find((value): value is number => typeof value === 'number' && Number.isFinite(value))
-        ?? null;
-
-      if (serverBalance != null) {
-        setBalance(serverBalance);
-      }
+      console.log('[LIVE] Server balance:', userInfoRes.value.balance, '(not overwriting local)');
     }
 
+    if (recordsRes.status === 'fulfilled') {
+      const rows = recordsRes.value?.data ?? [];
+      setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
+    }
+
+    /* TodayWin — only update if server value is HIGHER than local (never go backwards) */
     if (todayWinRes.status === 'fulfilled') {
       const total = todayWinRes.value?.today_win?.total_balance;
-      if (typeof total === 'number' && Number.isFinite(total)) {
-        setTodayWin(total);
+      if (typeof total === 'number' && Number.isFinite(total) && total > 0) {
+        setTodayWin((prev) => Math.max(prev, total));
       }
     }
   }, [isAdvanceMode]);
