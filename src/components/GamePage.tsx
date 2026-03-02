@@ -6,16 +6,16 @@ const DEBUG = false;
 
 const ARTBOARD = { width: 402, height: 735 } as const;
 
-const BET_SECONDS = 20;
-const DRAW_SECONDS = 4;       // was 8 — compressed to fit 30s round
-const SHOW_SECONDS = 3;       // was 5 — compressed to fit 30s round
-const PRE_DRAW_MS = 800;      // was 2000 — faster pre-draw flash
-const WINNER_POLL_INTERVAL_MS = 600;   // was 800 — poll faster
-const WINNER_POLL_MAX_ATTEMPTS = 12;   // was 20 — fewer attempts since less time
+const BET_SECONDS = 30;               // max fallback — actual countdown from server (~27-30s)
+const DRAW_SECONDS = 7;               // expanded for 40s round — smooth wheel/jackpot animation
+const SHOW_SECONDS = 6;               // expanded for 40s round — leaderboard visible longer
+const PRE_DRAW_MS = 1200;             // pre-draw flash before drawing starts
+const WINNER_POLL_INTERVAL_MS = 600;
+const WINNER_POLL_MAX_ATTEMPTS = 16;   // more attempts with longer round
 const TIMER_SYNC_INTERVAL_MS = 5000;
 const BETTING_TICK_INTERVAL_MS = 250;
 const LIVE_REFRESH_INTERVAL_MS = 10000;
-const WINNER_MAX_WAIT_MS = 6000;       // was 15000 — can't wait this long in a 30s round
+const WINNER_MAX_WAIT_MS = 10000;      // more time to wait for winner in 40s round
 
 const GAME_ON_MS = 1200;
 const ADVANCE_UNLOCK_BET = 500000;
