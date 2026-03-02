@@ -1577,8 +1577,13 @@ const GamePage = () => {
 
   /* Persist to localStorage whenever balance or todayWin changes */
   useEffect(() => { writeLS(LS_KEY_BALANCE, balance); }, [balance, LS_KEY_BALANCE]);
-  /* todayWin is persisted per-mode */
+  /* todayWin persisted per-mode — skip flag prevents race condition on mode switch */
+  const skipTodayWinPersistRef = useRef(false);
   useEffect(() => {
+    if (skipTodayWinPersistRef.current) {
+      skipTodayWinPersistRef.current = false;
+      return;
+    }
     const key = mode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
     writeLS(key, todayWin);
   }, [todayWin, mode, LS_KEY_TODAY_WIN_ADVANCE, LS_KEY_TODAY_WIN_BASIC]);
@@ -1695,6 +1700,7 @@ const GamePage = () => {
     const newLsKey = mode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
     writeLS(oldLsKey, todayWin);
     const newTodayWin = readLS(newLsKey) ?? 0;
+    skipTodayWinPersistRef.current = true; // prevent persistence effect from writing old value to new key
     setTodayWin(newTodayWin);
 
     /* 2. Re-fetch mode-specific data (boxes, elements, buttons, win history) */
