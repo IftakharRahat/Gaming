@@ -1147,7 +1147,7 @@ const GamePage = () => {
           () => apiFetch<ApiGameRule>('/game/game/rule'),
           () => apiFetch<ApiPrizeDistribution>('/game/game/prize/distribution'),
           () => apiFetch<ApiGameMetadata>('/game/game/icon/'),
-          () => apiFetch<ApiTodayWin>('/game/today/win'),
+          () => apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(2)),
           /* 18: User info / balance */
           () => apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 2,
             JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
@@ -1559,10 +1559,8 @@ const GamePage = () => {
 
   const [selectedChip, setSelectedChip] = useState<number>(100);
 
-  /* ── localStorage persistence for balance & todayWin (backend doesn't persist properly yet) ── */
+  /* ── localStorage persistence for balance (todayWin now from server API) ── */
   const LS_KEY_BALANCE = `gm_balance_${PLAYER_ID}`;
-  const LS_KEY_TODAY_WIN_BASIC = `gm_todaywin_BASIC_${PLAYER_ID}`;
-  const LS_KEY_TODAY_WIN_ADVANCE = `gm_todaywin_ADVANCE_${PLAYER_ID}`;
 
   const readLS = (key: string): number | null => {
     try { const v = localStorage.getItem(key); return v != null ? Number(v) : null; } catch { return null; }
@@ -1572,12 +1570,11 @@ const GamePage = () => {
   };
 
   const [balance, setBalance] = useState(() => readLS(LS_KEY_BALANCE) ?? 0);
-  const [todayWin, setTodayWin] = useState(() => readLS(LS_KEY_TODAY_WIN_BASIC) ?? 0);
+  const [todayWin, setTodayWin] = useState(0); /* will be set from API on init */
   const [lifetimeBet, setLifetimeBet] = useState(0);
 
-  /* Persist to localStorage whenever balance or todayWin changes */
+  /* Persist to localStorage whenever balance changes */
   useEffect(() => { writeLS(LS_KEY_BALANCE, balance); }, [balance, LS_KEY_BALANCE]);
-  /* todayWin is persisted manually (not via useEffect) to avoid race conditions on mode switch */
 
   /* Bets saved per mode so switching modes preserves them */
   const savedBetsBasicRef = useRef<BetsState>(buildEmptyBets());
@@ -1691,13 +1688,8 @@ const GamePage = () => {
     const restoredBets = mode === 'ADVANCE' ? savedBetsAdvanceRef.current : savedBetsBasicRef.current;
     setBets({ ...restoredBets });
 
-    /* 2. Save todayWin for old mode, restore for new mode */
-    const oldLsKey = oldMode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
-    const newLsKey = mode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
-    writeLS(oldLsKey, todayWin);
-    const newTodayWin = readLS(newLsKey) ?? 0;
-    setTodayWin(newTodayWin);
-    console.log('[MODE] TodayWin saved', todayWin, 'to', oldMode, '| loaded', newTodayWin, 'for', mode);
+    /* 2. Reset todayWin temporarily, will be set from API below */
+    setTodayWin(0);
 
     /* 3. Save openedChests for old mode, restore for new mode */
     if (oldMode === 'BASIC') {
@@ -1709,17 +1701,18 @@ const GamePage = () => {
     setOpenedChests({ ...restoredChests });
     console.log('[MODE] Chests restored for', mode, ':', restoredChests);
 
-    /* 2. Re-fetch mode-specific data (boxes, elements, buttons, win history) */
+    /* 4. Re-fetch mode-specific data (boxes, elements, buttons, win history, todayWin) */
     const modeNum = mode === 'ADVANCE' ? 1 : 2;
     const mBody = apiBodyWithMode(modeNum);
 
     (async () => {
       try {
-        const [elemRes, btnRes, boxRes, winRes] = await Promise.allSettled([
+        const [elemRes, btnRes, boxRes, winRes, todayWinRes] = await Promise.allSettled([
           apiFetch<ApiElement[]>('/game/game/elements', 1, mBody),
           apiFetch<ApiButton[]>('/game/sorce/buttons', 1, mBody),
           apiFetch<ApiBox[]>('/game/magic/boxs', 1, mBody),
           apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
+          apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(modeNum)),
         ]);
 
         /* Elements — update multipliers & badges */
@@ -1796,6 +1789,15 @@ const GamePage = () => {
             .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
             .filter(Boolean) as string[];
           if (srcs.length > 0) setResultSrcs(srcs.reverse());
+        }
+
+        /* TodayWin — from server per-player per-mode */
+        if (todayWinRes.status === 'fulfilled') {
+          const total = todayWinRes.value?.today_win?.total_balance;
+          if (typeof total === 'number' && Number.isFinite(total)) {
+            setTodayWin(total);
+            console.log('[MODE] TodayWin from API for', mode, ':', total);
+          }
         }
       } catch (err) {
         console.warn('[MODE] Re-fetch failed:', err);
@@ -1947,11 +1949,10 @@ const GamePage = () => {
   const refreshRoundStateFromServer = useCallback(async () => {
     const modeNum = isAdvanceMode ? 1 : 2;
     const pBody = apiBodyPlayer(modeNum);
-    const mBody = apiBodyWithMode(modeNum);
 
     const [recordsRes, todayWinRes, userInfoRes] = await Promise.allSettled([
       apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, pBody),
-      apiFetch<ApiTodayWin>('/game/today/win', 1, mBody),
+      apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(modeNum)),
       apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 1,
         JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
     ]);
@@ -1962,17 +1963,12 @@ const GamePage = () => {
       setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
     }
 
-    /* TodayWin — only use server value if it's greater than local (preserves per-mode tracking) */
+    /* TodayWin — trust server value (API now returns per-player per-mode data) */
     if (todayWinRes.status === 'fulfilled') {
       const total = todayWinRes.value?.today_win?.total_balance;
-      if (typeof total === 'number' && Number.isFinite(total) && total > 0) {
-        setTodayWin((prev) => {
-          if (total > prev) {
-            console.log('[LIVE] TodayWin from API:', total, '(was', prev, ')');
-            return total;
-          }
-          return prev;
-        });
+      if (typeof total === 'number' && Number.isFinite(total)) {
+        setTodayWin(total);
+        console.log('[LIVE] TodayWin from API:', total);
       }
     }
 
@@ -2807,13 +2803,7 @@ const GamePage = () => {
 
       if (winAmount > 0) {
         setBalance(balanceAfter);
-        setTodayWin((prev) => {
-          const newVal = prev + winAmount;
-          /* Persist to correct per-mode localStorage key */
-          const key = isAdvanceMode ? `gm_todaywin_ADVANCE_${PLAYER_ID}` : `gm_todaywin_BASIC_${PLAYER_ID}`;
-          try { localStorage.setItem(key, String(newVal)); } catch { /* */ }
-          return newVal;
-        });
+        setTodayWin((prev) => prev + winAmount);
       }
 
       if (winner) {
