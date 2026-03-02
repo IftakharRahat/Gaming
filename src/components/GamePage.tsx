@@ -1583,6 +1583,11 @@ const GamePage = () => {
   const savedBetsBasicRef = useRef<BetsState>(buildEmptyBets());
   const savedBetsAdvanceRef = useRef<BetsState>(buildEmptyBets());
 
+  /* Opened chests saved per mode */
+  const EMPTY_CHESTS: Record<number, boolean> = { 10000: false, 50000: false, 100000: false, 500000: false, 1000000: false };
+  const savedChestsBasicRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
+  const savedChestsAdvanceRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
+
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
 
@@ -1693,6 +1698,16 @@ const GamePage = () => {
     const newTodayWin = readLS(newLsKey) ?? 0;
     setTodayWin(newTodayWin);
     console.log('[MODE] TodayWin saved', todayWin, 'to', oldMode, '| loaded', newTodayWin, 'for', mode);
+
+    /* 3. Save openedChests for old mode, restore for new mode */
+    if (oldMode === 'BASIC') {
+      savedChestsBasicRef.current = { ...openedChests };
+    } else {
+      savedChestsAdvanceRef.current = { ...openedChests };
+    }
+    const restoredChests = mode === 'ADVANCE' ? savedChestsAdvanceRef.current : savedChestsBasicRef.current;
+    setOpenedChests({ ...restoredChests });
+    console.log('[MODE] Chests restored for', mode, ':', restoredChests);
 
     /* 2. Re-fetch mode-specific data (boxes, elements, buttons, win history) */
     const modeNum = mode === 'ADVANCE' ? 1 : 2;
