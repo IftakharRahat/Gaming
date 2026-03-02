@@ -1956,12 +1956,17 @@ const GamePage = () => {
       setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
     }
 
-    /* TodayWin — trust server value from today/win API */
+    /* TodayWin — only use server value if it's greater than local (preserves per-mode tracking) */
     if (todayWinRes.status === 'fulfilled') {
       const total = todayWinRes.value?.today_win?.total_balance;
-      if (typeof total === 'number' && Number.isFinite(total)) {
-        setTodayWin(total);
-        console.log('[LIVE] TodayWin from API:', total);
+      if (typeof total === 'number' && Number.isFinite(total) && total > 0) {
+        setTodayWin((prev) => {
+          if (total > prev) {
+            console.log('[LIVE] TodayWin from API:', total, '(was', prev, ')');
+            return total;
+          }
+          return prev;
+        });
       }
     }
 
