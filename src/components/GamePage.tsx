@@ -1561,7 +1561,8 @@ const GamePage = () => {
 
   /* ── localStorage persistence for balance & todayWin (backend doesn't persist properly yet) ── */
   const LS_KEY_BALANCE = `gm_balance_${PLAYER_ID}`;
-  const LS_KEY_TODAY_WIN = `gm_todaywin_${PLAYER_ID}`;
+  const LS_KEY_TODAY_WIN_BASIC = `gm_todaywin_BASIC_${PLAYER_ID}`;
+  const LS_KEY_TODAY_WIN_ADVANCE = `gm_todaywin_ADVANCE_${PLAYER_ID}`;
 
   const readLS = (key: string): number | null => {
     try { const v = localStorage.getItem(key); return v != null ? Number(v) : null; } catch { return null; }
@@ -1571,12 +1572,20 @@ const GamePage = () => {
   };
 
   const [balance, setBalance] = useState(() => readLS(LS_KEY_BALANCE) ?? 0);
-  const [todayWin, setTodayWin] = useState(() => readLS(LS_KEY_TODAY_WIN) ?? 0);
+  const [todayWin, setTodayWin] = useState(() => readLS(LS_KEY_TODAY_WIN_BASIC) ?? 0);
   const [lifetimeBet, setLifetimeBet] = useState(0);
 
   /* Persist to localStorage whenever balance or todayWin changes */
   useEffect(() => { writeLS(LS_KEY_BALANCE, balance); }, [balance, LS_KEY_BALANCE]);
-  useEffect(() => { writeLS(LS_KEY_TODAY_WIN, todayWin); }, [todayWin, LS_KEY_TODAY_WIN]);
+  /* todayWin is persisted per-mode */
+  useEffect(() => {
+    const key = mode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
+    writeLS(key, todayWin);
+  }, [todayWin, mode, LS_KEY_TODAY_WIN_ADVANCE, LS_KEY_TODAY_WIN_BASIC]);
+
+  /* Bets saved per mode so switching modes preserves them */
+  const savedBetsBasicRef = useRef<BetsState>(buildEmptyBets());
+  const savedBetsAdvanceRef = useRef<BetsState>(buildEmptyBets());
 
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
@@ -1669,10 +1678,24 @@ const GamePage = () => {
     if (prevModeRef.current === mode) return; // skip initial mount
     prevModeRef.current = mode;
 
-    console.log('[MODE] Switched to', mode, '— clearing bets & refreshing data');
+    console.log('[MODE] Switched to', mode, '— saving bets for old mode, restoring bets for new mode');
 
-    /* 1. Clear all bets */
-    setBets(buildEmptyBets());
+    /* 1. Save current bets for the OLD mode, restore saved bets for NEW mode */
+    const oldMode = mode === 'ADVANCE' ? 'BASIC' : 'ADVANCE';
+    if (oldMode === 'BASIC') {
+      savedBetsBasicRef.current = { ...bets } as BetsState;
+    } else {
+      savedBetsAdvanceRef.current = { ...bets } as BetsState;
+    }
+    const restoredBets = mode === 'ADVANCE' ? savedBetsAdvanceRef.current : savedBetsBasicRef.current;
+    setBets({ ...restoredBets });
+
+    /* 2. Save todayWin for old mode, restore for new mode */
+    const oldLsKey = oldMode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
+    const newLsKey = mode === 'ADVANCE' ? LS_KEY_TODAY_WIN_ADVANCE : LS_KEY_TODAY_WIN_BASIC;
+    writeLS(oldLsKey, todayWin);
+    const newTodayWin = readLS(newLsKey) ?? 0;
+    setTodayWin(newTodayWin);
 
     /* 2. Re-fetch mode-specific data (boxes, elements, buttons, win history) */
     const modeNum = mode === 'ADVANCE' ? 1 : 2;
@@ -1713,6 +1736,13 @@ const GamePage = () => {
           const vals = btnRes.value.map((b) => b.source).filter(Boolean).sort((a, b) => a - b);
           if (vals.length > 0) {
             setChipValues(vals);
+            /* Validate selectedChip — if current chip isn't in the new list, pick closest */
+            setSelectedChip((prev) => {
+              if (vals.includes(prev)) return prev;
+              const closest = vals.reduce((best, v) => Math.abs(v - prev) < Math.abs(best - prev) ? v : best, vals[0]);
+              console.log('[MODE] Chip', prev, 'not in new list, auto-selecting:', closest);
+              return closest;
+            });
             console.log('[MODE] Buttons reloaded:', vals);
           }
         }
