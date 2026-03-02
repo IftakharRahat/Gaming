@@ -4353,7 +4353,7 @@ const GamePage = () => {
                   </div>
 
                   {/* â”€â”€ Leaderboard rows â€” inside body area below header strip â”€â”€ */}
-                  {topWinnersRows.slice(0, 3).map((row, idx) => (
+                  {rankRows.slice(0, 3).map((row, idx) => (
                     <div
                       key={`${row.name}-${idx}`}
                       className="absolute flex items-center"
@@ -4407,7 +4407,7 @@ const GamePage = () => {
                             textAlign: 'right',
                           }}
                         >
-                          {formatK(row.amount)}
+                          {formatK((row as any).amount ?? (row as any).diamonds ?? 0)}
                         </span>
                       </div>
                     </div>
