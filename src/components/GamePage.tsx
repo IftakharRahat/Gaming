@@ -1283,7 +1283,10 @@ const GamePage = () => {
           const itemSrcMap: Record<string, string> = {};
           for (const item of ITEMS) {
             const apiName = ID_TO_API_NAME[item.id];
-            if (apiName) itemSrcMap[apiName] = item.src;
+            if (apiName) {
+              itemSrcMap[apiName] = item.src;
+              itemSrcMap[apiName.toLowerCase()] = item.src;
+            }
           }
 
           const srcs = winHistory
@@ -1783,7 +1786,10 @@ const GamePage = () => {
           const itemSrcMap: Record<string, string> = {};
           for (const item of ITEMS) {
             const apiName = ID_TO_API_NAME[item.id];
-            if (apiName) itemSrcMap[apiName] = item.src;
+            if (apiName) {
+              itemSrcMap[apiName] = item.src;
+              itemSrcMap[apiName.toLowerCase()] = item.src;
+            }
           }
           const srcs = winRes.value
             .map((w) => w.element__element_name ? itemSrcMap[w.element__element_name] : undefined)
