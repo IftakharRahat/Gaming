@@ -221,7 +221,7 @@ function computeJackpotWin(params: {
 type ItemId = 'honey' | 'tomato' | 'lemon' | 'milk' | 'pumpkin' | 'zucchini' | 'cola' | 'water';
 type Phase = 'BETTING' | 'DRAWING' | 'SHOWTIME';
 type Mode = 'BASIC' | 'ADVANCE';
-type ModalType = 'NONE' | 'RULE' | 'RECORDS' | 'PRIZE' | 'RANK' | 'ADVANCED' | 'JACKPOT';
+type ModalType = 'NONE' | 'RULE' | 'RECORDS' | 'PRIZE' | 'RANK' | 'ADVANCED' | 'JACKPOT' | 'RECHARGE';
 type RankTab = 'TODAY' | 'YESTERDAY';
 type ResultKind = 'WIN' | 'LOSE' | 'NOBET';
 
@@ -3090,7 +3090,8 @@ const GamePage = () => {
             {/* Green + button (Ellipse 5 + Plus icon) */}
             <div
               className="absolute flex items-center justify-center"
-              style={{ right: -3, top: 1, width: 26, height: 26 }}
+              style={{ right: -3, top: 1, width: 26, height: 26, cursor: 'pointer' }}
+              onClick={() => setActiveModal('RECHARGE')}
             >
               <img
                 src="/image2/Ellipse 5.png"
@@ -6017,6 +6018,94 @@ const GamePage = () => {
                     >
                       OK
                     </button>
+                  </div>
+                ) : activeModal === 'RECHARGE' ? (
+                  <div className="relative h-full w-full flex flex-col items-center justify-center">
+                    {/* Background panel */}
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        borderRadius: 22,
+                        border: '5px solid #f09c16',
+                        background: 'linear-gradient(180deg, #fff3cc 0%, #ffdd9d 100%)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                      }}
+                    />
+
+                    {/* Question text */}
+                    <div
+                      className="relative"
+                      style={{
+                        fontFamily: 'Inter, system-ui, sans-serif',
+                        fontWeight: 700,
+                        fontSize: 18,
+                        color: '#5a2d0c',
+                        textAlign: 'center',
+                        padding: '0 20px',
+                        marginBottom: 24,
+                      }}
+                    >
+                      Are you want to Recharge now??
+                    </div>
+
+                    {/* Buttons row */}
+                    <div className="relative flex items-center" style={{ gap: 16 }}>
+                      {/* Recharge button */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await fetch(`${API_BASE}/game/recharge/panal`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ regisation: 3, payer_id: PLAYER_ID }),
+                            });
+                            console.log('[API] Recharge request sent for player:', PLAYER_ID);
+                          } catch (err) {
+                            console.warn('[API] Recharge failed:', err);
+                          }
+                          setActiveModal('NONE');
+                        }}
+                        style={{
+                          width: 120,
+                          height: 44,
+                          borderRadius: 12,
+                          background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                          border: '2px solid rgba(0,0,0,0.15)',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 800,
+                          fontSize: 16,
+                          color: '#fff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.25)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Recharge
+                      </button>
+
+                      {/* Cancel button */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveModal('NONE')}
+                        style={{
+                          width: 120,
+                          height: 44,
+                          borderRadius: 12,
+                          background: 'linear-gradient(180deg, #FFD84A 0%, #F5A623 100%)',
+                          border: '2px solid rgba(0,0,0,0.15)',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontWeight: 800,
+                          fontSize: 16,
+                          color: '#fff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.25)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>
