@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const gamePath = normalizedPath
       ? `/game/${normalizedPath}${hasTrailingSlash ? '/' : ''}`
       : '/game';
-    const isPostEndpoint = gamePath.startsWith('/game/player') || gamePath.startsWith('/game/user');
+    const isPostEndpoint = gamePath.startsWith('/game/player') || gamePath.startsWith('/game/user') || gamePath.startsWith('/game/magic/boxs/open');
     const method = isPostEndpoint ? 'POST' : 'GET';
 
     const qs = new URLSearchParams();
@@ -87,3 +87,4 @@ export default async function handler(req, res) {
     res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Unexpected proxy error' }));
   }
 }
+

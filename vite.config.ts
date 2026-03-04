@@ -8,7 +8,7 @@ const API_HOST = 'funint.site'
 
 /**
  * Custom middleware that proxies /game/* requests.
- * - /game/player/* → forwarded as POST (bet submission)
+ * - /game/player/*, /game/user/*, /game/magic/boxs/open -> forwarded as POST
  * - all other /game/* → forwarded as GET-with-body using Node https
  *   (browsers can't send GET with body, so the frontend sends POST
  *    and this middleware re-issues it as GET)
@@ -42,7 +42,7 @@ function gameApiMiddleware(req: IncomingMessage, res: ServerResponse, next: () =
   req.on('data', (c: Buffer) => chunks.push(c))
   req.on('end', () => {
     const body = Buffer.concat(chunks)
-    const isPostEndpoint = req.url!.startsWith('/game/player') || req.url!.startsWith('/game/user')
+    const isPostEndpoint = req.url!.startsWith('/game/player') || req.url!.startsWith('/game/user') || req.url!.startsWith('/game/magic/boxs/open')
     const method = isPostEndpoint ? 'POST' : 'GET'
 
     const options: https.RequestOptions = {
@@ -103,3 +103,4 @@ export default defineConfig({
     chunkSizeWarningLimit: 200,
   },
 })
+

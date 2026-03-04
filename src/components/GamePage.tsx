@@ -6,12 +6,11 @@ const DEBUG = false;
 
 const ARTBOARD = { width: 402, height: 735 } as const;
 
-const BET_SECONDS = 30;               // max fallback — actual countdown from server (~27-30s)
-const DRAW_SECONDS = 7;               // expanded for 40s round — smooth wheel/jackpot animation
-const SHOW_SECONDS = 6;               // expanded for 40s round — leaderboard visible longer
+const BET_SECONDS = 30;               // max fallback Ã¢â‚¬â€ actual countdown from server (~27-30s)
+const DRAW_SECONDS = 7;               // expanded for 40s round Ã¢â‚¬â€ smooth wheel/jackpot animation
+const SHOW_SECONDS = 6;               // expanded for 40s round Ã¢â‚¬â€ leaderboard visible longer
 const PRE_DRAW_MS = 1200;             // pre-draw flash before drawing starts
 const WINNER_POLL_INTERVAL_MS = 600;
-const WINNER_POLL_MAX_ATTEMPTS = 16;   // more attempts with longer round
 const TIMER_SYNC_INTERVAL_MS = 5000;
 const BETTING_TICK_INTERVAL_MS = 250;
 const LIVE_REFRESH_INTERVAL_MS = 10000;
@@ -22,7 +21,7 @@ const ADVANCE_UNLOCK_BET = 500000;
 
 const DEFAULT_CHIP_VALUES = [10, 100, 500, 1000, 5000] as const;
 
-/* Map chip value â†’ local image path */
+/* Map chip value ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ local image path */
 const CHIP_IMAGE_MAP: Record<number, string> = {
   10: '/image2/chip_10.png',
   100: '/image2/chip_100.png',
@@ -32,7 +31,7 @@ const CHIP_IMAGE_MAP: Record<number, string> = {
   10000: '/image2/chip_10k.png',
 };
 
-/* Map box value â†’ local chest image */
+/* Map box value ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ local chest image */
 const BOX_VALUE_TO_CHEST: Record<number, string> = {
   10: '/image2/chest_10k.png',
   20: '/image2/chest_50k.png',
@@ -41,23 +40,24 @@ const BOX_VALUE_TO_CHEST: Record<number, string> = {
   50: '/image2/chest_1m.png',
 };
 
-/* Format box value label */
-const BOX_LABELS: Record<number, string> = {
-  10: '10K',
-  20: '50K',
-  30: '100K',
-  40: '500K',
-  50: '1M',
-};
+const DEFAULT_BOX_THRESHOLDS = [10, 20, 30, 40, 50] as const;
 type RoundType = 'NORMAL' | 'JACKPOT';
 
 /* Jackpot amount is loaded from /game/jackpot/details (jackpot_total) */
-/* â”€â”€ API config â”€â”€ */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ API config ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 const API_BASE = ''; // proxied via vite.config.ts
-const API_BODY = JSON.stringify({ regisation: 3 });
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const RAW_REGISATION_ID =
+  Number(URL_PARAMS.get('regisation') ?? URL_PARAMS.get('registration_id'))
+  || Number((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_REGISATION_ID)
+  || 3;
+const REGISATION_ID = RAW_REGISATION_ID;
+const RAW_PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
+const PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
+const API_BODY = JSON.stringify({ regisation: REGISATION_ID });
 /* Body with mode: 2 = general/basic, 1 = advance */
-const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: 3, mode });
-const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: 3, player_id: PLAYER_ID, mode });
+const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, mode });
+const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID, mode });
 
 type ApiElement = {
   id: number;
@@ -72,13 +72,17 @@ type ApiButton = {
   source: number;
 };
 
+type ApiBoxStatus = boolean | number | string | null | undefined;
 type ApiBox = {
-  box_image: string;
-  box_image_close: string;
-  box_image_open: string;
-  box_source: number;
+  id?: number;
+  box_image?: string | null;
+  box_image_close?: string | null;
+  box_image_open?: string | null;
+  box_source: number | string;
   box_win_weights?: number;
+  status?: ApiBoxStatus;
 };
+type ApiOpenMagicBoxResponse = { message?: string };
 
 type ApiTrophy = {
   icon: string;
@@ -112,35 +116,92 @@ type ApiRankRow = {
   mrs_player_id_player_pic: string | null;
   last_balance: number;
 };
+type ApiMyRankResponse = {
+  my_positon?: Record<string, unknown> | null;
+  my_position?: Record<string, unknown> | null;
+  data?: Record<string, unknown> | Record<string, unknown>[] | null;
+};
 type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
 type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
 type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
-type ApiPlayerRecordRow = {
-  round?: number;
+type ApiRecordBetRow = {
+  element_name?: string | null;
   element__element_name?: string | null;
-  bet?: number;
-  win?: number;
-  time?: string;
-  balance?: number;
-  current_balance?: number;
-  last_balance?: number;
-  balance_after?: number;
-  total_balance?: number;
+  element?: string | null;
+  name?: string | null;
+  element_icon?: string | null;
+  element__element_icon?: string | null;
+  bet?: number | string | null;
+  bet_amount?: number | string | null;
+  amount?: number | string | null;
 };
-type ApiPlayerRecords = { data: ApiPlayerRecordRow[] };
+type ApiRecordWinItemRow = {
+  element_name?: string | null;
+  element__element_name?: string | null;
+  element?: string | null;
+  name?: string | null;
+  element_icon?: string | null;
+  element__element_icon?: string | null;
+};
+type ApiPlayerRecordRow = {
+  round?: number | string | null;
+  round_no?: number | string | null;
+  mode?: number | string | null;
+  element__element_name?: string | null;
+  element_name?: string | null;
+  element?: string | null;
+  bet?: number | string | null;
+  bet_amount?: number | string | null;
+  selected_bets?: ApiRecordBetRow[] | null;
+  selectedBets?: ApiRecordBetRow[] | string | null;
+  win?: number | string | null;
+  win_amount?: number | string | null;
+  time?: string | null;
+  created_at?: string | null;
+  balance_before?: number | string | null;
+  balance?: number | string | null;
+  current_balance?: number | string | null;
+  last_balance?: number | string | null;
+  balance_after?: number | string | null;
+  total_balance?: number | string | null;
+  winning_element_name?: string | null;
+  winningElementName?: string | null;
+  winning_element_icon?: string | null;
+  winningElementIcon?: string | null;
+  winning_items?: ApiRecordWinItemRow[] | null;
+  winningItems?: ApiRecordWinItemRow[] | string | null;
+  winning_bucket?: string | null;
+  winningBucket?: string | null;
+  gjp__jackpot_name?: string | null;
+  jackport_element_name?: string[] | string | null;
+  round_type?: string | null;
+  mrs_in_time_balance?: number | string | null;
+  in_time_balance?: number | string | null;
+};
+type ApiPlayerRecords = {
+  data?: ApiPlayerRecordRow[] | null;
+  records?: ApiPlayerRecordRow[] | null;
+  results?: ApiPlayerRecordRow[] | null;
+};
 
 /* User info / balance API */
 type ApiUserInfo = {
-  registration_id: number;
+  registration_id?: number;
   balance: number;
-  user_id: number;
-  user_photo: string;
+  user_id?: number;
+  user_photo?: string | null;
+  player_name?: string | null;
+  user_name?: string | null;
+  username?: string | null;
+  name?: string | null;
+  profile_pic?: string | null;
+  player_pic?: string | null;
 };
 
-/* Map API element_name â†’ local ItemId */
+/* Map API element_name ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ local ItemId */
 
 
-/* Reverse map: local ItemId â†’ API element_name */
+/* Reverse map: local ItemId ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ API element_name */
 const ID_TO_API_NAME: Record<ItemId, string> = {
   honey: 'Honey',
   tomato: 'Tomato',
@@ -152,10 +213,85 @@ const ID_TO_API_NAME: Record<ItemId, string> = {
   water: 'Water',
 };
 
-/* Read player_id from URL query param, e.g. ?player_id=2610 */
-const URL_PARAMS = new URLSearchParams(window.location.search);
-const RAW_PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
-const PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
+function resolveMediaPath(path?: string | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function isTruthyBoxStatus(status: ApiBoxStatus): boolean {
+  if (status === true || status === 1 || status === '1') return true;
+  if (typeof status === 'string') return status.toLowerCase() === 'true';
+  return false;
+}
+
+function buildChestState(thresholds: readonly number[]): Record<number, boolean> {
+  const unique = Array.from(new Set(thresholds.filter((v) => Number.isFinite(v) && v > 0)));
+  if (unique.length === 0) {
+    return DEFAULT_BOX_THRESHOLDS.reduce((acc, threshold) => {
+      acc[threshold] = false;
+      return acc;
+    }, {} as Record<number, boolean>);
+  }
+  return unique.reduce((acc, threshold) => {
+    acc[threshold] = false;
+    return acc;
+  }, {} as Record<number, boolean>);
+}
+
+function mergeOpenedChestState(
+  serverState: Record<number, boolean>,
+  localState: Record<number, boolean>,
+): Record<number, boolean> {
+  const merged: Record<number, boolean> = { ...serverState };
+  Object.entries(localState).forEach(([key, opened]) => {
+    const threshold = Number(key);
+    if (!Number.isFinite(threshold)) return;
+    if (opened) merged[threshold] = true;
+    else if (!(threshold in merged)) merged[threshold] = false;
+  });
+  return merged;
+}
+
+function formatThresholdLabel(threshold: number): string {
+  if (!Number.isFinite(threshold) || threshold <= 0) return String(threshold);
+  if (threshold >= 1000000) {
+    const val = threshold / 1000000;
+    return Number.isInteger(val) ? `${val}M` : `${val.toFixed(1)}M`;
+  }
+  if (threshold >= 1000) {
+    const val = threshold / 1000;
+    return Number.isInteger(val) ? `${val}K` : `${val.toFixed(1)}K`;
+  }
+  return String(threshold);
+}
+
+function resolveThresholdFromBoxSource(source: number | string): number | null {
+  if (typeof source === 'number') {
+    if (!Number.isFinite(source) || source <= 0) return null;
+    return Math.round(source);
+  }
+
+  const raw = source.trim().toLowerCase();
+  if (!raw) return null;
+
+  const compact = raw.replace(/,/g, '').replace(/\s+/g, '');
+  const direct = Number(compact);
+  if (Number.isFinite(direct) && direct > 0) {
+    return Math.round(direct);
+  }
+
+  const shortMatch = compact.match(/^(\d+(?:\.\d+)?)(k|m)$/);
+  if (shortMatch) {
+    const base = Number(shortMatch[1]);
+    if (Number.isFinite(base) && base > 0) {
+      const factor = shortMatch[2] === 'm' ? 1000000 : 1000;
+      return Math.round(base * factor);
+    }
+  }
+
+  return null;
+}
 
 async function apiFetch<T>(path: string, retries = 0, customBody?: string): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -167,7 +303,7 @@ async function apiFetch<T>(path: string, retries = 0, customBody?: string): Prom
       });
       if (res.ok) return res.json();
     } catch {
-      /* network error — suppress browser console noise */
+      /* network error Ã¢â‚¬â€ suppress browser console noise */
     }
     if (attempt < retries) {
       await new Promise((r) => setTimeout(r, 300));
@@ -176,17 +312,306 @@ async function apiFetch<T>(path: string, retries = 0, customBody?: string): Prom
   throw new Error(`API ${path} failed`);
 }
 
-function mapApiPlayerRecord(row: ApiPlayerRecordRow): PlayerRecordView {
+function toFiniteNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseJackpotElements(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return undefined;
+}
+
+function normalizeBucket(value: unknown): 'VEGETABLES' | 'DRINKS' | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'VEGETABLES' || normalized === 'DRINKS') return normalized;
+  return null;
+}
+
+function inferItemIdFromIconPath(path?: string | null): ItemId | null {
+  if (!path) return null;
+  const raw = path.toLowerCase();
+  if (raw.includes('tomato')) return 'tomato';
+  if (raw.includes('milk')) return 'milk';
+  if (raw.includes('lemon')) return 'lemon';
+  if (raw.includes('pumpkin')) return 'pumpkin';
+  if (raw.includes('blur') || raw.includes('zucchini')) return 'zucchini';
+  if (raw.includes('coke') || raw.includes('cola')) return 'cola';
+  if (raw.includes('water')) return 'water';
+  if (raw.includes('honey')) return 'honey';
+  return null;
+}
+
+function parseSelectedBets(value: unknown): Array<{ elementName: string; elementIcon: string | null; bet: number }> {
+  let source: unknown = value;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      source = [];
+    }
+  }
+  if (!Array.isArray(source)) return [];
+
+  return source
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const row = entry as ApiRecordBetRow;
+      const elementNameRaw =
+        row.element_name
+        ?? row.element__element_name
+        ?? row.element
+        ?? row.name
+        ?? '';
+      const elementName = typeof elementNameRaw === 'string' ? elementNameRaw.trim() : '';
+      const elementIcon =
+        typeof row.element_icon === 'string'
+          ? row.element_icon
+          : typeof row.element__element_icon === 'string'
+            ? row.element__element_icon
+            : null;
+      const bet = toFiniteNumber(row.bet ?? row.bet_amount ?? row.amount) ?? 0;
+      const inferredId = inferItemIdFromIconPath(elementIcon);
+      const finalName = elementName || (inferredId ? ID_TO_API_NAME[inferredId] : '');
+      if (!finalName || bet <= 0) return null;
+      return {
+        elementName: finalName,
+        elementIcon,
+        bet,
+      };
+    })
+    .filter((entry): entry is { elementName: string; elementIcon: string | null; bet: number } => entry !== null);
+}
+
+function parseWinningItems(value: unknown): Array<{ elementName: string; elementIcon: string | null }> {
+  let source: unknown = value;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      source = [];
+    }
+  }
+  if (!Array.isArray(source)) return [];
+
+  return source
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const row = entry as ApiRecordWinItemRow;
+      const elementNameRaw =
+        row.element_name
+        ?? row.element__element_name
+        ?? row.element
+        ?? row.name
+        ?? '';
+      const elementName = typeof elementNameRaw === 'string' ? elementNameRaw.trim() : '';
+      const elementIcon =
+        typeof row.element_icon === 'string'
+          ? row.element_icon
+          : typeof row.element__element_icon === 'string'
+            ? row.element__element_icon
+            : null;
+      const inferredId = inferItemIdFromIconPath(elementIcon);
+      const finalName = elementName || (inferredId ? ID_TO_API_NAME[inferredId] : '');
+      if (!finalName) return null;
+      return {
+        elementName: finalName,
+        elementIcon,
+      };
+    })
+    .filter((entry): entry is { elementName: string; elementIcon: string | null } => entry !== null);
+}
+
+function resolveProfilePic(path?: string | null): string | undefined {
+  if (!path) return undefined;
+  if (/^https?:\/\//i.test(path)) return path;
+  return encodeURI(path.startsWith('/') ? path : `/media/${path}`);
+}
+
+function normalizeDisplayName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseApiIdentity(payload: unknown): { name?: string; pic?: string } {
+  if (!payload || typeof payload !== 'object') return {};
+  const row = payload as Record<string, unknown>;
+
+  const name = normalizeDisplayName(
+    row.mrs_player_id_player_name
+    ?? row.mrs__player_id__player_name
+    ?? row.player_name
+    ?? row.user_name
+    ?? row.username
+    ?? row.name,
+  );
+
+  const picRaw =
+    typeof row.user_photo === 'string' ? row.user_photo
+      : typeof row.profile_pic === 'string' ? row.profile_pic
+        : typeof row.player_pic === 'string' ? row.player_pic
+          : typeof row.pic === 'string' ? row.pic
+            : typeof row.mrs_player_id_player_pic === 'string' ? row.mrs_player_id_player_pic
+              : typeof row.mrs__player_id__player_pic === 'string' ? row.mrs__player_id__player_pic
+                : null;
+
   return {
-    round: row.round,
-    element: row.element__element_name ?? undefined,
-    bet: row.bet,
-    win: row.win,
-    time: row.time,
-    balance: row.balance,
-    currentBalance: row.current_balance ?? row.last_balance,
-    balanceAfter: row.balance_after,
-    totalBalance: row.total_balance,
+    name,
+    pic: resolveProfilePic(picRaw),
+  };
+}
+
+function parseMyRankResponse(payload: unknown): MyRankView | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const obj = payload as Record<string, unknown>;
+  const fuzzyMyPositionKey = Object.keys(obj).find((key) => {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+    return normalized.startsWith('mypos') || normalized.startsWith('myposit');
+  });
+  const candidate =
+    (fuzzyMyPositionKey ? obj[fuzzyMyPositionKey] : null)
+    ?? obj.my_positon
+    ?? obj.my_position
+    ?? (Array.isArray(obj.data) ? obj.data[0] : obj.data)
+    ?? null;
+
+  if (!candidate || typeof candidate !== 'object') return null;
+  const row = candidate as Record<string, unknown>;
+
+  const position =
+    toFiniteNumber(row.position)
+    ?? toFiniteNumber(row.rank)
+    ?? null;
+
+  const fuzzyDiamondsValue = (() => {
+    const key = Object.keys(row).find((rawKey) => {
+      const normalized = rawKey.toLowerCase().replace(/[^a-z]/g, '');
+      return normalized.includes('dimondplay')
+        || normalized.includes('diamondplay')
+        || normalized.includes('diamond');
+    });
+    return key ? toFiniteNumber(row[key]) : undefined;
+  })();
+
+  const diamonds =
+    fuzzyDiamondsValue
+    ?? toFiniteNumber(row['dimond play'])
+    ?? toFiniteNumber(row['diamond play'])
+    ?? toFiniteNumber(row.diamond_play)
+    ?? toFiniteNumber(row.diamondPlay)
+    ?? toFiniteNumber(row.last_balance)
+    ?? toFiniteNumber(row.balance)
+    ?? 0;
+  const identity = parseApiIdentity(row);
+
+  return {
+    position,
+    diamonds,
+    name: identity.name,
+    pic: identity.pic,
+  };
+}
+
+function extractPlayerRecordRows(payload: unknown): ApiPlayerRecordRow[] {
+  if (Array.isArray(payload)) return payload as ApiPlayerRecordRow[];
+  if (!payload || typeof payload !== 'object') return [];
+
+  const obj = payload as Record<string, unknown>;
+  const candidates: unknown[] = [obj.data, obj.records, obj.results];
+
+  if (obj.data && typeof obj.data === 'object') {
+    const nestedData = (obj.data as Record<string, unknown>).data;
+    candidates.push(nestedData);
+  }
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate as ApiPlayerRecordRow[];
+  }
+  return [];
+}
+
+function hasExplicitPlayerRecordArray(payload: unknown): boolean {
+  if (Array.isArray(payload)) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  const obj = payload as Record<string, unknown>;
+  if (Array.isArray(obj.data) || Array.isArray(obj.records) || Array.isArray(obj.results)) return true;
+  if (obj.data && typeof obj.data === 'object') {
+    return Array.isArray((obj.data as Record<string, unknown>).data);
+  }
+  return false;
+}
+
+function mapApiPlayerRecord(row: ApiPlayerRecordRow): PlayerRecordView {
+  const round = toFiniteNumber(row.round ?? row.round_no);
+  const mode = toFiniteNumber(row.mode);
+  const elementName = row.element__element_name ?? row.element_name ?? row.element ?? undefined;
+  const bet = toFiniteNumber(row.bet ?? row.bet_amount) ?? 0;
+  const win = toFiniteNumber(row.win ?? row.win_amount) ?? 0;
+  const selectedBetsFromApi = parseSelectedBets(row.selected_bets ?? row.selectedBets ?? null);
+  const selectedBets = selectedBetsFromApi.length > 0
+    ? selectedBetsFromApi
+    : (elementName && bet > 0
+      ? [{ elementName, elementIcon: null, bet }]
+      : []);
+  const winningElementName = row.winning_element_name ?? row.winningElementName ?? null;
+  const winningElementIcon = row.winning_element_icon ?? row.winningElementIcon ?? null;
+  const winningItemsFromApi = parseWinningItems(row.winning_items ?? row.winningItems ?? null);
+  const winningItems = winningItemsFromApi.length > 0
+    ? winningItemsFromApi
+    : (winningElementName
+      ? [{ elementName: winningElementName, elementIcon: winningElementIcon }]
+      : []);
+  const winningBucket = normalizeBucket(row.winning_bucket ?? row.winningBucket);
+  const currentBalance = toFiniteNumber(row.current_balance ?? row.last_balance);
+  const afterBalance = toFiniteNumber(
+    row.balance_after
+    ?? row.current_balance
+    ?? row.last_balance
+    ?? row.mrs_in_time_balance
+    ?? row.in_time_balance,
+  );
+  const beforeBalance = toFiniteNumber(
+    row.balance_before
+    ?? row.balance
+    ?? row.total_balance
+    ?? row.last_balance
+    ?? currentBalance
+    ?? afterBalance,
+  );
+  const totalBalance = toFiniteNumber(row.total_balance);
+  const jackpotElements = parseJackpotElements(row.jackport_element_name);
+  const time = row.time ?? row.created_at ?? undefined;
+
+  return {
+    round,
+    mode,
+    element: elementName ?? undefined,
+    bet,
+    win,
+    time: time ?? undefined,
+    balanceBefore: beforeBalance,
+    balance: toFiniteNumber(row.balance),
+    currentBalance,
+    balanceAfter: afterBalance,
+    totalBalance,
+    jackpotName: row.gjp__jackpot_name ?? null,
+    jackpotElements,
+    selectedBets,
+    winningElementName,
+    winningElementIcon,
+    winningItems,
+    winningBucket,
+    roundType: row.round_type ?? null,
   };
 }
 
@@ -231,7 +656,7 @@ const POINTER_HOTSPOT = { x: 25, y: 35 } as const;
 const POINTER_TOUR_ORDER: ItemId[] = ['lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk', 'honey', 'tomato'];
 const DRAW_HIGHLIGHT_ORDER: ItemId[] = ['honey', 'tomato', 'lemon', 'pumpkin', 'zucchini', 'water', 'cola', 'milk'];
 
-/* Map server-side element names → local item IDs */
+/* Map server-side element names Ã¢â€ â€™ local item IDs */
 const API_NAME_TO_ID: Record<string, ItemId> = {
   Honey: 'honey', honey: 'honey',
   Tomato: 'tomato', tomato: 'tomato',
@@ -284,9 +709,11 @@ type PendingWin = {
 type GameRecord = {
   round: number;
   at: string;
-  winner: ItemId[]; // âœ…
+  winner: ItemId[]; // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦
   selected: ItemId | 'none';
   selectedAmount: number;
+  selectedBets: Array<{ itemId: ItemId; amount: number }>;
+  winningBucket: 'VEGETABLES' | 'DRINKS' | null;
   win: number;
   balanceBefore: number;
   balanceAfter: number;
@@ -294,6 +721,7 @@ type GameRecord = {
 
 type PlayerRecordView = {
   round?: number;
+  mode?: number;
   element?: string;
   bet?: number;
   win?: number;
@@ -303,6 +731,21 @@ type PlayerRecordView = {
   currentBalance?: number;
   balanceAfter?: number;
   totalBalance?: number;
+  jackpotName?: string | null;
+  jackpotElements?: string[];
+  selectedBets?: Array<{ elementName: string; elementIcon: string | null; bet: number }>;
+  winningElementName?: string | null;
+  winningElementIcon?: string | null;
+  winningItems?: Array<{ elementName: string; elementIcon: string | null }>;
+  winningBucket?: 'VEGETABLES' | 'DRINKS' | null;
+  roundType?: string | null;
+};
+
+type MyRankView = {
+  position: number | null;
+  diamonds: number;
+  name?: string;
+  pic?: string;
 };
 
 type ResultBoardRow = {
@@ -655,7 +1098,7 @@ const ITEMS: ItemSpec[] = [
   },
 ];
 
-/* Default multipliers â€” overridden by API data at runtime */
+/* Default multipliers ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â overridden by API data at runtime */
 const DEFAULT_MULTIPLIER: Record<ItemId, number> = {
   honey: 8,
   milk: 7,
@@ -692,7 +1135,7 @@ function getWheelFocusRect(item: ItemSpec) {
 
   const pad = clamp(Math.round(base * 0.08), 4, 10);
 
-  // ðŸ”§ SIZE SCALE CONTROL (this is what you adjust)
+  // ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â§ SIZE SCALE CONTROL (this is what you adjust)
   const SCALE_X = .7; // width scale
   const SCALE_Y = 0.6; // height scale
 
@@ -730,9 +1173,9 @@ function wheelClipPathForRect(
     ? clamp((itemCenterY - WHEEL.top) / WHEEL.height, 0, 1)
     : 0.5;
 
-  // âœ… Dynamic extras:
-  // Top items (tâ‰ˆ0) need MORE top expansion.
-  // Bottom items (tâ‰ˆ1) need LESS top expansion.
+  // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Dynamic extras:
+  // Top items (tÃƒÂ¢Ã¢â‚¬Â°Ã‹â€ 0) need MORE top expansion.
+  // Bottom items (tÃƒÂ¢Ã¢â‚¬Â°Ã‹â€ 1) need LESS top expansion.
   const EXTRA_LEFT = 18;
   const EXTRA_RIGHT = 20;
 
@@ -748,9 +1191,9 @@ function wheelClipPathForRect(
 
   return `inset(${localTop}px ${localRight}px ${localBottom}px ${localLeft}px round 10px)`;
 }
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   Trophy Win Overlay â€” chips fly to trophy â†’ trophy explodes â†’ panel pops up
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
+   Trophy Win Overlay ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â chips fly to trophy ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ trophy explodes ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ panel pops up
+   ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â */
 type WinAnimStage = 'FLY_TO_TROPHY' | 'TROPHY_EXPLODE' | 'PANEL';
 
 type TrophyWinOverlayProps = {
@@ -821,10 +1264,10 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
   useEffect(() => {
     /*
       Timeline (from start):
-      0.0s  â€” chips fly to trophy
-      0.7s  â€” coin explosion + fireworks start
-      2.7s  â€” leaderboard panel appears (coins + fireworks still going)
-      4.7s  â€” coin explosion stops (fireworks + panel continue)
+      0.0s  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â chips fly to trophy
+      0.7s  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â coin explosion + fireworks start
+      2.7s  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â leaderboard panel appears (coins + fireworks still going)
+      4.7s  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â coin explosion stops (fireworks + panel continue)
     */
     const t1 = window.setTimeout(() => { setStage('TROPHY_EXPLODE'); setShowCoins(true); }, 700);
     const t2 = window.setTimeout(() => setStage('PANEL'), 2700);
@@ -834,7 +1277,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
 
   return (
     <>
-      {/* â”€â”€ Stage 1: Chips fly from each bet position â†’ trophy â”€â”€ */}
+      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Stage 1: Chips fly from each bet position ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ trophy ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
       {stage === 'FLY_TO_TROPHY' && betChips.map((chip, i) => (
         <motion.div
           key={chip.id}
@@ -853,10 +1296,10 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
         </motion.div>
       ))}
 
-      {/* â”€â”€ Coins bursting upward from trophy (independent of stage) â”€â”€ */}
+      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Coins bursting upward from trophy (independent of stage) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
       {showCoins && (
         <div className="absolute z-[530] pointer-events-none">
-          {/* Tiny flash â€” trophy stays visible */}
+          {/* Tiny flash ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â trophy stays visible */}
           <motion.div
             className="absolute rounded-full"
             style={{
@@ -908,7 +1351,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
       )}
 
 
-      {/* â”€â”€ Stage 3: Win panel pops up with spring bounce â”€â”€ */}
+      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Stage 3: Win panel pops up with spring bounce ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
       <AnimatePresence>
         {stage === 'PANEL' && (
           <motion.div
@@ -921,7 +1364,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
           >
             <img src="/image2/panel_you_win.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-            {/* â”€â”€ Content container with consistent padding â”€â”€ */}
+            {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Content container with consistent padding ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
             {(() => {
               const PX = 28;           // horizontal padding
               const CONTENT_W = 402 - PX * 2; // 346px
@@ -934,7 +1377,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
 
               return (
                 <>
-                  {/* â”€â”€ Reward Bar â”€â”€ */}
+                  {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Reward Bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                   <motion.div
                     className="absolute flex items-center justify-center"
                     style={{
@@ -987,7 +1430,7 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                     </div>
                   </motion.div>
 
-                  {/* â”€â”€ Leaderboard rows (matching no-bet panel alignment) â”€â”€ */}
+                  {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Leaderboard rows (matching no-bet panel alignment) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                   {rankRows.slice(0, 3).map((row, idx) => (
                     <motion.div
                       key={`${row.name}-${idx}`}
@@ -1065,6 +1508,82 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
   );
 };
 
+type RankAvatarProps = {
+  src?: string;
+  size: number;
+  borderColor?: string;
+  borderWidth?: number;
+  className?: string;
+  style?: React.CSSProperties;
+};
+
+const RankAvatar = ({
+  src,
+  size,
+  borderColor = 'rgba(255,255,255,0.6)',
+  borderWidth = 2,
+  className,
+  style,
+}: RankAvatarProps) => {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
+
+  return (
+    <div
+      className={className}
+      style={{
+        position: 'relative',
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: '50%',
+        overflow: 'hidden',
+        border: `${borderWidth}px solid ${borderColor}`,
+        background: 'linear-gradient(180deg, #f7d996 0%, #e9be6d 100%)',
+        ...style,
+      }}
+    >
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 70% at 30% 25%, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 100%)' }} />
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: size * 0.2,
+          width: size * 0.28,
+          height: size * 0.28,
+          transform: 'translateX(-50%)',
+          borderRadius: '50%',
+          background: '#f5e6be',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: size * 0.12,
+          width: size * 0.58,
+          height: size * 0.36,
+          transform: 'translateX(-50%)',
+          borderRadius: '999px 999px 18px 18px',
+          background: '#f5e6be',
+        }}
+      />
+
+      {src && !imageFailed ? (
+        <img
+          src={src}
+          alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setImageFailed(true)}
+        />
+      ) : null}
+    </div>
+  );
+};
+
 const GamePage = () => {
   const flags = useMemo(() => {
     if (typeof window === 'undefined') return { overlay: false, grid: false, metrics: false };
@@ -1083,29 +1602,43 @@ const GamePage = () => {
     }, {} as Record<ItemId, ItemSpec>);
   }, []);
 
-  /* â”€â”€ API state â”€â”€ */
+  /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ API state ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
   const [itemMultiplier, setItemMultiplier] = useState<Record<ItemId, number>>(DEFAULT_MULTIPLIER);
   const [chipValues, setChipValues] = useState<number[]>([...DEFAULT_CHIP_VALUES]);
   const [badgeOverrides, setBadgeOverrides] = useState<Record<ItemId, string>>({} as Record<ItemId, string>);
-  const [boxData, setBoxData] = useState<{ src: string; openSrc: string; label: string }[]>(
-    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({ src, openSrc: src.replace('.png', '_open.png'), label: BOX_LABELS[Number(val)] || '' }))
+  const [boxData, setBoxData] = useState<{ id: number | null; threshold: number; src: string; openSrc: string; label: string }[]>(
+    Object.entries(BOX_VALUE_TO_CHEST).map(([val, src]) => ({
+      id: null,
+      threshold: resolveThresholdFromBoxSource(Number(val)) ?? DEFAULT_BOX_THRESHOLDS[0],
+      src,
+      openSrc: src.replace('.png', '_open.png'),
+      label: formatThresholdLabel(resolveThresholdFromBoxSource(Number(val)) ?? Number(val)),
+    }))
   );
-  /* box_source → threshold mapping */
-  const BOX_SOURCE_TO_THRESHOLD: Record<number, number> = { 10: 10000, 20: 50000, 30: 100000, 40: 500000, 50: 1000000 };
-  /* Dynamic chest rewards from API (threshold → reward amount) */
-  const boxRewardsRef = useRef<Record<number, number>>({ 10000: 100, 50000: 200, 100000: 300, 500000: 400, 1000000: 500 });
+  /* Dynamic chest rewards from API (threshold Ã¢â€ â€™ reward amount) */
+  const boxRewardsRef = useRef<Record<number, number>>({
+    10: 100,
+    20: 200,
+    30: 300,
+    40: 400,
+    50: 500,
+  });
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [trophySrc, setTrophySrc] = useState('/image2/trophy.png');
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
   const elementApiIdsRef = useRef<Record<string, number>>({});
   const missingElementMapWarnedRef = useRef<Set<ItemId>>(new Set());
   const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
-  const [gameLogoSrc, setGameLogoSrc] = useState('/image2/greedy_sign_board.png');
+  const [gameLogoSrc] = useState('/image2/greedy_sign_board.png');
   const [jackpotAmount, setJackpotAmount] = useState(0);
   const [prizeData, setPrizeData] = useState<ApiPrizeDistribution | null>(null);
   const [advanceModeApi, setAdvanceModeApi] = useState<ApiGameMode | null>(null);
   const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
   const [rankRowsYesterday, setRankRowsYesterday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
+  const [myRankToday, setMyRankToday] = useState<MyRankView | null>(null);
+  const [myRankYesterday, setMyRankYesterday] = useState<MyRankView | null>(null);
+  const [myPlayerName, setMyPlayerName] = useState('');
+  const [myPlayerPic, setMyPlayerPic] = useState<string | undefined>(undefined);
   const [topWinnersRows, setTopWinnersRows] = useState<ResultBoardRow[]>(NO_BET_ROWS);
 
   /* Fetch API data on mount */
@@ -1127,10 +1660,10 @@ const GamePage = () => {
 
         /* Build the list of API calls (they won't execute until we call them) */
         const apiCalls: (() => Promise<unknown>)[] = [
-          /* 0â€“10: APIs that need mode */
+          /* 0ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“10: APIs that need mode */
           () => prefetched?.elements ? Promise.resolve(prefetched.elements) : apiFetch<ApiElement[]>('/game/game/elements', 2, mBody),
           () => prefetched?.buttons ? Promise.resolve(prefetched.buttons) : apiFetch<ApiButton[]>('/game/sorce/buttons', 2, mBody),
-          () => prefetched?.boxes ? Promise.resolve(prefetched.boxes) : apiFetch<ApiBox[]>('/game/magic/boxs', 2, mBody),
+          () => prefetched?.boxes ? Promise.resolve(prefetched.boxes) : apiFetch<ApiBox[]>('/game/magic/boxs', 2, pBody),
           () => prefetched?.winHistory ? Promise.resolve(prefetched.winHistory) : apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
           () => apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
           () => prefetched?.jackpot ? Promise.resolve(prefetched.jackpot) : apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
@@ -1139,7 +1672,7 @@ const GamePage = () => {
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
           () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
-          /* 11â€“18: APIs that DON'T need mode */
+          /* 11ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“18: APIs that DON'T need mode */
           () => prefetched?.trophy ? Promise.resolve(prefetched.trophy) : apiFetch<ApiTrophy>('/game/game/trophy'),
           () => prefetched?.coin ? Promise.resolve(prefetched.coin) : apiFetch<ApiCoin>('/game/game/coin'),
           () => prefetched?.gameIcon ? Promise.resolve(prefetched.gameIcon) : apiFetch<ApiGameIcon>('/game/icon/during/gaming'),
@@ -1150,7 +1683,7 @@ const GamePage = () => {
           () => apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(2)),
           /* 18: User info / balance */
           () => apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 2,
-            JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
+            JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID })),
         ];
 
         /* If prefetched data exists, all calls resolve fast; otherwise batch them */
@@ -1176,7 +1709,7 @@ const GamePage = () => {
           }
         }
 
-        /* Map results â€” order matches the API calls array above */
+        /* Map results ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â order matches the API calls array above */
         const val = <T,>(i: number): T | null =>
           results[i]?.status === 'fulfilled' ? (results[i].value as T) : null;
 
@@ -1243,16 +1776,49 @@ const GamePage = () => {
 
         /* Build box/chest data from boxes API */
         if (boxes && boxes.length > 0) {
-          const bd = boxes.map((b) => ({
-            src: BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png',
-            openSrc: CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png',
-            label: BOX_LABELS[b.box_source] || `${b.box_source}`,
-          }));
+          const boxesSorted = [...boxes].sort((a, b) => {
+            const ta = resolveThresholdFromBoxSource(a.box_source) ?? Number.MAX_SAFE_INTEGER;
+            const tb = resolveThresholdFromBoxSource(b.box_source) ?? Number.MAX_SAFE_INTEGER;
+            return ta - tb;
+          });
+          const thresholdsFromApi = boxesSorted.map((b, idx) => (
+            resolveThresholdFromBoxSource(b.box_source)
+            ?? DEFAULT_BOX_THRESHOLDS[idx]
+            ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1]
+          ));
+          const openedFromApi = buildChestState(thresholdsFromApi);
+          const bd = boxesSorted.map((b, idx) => {
+            const threshold = resolveThresholdFromBoxSource(b.box_source)
+              ?? DEFAULT_BOX_THRESHOLDS[idx]
+              ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1];
+            const closedSrc = resolveMediaPath(b.box_image_close ?? b.box_image)
+              ?? BOX_VALUE_TO_CHEST[Number(b.box_source)]
+              ?? '/image2/chest_10k.png';
+            const openSrc = resolveMediaPath(b.box_image_open)
+              ?? CHEST_OPEN_SRC_BY_THRESHOLD[threshold]
+              ?? CHEST_OPEN_SRC_BY_THRESHOLD[Number(b.box_source)]
+              ?? '/image2/chest_10k_open.png';
+
+            if (threshold in openedFromApi) {
+              openedFromApi[threshold] = isTruthyBoxStatus(b.status);
+            }
+
+            return {
+              id: typeof b.id === 'number' ? b.id : null,
+              threshold,
+              src: closedSrc,
+              openSrc,
+              label: formatThresholdLabel(threshold),
+            };
+          });
+          const mergedOpened = mergeOpenedChestState(openedFromApi, savedChestsBasicRef.current);
           setBoxData(bd);
+          setOpenedChests(mergedOpened);
+          savedChestsBasicRef.current = { ...mergedOpened };
           /* Store reward amounts from API */
           const rewards: Record<number, number> = {};
-          for (const b of boxes) {
-            const threshold = BOX_SOURCE_TO_THRESHOLD[b.box_source];
+          for (const b of boxesSorted) {
+            const threshold = resolveThresholdFromBoxSource(b.box_source);
             if (threshold && typeof b.box_win_weights === 'number') {
               rewards[threshold] = b.box_win_weights;
             }
@@ -1273,7 +1839,7 @@ const GamePage = () => {
           console.log('[API] Trophy loaded:', imgUrl);
         }
 
-        /* Win history â†’ result strip */
+        /* Win history ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ result strip */
         if (winHistory && Array.isArray(winHistory) && winHistory.length > 0) {
           const latestWin = winHistory[winHistory.length - 1];
           if (typeof latestWin?.id === 'number') {
@@ -1315,12 +1881,12 @@ const GamePage = () => {
           console.log('[API] Coin icon loaded:', imgUrl);
         }
 
-        /* Game logo icon — keep the local signboard; the API icon lacks
+        /* Game logo icon Ã¢â‚¬â€ keep the local signboard; the API icon lacks
            the wooden background and food decorations */
         if (gameIcon?.icon) {
           const imgUrl = gameIcon.icon.startsWith('/') ? gameIcon.icon : `/${gameIcon.icon}`;
-          // setGameLogoSrc(imgUrl);  — intentionally disabled to preserve local signboard
-          console.log('[API] Game logo loaded (not applied — using local signboard):', imgUrl);
+          // setGameLogoSrc(imgUrl);  Ã¢â‚¬â€ intentionally disabled to preserve local signboard
+          console.log('[API] Game logo loaded (not applied Ã¢â‚¬â€ using local signboard):', imgUrl);
         }
 
         /* Today's win */
@@ -1354,7 +1920,7 @@ const GamePage = () => {
           console.log('[API] Prize distribution loaded');
         }
 
-        /* Game mode â€” auto-enable advance if API says so */
+        /* Game mode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â auto-enable advance if API says so */
         if (gameMode) {
           setAdvanceModeApi(gameMode);
           if (gameMode.advance === true) {
@@ -1364,7 +1930,7 @@ const GamePage = () => {
           console.log('[API] Game mode loaded:', gameMode.advance, 'remaining:', gameMode.remanning_values);
         }
 
-        /* Rank today â€” row-based array: [{mrs_player_id_player_name, mrs_player_id_player_pic, last_balance}] */
+        /* Rank today ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â row-based array: [{mrs_player_id_player_name, mrs_player_id_player_pic, last_balance}] */
         console.log('[API] Rank today RAW:', JSON.stringify(rankToday));
         type RankParsedRow = { name: string; diamonds: number; pic?: string };
 
@@ -1419,7 +1985,7 @@ const GamePage = () => {
           }
         }
 
-        /* Top Winners â€” use API data, fallback to rank today for profile pics */
+        /* Top Winners ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â use API data, fallback to rank today for profile pics */
         console.log('[API] Top Winners RAW:', JSON.stringify(topWinners));
         let topWinnersMapped: ResultBoardRow[] | null = null;
 
@@ -1456,11 +2022,31 @@ const GamePage = () => {
           console.log('[API] Max bets per turn loaded:', (maxFruits as ApiMaxPlayers).max_players);
         }
 
-        /* Rank yesterday â€” same row-based format */
+        /* Rank yesterday ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â same row-based format */
         const parsedRankYesterday = parseRankRows(rankYesterday);
         if (parsedRankYesterday.length > 0) {
           setRankRowsYesterday(parsedRankYesterday);
           console.log('[API] Rank yesterday loaded:', parsedRankYesterday.length, 'rows');
+        }
+
+        /* My rank row (Today / Yesterday) for sticky bottom layout */
+        const [myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
+          apiFetch<ApiMyRankResponse>('/game/my/game/rank/today/', 1, pBody),
+          apiFetch<ApiMyRankResponse>('/game/my/game/rank/yesterday/', 1, pBody),
+        ]);
+
+        if (myRankTodayRes.status === 'fulfilled') {
+          const parsed = parseMyRankResponse(myRankTodayRes.value);
+          if (parsed) {
+            setMyRankToday(parsed);
+          }
+        }
+
+        if (myRankYesterdayRes.status === 'fulfilled') {
+          const parsed = parseMyRankResponse(myRankYesterdayRes.value);
+          if (parsed) {
+            setMyRankYesterday(parsed);
+          }
         }
 
         /* Game Rules */
@@ -1490,15 +2076,24 @@ const GamePage = () => {
         }
 
         /* Player Records */
-        if (playerRecords?.data?.length) {
-          setApiPlayerRecords(playerRecords.data.map((r) => mapApiPlayerRecord(r)));
-          console.log('[API] Player records loaded:', playerRecords.data.length, 'records');
+        if (hasExplicitPlayerRecordArray(playerRecords)) {
+          const rows = extractPlayerRecordRows(playerRecords);
+          setApiPlayerRecords(rows.map((r) => mapApiPlayerRecord(r)));
+          setPlayerRecordsHydrated(true);
+          console.log('[API] Player records loaded:', rows.length, 'records');
+        } else {
+          console.warn('[API] Player records payload had no array shape:', playerRecords);
         }
 
-        /* User Info / Balance — authoritative from server */
-        if (userInfo && typeof userInfo.balance === 'number') {
-          setBalance(userInfo.balance);
-          console.log('[API] User info loaded — balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+        /* User Info / Balance Ã¢â‚¬â€ authoritative from server */
+        if (userInfo) {
+          if (typeof userInfo.balance === 'number') {
+            setBalance(userInfo.balance);
+            console.log('[API] User info loaded Ã¢â‚¬â€ balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+          }
+          const identity = parseApiIdentity(userInfo);
+          if (identity.name) setMyPlayerName(identity.name);
+          if (identity.pic) setMyPlayerPic(identity.pic);
         }
 
       } catch (err) {
@@ -1512,7 +2107,7 @@ const GamePage = () => {
         const res = await fetch(`${API_BASE}/game/game/music`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ regisation: 3 }),
+          body: JSON.stringify({ regisation: REGISATION_ID }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1543,7 +2138,7 @@ const GamePage = () => {
     })();
 
     return () => {
-      /* cleanup — pause music on unmount */
+      /* cleanup Ã¢â‚¬â€ pause music on unmount */
       if (musicAudioRef.current) {
         musicAudioRef.current.pause();
         musicAudioRef.current = null;
@@ -1562,7 +2157,7 @@ const GamePage = () => {
 
   const [selectedChip, setSelectedChip] = useState<number>(100);
 
-  /* ── localStorage persistence for balance (todayWin now from server API) ── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ localStorage persistence for balance (todayWin now from server API) Ã¢â€â‚¬Ã¢â€â‚¬ */
   const LS_KEY_BALANCE = `gm_balance_${PLAYER_ID}`;
 
   const readLS = (key: string): number | null => {
@@ -1584,7 +2179,7 @@ const GamePage = () => {
   const savedBetsAdvanceRef = useRef<BetsState>(buildEmptyBets());
 
   /* Opened chests saved per mode */
-  const EMPTY_CHESTS: Record<number, boolean> = { 10000: false, 50000: false, 100000: false, 500000: false, 1000000: false };
+  const EMPTY_CHESTS: Record<number, boolean> = buildChestState(DEFAULT_BOX_THRESHOLDS);
   const savedChestsBasicRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
   const savedChestsAdvanceRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
 
@@ -1595,7 +2190,7 @@ const GamePage = () => {
   const [resultKind, setResultKind] = useState<ResultKind>('LOSE');
 
   const [roundType, setRoundType] = useState<RoundType>('NORMAL');
-  const transitioningRef = useRef(false); // guard: prevents double SHOWTIMEâ†’BETTING transition
+  const transitioningRef = useRef(false); // guard: prevents double SHOWTIMEÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢BETTING transition
 
   const [showResultBoard, setShowResultBoard] = useState(false);
   const [winnerIds, setWinnerIds] = useState<ItemId[] | null>(null);
@@ -1605,7 +2200,7 @@ const GamePage = () => {
   const [rankTab, setRankTab] = useState<RankTab>('TODAY');
   const [musicOn, setMusicOn] = useState(true);
 
-  /* ── Daily reset countdown (from rank/today API "time" field) ── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ Daily reset countdown (from rank/today API "time" field) Ã¢â€â‚¬Ã¢â€â‚¬ */
   const [dayResetSeconds, setDayResetSeconds] = useState(0);
 
   /* 1-second countdown interval for day reset */
@@ -1614,15 +2209,15 @@ const GamePage = () => {
     const id = setInterval(() => {
       setDayResetSeconds((prev) => {
         if (prev <= 1) {
-          /* Timer expired — reset today's data */
+          /* Timer expired Ã¢â‚¬â€ reset today's data */
           setTodayWin(0);
-          setOpenedChests({ 10000: false, 50000: false, 100000: false, 500000: false, 1000000: false });
+          setOpenedChests({ ...EMPTY_CHESTS });
           /* Move today records to yesterday */
           setRankRowsYesterday(rankRowsToday);
           setRankRowsToday([]);
           /* Re-fetch fresh data */
           void refreshRoundStateFromServer();
-          console.log('[TIMER] Day reset — todayWin, boxes, and rank reset');
+          console.log('[TIMER] Day reset Ã¢â‚¬â€ todayWin, boxes, and rank reset');
           return 0;
         }
         return prev - 1;
@@ -1650,6 +2245,7 @@ const GamePage = () => {
   const [jackpotAwards, setJackpotAwards] = useState<{ round: number; win: number; time: string }[]>([]);
   const [gameName, setGameName] = useState('Gready Market');
   const [apiPlayerRecords, setApiPlayerRecords] = useState<PlayerRecordView[]>([]);
+  const [playerRecordsHydrated, setPlayerRecordsHydrated] = useState(false);
   const roundRef = useRef(0);
 
   const [itemPulse, setItemPulse] = useState<{ id: ItemId | null; key: number }>({ id: null, key: 0 });
@@ -1673,13 +2269,13 @@ const GamePage = () => {
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { elementApiIdsRef.current = elementApiIds; }, [elementApiIds]);
 
-  /* ── When mode changes (Basic ↔ Advance), clear bets & re-fetch mode-specific data ── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ When mode changes (Basic Ã¢â€ â€ Advance), clear bets & re-fetch mode-specific data Ã¢â€â‚¬Ã¢â€â‚¬ */
   const prevModeRef = useRef<Mode>(mode);
   useEffect(() => {
     if (prevModeRef.current === mode) return; // skip initial mount
     prevModeRef.current = mode;
 
-    console.log('[MODE] Switched to', mode, '— saving bets for old mode, restoring bets for new mode');
+    console.log('[MODE] Switched to', mode, 'Ã¢â‚¬â€ saving bets for old mode, restoring bets for new mode');
 
     /* 1. Save current bets for the OLD mode, restore saved bets for NEW mode */
     const oldMode = mode === 'ADVANCE' ? 'BASIC' : 'ADVANCE';
@@ -1707,18 +2303,21 @@ const GamePage = () => {
     /* 4. Re-fetch mode-specific data (boxes, elements, buttons, win history, todayWin) */
     const modeNum = mode === 'ADVANCE' ? 1 : 2;
     const mBody = apiBodyWithMode(modeNum);
+    const pBody = apiBodyPlayer(modeNum);
 
     (async () => {
       try {
-        const [elemRes, btnRes, boxRes, winRes, todayWinRes] = await Promise.allSettled([
+        const [elemRes, btnRes, boxRes, winRes, todayWinRes, myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
           apiFetch<ApiElement[]>('/game/game/elements', 1, mBody),
           apiFetch<ApiButton[]>('/game/sorce/buttons', 1, mBody),
-          apiFetch<ApiBox[]>('/game/magic/boxs', 1, mBody),
+          apiFetch<ApiBox[]>('/game/magic/boxs', 1, pBody),
           apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
-          apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(modeNum)),
+          apiFetch<ApiTodayWin>('/game/today/win', 1, pBody),
+          apiFetch<ApiMyRankResponse>('/game/my/game/rank/today/', 1, pBody),
+          apiFetch<ApiMyRankResponse>('/game/my/game/rank/yesterday/', 1, pBody),
         ]);
 
-        /* Elements — update multipliers & badges */
+        /* Elements Ã¢â‚¬â€ update multipliers & badges */
         if (elemRes.status === 'fulfilled' && elemRes.value?.length) {
           const multipliers = { ...DEFAULT_MULTIPLIER };
           const badges: Record<string, string> = {};
@@ -1744,7 +2343,7 @@ const GamePage = () => {
           const vals = btnRes.value.map((b) => b.source).filter(Boolean).sort((a, b) => a - b);
           if (vals.length > 0) {
             setChipValues(vals);
-            /* Validate selectedChip — if current chip isn't in the new list, pick closest */
+            /* Validate selectedChip Ã¢â‚¬â€ if current chip isn't in the new list, pick closest */
             setSelectedChip((prev) => {
               if (vals.includes(prev)) return prev;
               const closest = vals.reduce((best, v) => Math.abs(v - prev) < Math.abs(best - prev) ? v : best, vals[0]);
@@ -1757,20 +2356,56 @@ const GamePage = () => {
 
         /* Boxes */
         if (boxRes.status === 'fulfilled' && boxRes.value?.length) {
-          const bd = boxRes.value.map((b) => ({
-            src: b.box_image_close
-              ? `https://funint.site/${b.box_image_close}`
-              : (BOX_VALUE_TO_CHEST[b.box_source] || '/image2/chest_10k.png'),
-            openSrc: b.box_image_open
-              ? `https://funint.site/${b.box_image_open}`
-              : (CHEST_OPEN_SRC_BY_THRESHOLD[b.box_source] || '/image2/chest_10k_open.png'),
-            label: BOX_LABELS[b.box_source] || `${b.box_source}`,
-          }));
+          const boxesSorted = [...boxRes.value].sort((a, b) => {
+            const ta = resolveThresholdFromBoxSource(a.box_source) ?? Number.MAX_SAFE_INTEGER;
+            const tb = resolveThresholdFromBoxSource(b.box_source) ?? Number.MAX_SAFE_INTEGER;
+            return ta - tb;
+          });
+          const thresholdsFromApi = boxesSorted.map((b, idx) => (
+            resolveThresholdFromBoxSource(b.box_source)
+            ?? DEFAULT_BOX_THRESHOLDS[idx]
+            ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1]
+          ));
+          const openedFromApi = buildChestState(thresholdsFromApi);
+          const bd = boxesSorted.map((b, idx) => {
+            const threshold = resolveThresholdFromBoxSource(b.box_source)
+              ?? DEFAULT_BOX_THRESHOLDS[idx]
+              ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1];
+            const closedSrc = resolveMediaPath(b.box_image_close ?? b.box_image)
+              ?? BOX_VALUE_TO_CHEST[Number(b.box_source)]
+              ?? '/image2/chest_10k.png';
+            const openSrc = resolveMediaPath(b.box_image_open)
+              ?? CHEST_OPEN_SRC_BY_THRESHOLD[threshold]
+              ?? CHEST_OPEN_SRC_BY_THRESHOLD[Number(b.box_source)]
+              ?? '/image2/chest_10k_open.png';
+
+            if (threshold in openedFromApi) {
+              openedFromApi[threshold] = isTruthyBoxStatus(b.status);
+            }
+
+            return {
+              id: typeof b.id === 'number' ? b.id : null,
+              threshold,
+              src: closedSrc,
+              openSrc,
+              label: formatThresholdLabel(threshold),
+            };
+          });
+          const preservedLocal = mode === 'ADVANCE'
+            ? savedChestsAdvanceRef.current
+            : savedChestsBasicRef.current;
+          const mergedOpened = mergeOpenedChestState(openedFromApi, preservedLocal);
           setBoxData(bd);
+          setOpenedChests(mergedOpened);
+          if (mode === 'ADVANCE') {
+            savedChestsAdvanceRef.current = { ...mergedOpened };
+          } else {
+            savedChestsBasicRef.current = { ...mergedOpened };
+          }
           /* Store reward amounts from API */
           const rewards: Record<number, number> = {};
-          for (const b of boxRes.value) {
-            const threshold = BOX_SOURCE_TO_THRESHOLD[b.box_source];
+          for (const b of boxesSorted) {
+            const threshold = resolveThresholdFromBoxSource(b.box_source);
             if (threshold && typeof b.box_win_weights === 'number') {
               rewards[threshold] = b.box_win_weights;
             }
@@ -1797,13 +2432,23 @@ const GamePage = () => {
           if (srcs.length > 0) setResultSrcs(srcs.reverse());
         }
 
-        /* TodayWin — from server per-player per-mode */
+        /* TodayWin Ã¢â‚¬â€ from server per-player per-mode */
         if (todayWinRes.status === 'fulfilled') {
           const total = todayWinRes.value?.today_win?.total_balance;
           if (typeof total === 'number' && Number.isFinite(total)) {
             setTodayWin(total);
             console.log('[MODE] TodayWin from API for', mode, ':', total);
           }
+        }
+
+        if (myRankTodayRes.status === 'fulfilled') {
+          const parsed = parseMyRankResponse(myRankTodayRes.value);
+          if (parsed) setMyRankToday(parsed);
+        }
+
+        if (myRankYesterdayRes.status === 'fulfilled') {
+          const parsed = parseMyRankResponse(myRankYesterdayRes.value);
+          if (parsed) setMyRankYesterday(parsed);
         }
       } catch (err) {
         console.warn('[MODE] Re-fetch failed:', err);
@@ -1851,57 +2496,108 @@ const GamePage = () => {
   const totalBet = useMemo(() => Object.values(bets).reduce((sum, val) => sum + val, 0), [bets]);
 
   /* Progress bar reaches each chest box at its threshold value */
-
-  // thresholds in order (must match visual order)
-  const BOX_THRESHOLDS = [10000, 50000, 100000, 500000, 1000000] as const;
+  const progressThresholds = useMemo(() => {
+    const uniqueSorted = Array.from(new Set(
+      boxData
+        .map((box) => box.threshold)
+        .filter((threshold) => Number.isFinite(threshold) && threshold > 0),
+    )).sort((a, b) => a - b);
+    return uniqueSorted.length > 0 ? uniqueSorted : [...DEFAULT_BOX_THRESHOLDS];
+  }, [boxData]);
 
   // closed -> open chest image mapping (from your folder screenshot)
   const CHEST_OPEN_SRC_BY_THRESHOLD: Record<number, string> = {
+    10: '/image2/chest_10k_open.png',
+    20: '/image2/chest_50k_open.png',
+    30: '/image2/chest_100k_open.png',
+    40: '/image2/chest_500k_open.png',
+    50: '/image2/chest_1m_open.png',
     10000: '/image2/chest_10k_open.png',
     50000: '/image2/chest_50k_open.png',
     100000: '/image2/chest_100k_open.png',
     500000: '/image2/chest_500k_open.png',
     1000000: '/image2/chest_1m_open.png',
   };
-  const [openedChests, setOpenedChests] = useState<Record<number, boolean>>({
-    10000: false,
-    50000: false,
-    100000: false,
-    500000: false,
-    1000000: false,
-  });
+  const [openedChests, setOpenedChests] = useState<Record<number, boolean>>(() => buildChestState(DEFAULT_BOX_THRESHOLDS));
+  const openingChestThresholdsRef = useRef<Set<number>>(new Set());
   // IMPORTANT: set your real reward amounts here (example values).
   // The popup in your screenshot shows 500, so adjust as needed per chest.
   /* Use API-driven rewards (boxRewardsRef) instead of hardcoded values */
   const isChestReady = (threshold: number) => todayWin >= threshold && !openedChests[threshold];
   const progressRatio = useMemo(() => {
     if (todayWin <= 0) return 0;
-    const segmentWidth = 1 / BOX_THRESHOLDS.length; // each box = 20%
-    for (let i = 0; i < BOX_THRESHOLDS.length; i++) {
-      const lo = i === 0 ? 0 : BOX_THRESHOLDS[i - 1];
-      const hi = BOX_THRESHOLDS[i];
+    if (progressThresholds.length === 0) return 0;
+    const segmentWidth = 1 / progressThresholds.length;
+    for (let i = 0; i < progressThresholds.length; i++) {
+      const lo = i === 0 ? 0 : progressThresholds[i - 1];
+      const hi = progressThresholds[i];
       if (todayWin <= hi) {
         const segmentProgress = (todayWin - lo) / (hi - lo);
         return segmentWidth * i + segmentWidth * segmentProgress;
       }
     }
     return 1; // exceeded all thresholds
-  }, [todayWin]);
-  const openChest = (threshold: number) => {
+  }, [progressThresholds, todayWin]);
+  const openChest = async (threshold: number) => {
     // can ONLY open if it's ready (met threshold + currently not opened)
     if (!isChestReady(threshold)) return;
+    if (openingChestThresholdsRef.current.has(threshold)) return;
 
-    // mark opened
-    setOpenedChests((prev) => ({ ...prev, [threshold]: true }));
-
-    // credit reward to balance
     const amount = boxRewardsRef.current[threshold] ?? 0;
-    if (amount > 0) {
-      setBalance((prev) => prev + amount);
-    }
+    const box = boxData.find((entry) => entry.threshold === threshold);
 
-    // show popup
-    setChestPopup({ threshold, amount });
+    openingChestThresholdsRef.current.add(threshold);
+    try {
+      // Optimistic UI: open immediately and keep it open even if save API fails.
+      setOpenedChests((prev) => {
+        const next = { ...prev, [threshold]: true };
+        if (isAdvanceMode) {
+          savedChestsAdvanceRef.current = { ...next };
+        } else {
+          savedChestsBasicRef.current = { ...next };
+        }
+        return next;
+      });
+
+      if (amount > 0) {
+        setBalance((prev) => prev + amount);
+      }
+
+      // show popup
+      setChestPopup({ threshold, amount });
+
+      if (PLAYER_ID && typeof box?.id === 'number') {
+        const modeNum = isAdvanceMode ? 1 : 2;
+        const res = await fetch(`${API_BASE}/game/magic/boxs/open`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            player_id: PLAYER_ID,
+            box_id: box.id,
+            mode: modeNum,
+            regisation: REGISATION_ID,
+          }),
+        });
+        if (res.ok) {
+          try {
+            const openResult = await res.json() as ApiOpenMagicBoxResponse;
+            if (openResult?.message) {
+              console.log('[API] Magic box open saved:', openResult.message);
+            }
+          } catch {
+            console.log('[API] Magic box open saved');
+          }
+        } else {
+          console.warn('[API] Magic box open save failed:', res.status, '(kept local open state)');
+        }
+      } else {
+        console.warn('[API] Missing player_id or box_id; using local open fallback');
+      }
+    } catch (err) {
+      console.warn('[API] Failed to save opened magic box (kept local open state):', err);
+    } finally {
+      openingChestThresholdsRef.current.delete(threshold);
+    }
   };
   // FIXED: Pointer stops now correctly point to the center of each item
   const pointerStops = useMemo(() => {
@@ -1956,20 +2652,29 @@ const GamePage = () => {
     const modeNum = isAdvanceMode ? 1 : 2;
     const pBody = apiBodyPlayer(modeNum);
 
-    const [recordsRes, todayWinRes, userInfoRes] = await Promise.allSettled([
+    const [recordsRes, todayWinRes, userInfoRes, boxesRes, myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
       apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, pBody),
-      apiFetch<ApiTodayWin>('/game/today/win', 1, apiBodyPlayer(modeNum)),
+      apiFetch<ApiTodayWin>('/game/today/win', 1, pBody),
       apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 1,
-        JSON.stringify({ regisation: 3, player_id: PLAYER_ID })),
+        JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID })),
+      apiFetch<ApiBox[]>('/game/magic/boxs', 1, pBody),
+      apiFetch<ApiMyRankResponse>('/game/my/game/rank/today/', 1, pBody),
+      apiFetch<ApiMyRankResponse>('/game/my/game/rank/yesterday/', 1, pBody),
     ]);
 
     /* Player records */
     if (recordsRes.status === 'fulfilled') {
-      const rows = recordsRes.value?.data ?? [];
-      setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
+      const payload = recordsRes.value;
+      if (hasExplicitPlayerRecordArray(payload)) {
+        const rows = extractPlayerRecordRows(payload);
+        setApiPlayerRecords(rows.map((row) => mapApiPlayerRecord(row)));
+        setPlayerRecordsHydrated(true);
+      } else {
+        console.warn('[LIVE] Player records payload had no array shape, keeping previous records:', payload);
+      }
     }
 
-    /* TodayWin — trust server value (API now returns per-player per-mode data) */
+    /* TodayWin Ã¢â‚¬â€ trust server value (API now returns per-player per-mode data) */
     if (todayWinRes.status === 'fulfilled') {
       const total = todayWinRes.value?.today_win?.total_balance;
       if (typeof total === 'number' && Number.isFinite(total)) {
@@ -1978,10 +2683,87 @@ const GamePage = () => {
       }
     }
 
-    /* Balance — trust user info API (called AFTER balance/update has saved) */
-    if (userInfoRes.status === 'fulfilled' && typeof userInfoRes.value?.balance === 'number') {
-      setBalance(userInfoRes.value.balance);
-      console.log('[LIVE] Balance from user info:', userInfoRes.value.balance);
+    /* Boxes Ã¢â‚¬â€ trust per-player status from API */
+    if (boxesRes.status === 'fulfilled' && boxesRes.value?.length) {
+      const boxesSorted = [...boxesRes.value].sort((a, b) => {
+        const ta = resolveThresholdFromBoxSource(a.box_source) ?? Number.MAX_SAFE_INTEGER;
+        const tb = resolveThresholdFromBoxSource(b.box_source) ?? Number.MAX_SAFE_INTEGER;
+        return ta - tb;
+      });
+      const thresholdsFromApi = boxesSorted.map((b, idx) => (
+        resolveThresholdFromBoxSource(b.box_source)
+        ?? DEFAULT_BOX_THRESHOLDS[idx]
+        ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1]
+      ));
+      const openedFromApi = buildChestState(thresholdsFromApi);
+      const bd = boxesSorted.map((b, idx) => {
+        const threshold = resolveThresholdFromBoxSource(b.box_source)
+          ?? DEFAULT_BOX_THRESHOLDS[idx]
+          ?? DEFAULT_BOX_THRESHOLDS[DEFAULT_BOX_THRESHOLDS.length - 1];
+        const closedSrc = resolveMediaPath(b.box_image_close ?? b.box_image)
+          ?? BOX_VALUE_TO_CHEST[Number(b.box_source)]
+          ?? '/image2/chest_10k.png';
+        const openSrc = resolveMediaPath(b.box_image_open)
+          ?? CHEST_OPEN_SRC_BY_THRESHOLD[threshold]
+          ?? CHEST_OPEN_SRC_BY_THRESHOLD[Number(b.box_source)]
+          ?? '/image2/chest_10k_open.png';
+
+        if (threshold in openedFromApi) {
+          openedFromApi[threshold] = isTruthyBoxStatus(b.status);
+        }
+
+        return {
+          id: typeof b.id === 'number' ? b.id : null,
+          threshold,
+          src: closedSrc,
+          openSrc,
+          label: formatThresholdLabel(threshold),
+        };
+      });
+      const preservedLocal = isAdvanceMode
+        ? savedChestsAdvanceRef.current
+        : savedChestsBasicRef.current;
+      const mergedOpened = mergeOpenedChestState(openedFromApi, preservedLocal);
+      setBoxData(bd);
+      setOpenedChests(mergedOpened);
+      if (isAdvanceMode) {
+        savedChestsAdvanceRef.current = { ...mergedOpened };
+      } else {
+        savedChestsBasicRef.current = { ...mergedOpened };
+      }
+
+      const rewards: Record<number, number> = {};
+      for (const b of boxesSorted) {
+        const threshold = resolveThresholdFromBoxSource(b.box_source);
+        if (threshold && typeof b.box_win_weights === 'number') {
+          rewards[threshold] = b.box_win_weights;
+        }
+      }
+      if (Object.keys(rewards).length > 0) {
+        boxRewardsRef.current = { ...boxRewardsRef.current, ...rewards };
+      }
+      console.log('[LIVE] Boxes synced:', bd.length);
+    }
+
+    if (myRankTodayRes.status === 'fulfilled') {
+      const parsed = parseMyRankResponse(myRankTodayRes.value);
+      if (parsed) setMyRankToday(parsed);
+    }
+
+    if (myRankYesterdayRes.status === 'fulfilled') {
+      const parsed = parseMyRankResponse(myRankYesterdayRes.value);
+      if (parsed) setMyRankYesterday(parsed);
+    }
+
+    /* Balance Ã¢â‚¬â€ trust user info API (called AFTER balance/update has saved) */
+    if (userInfoRes.status === 'fulfilled') {
+      if (typeof userInfoRes.value?.balance === 'number') {
+        setBalance(userInfoRes.value.balance);
+        console.log('[LIVE] Balance from user info:', userInfoRes.value.balance);
+      }
+      const identity = parseApiIdentity(userInfoRes.value);
+      if (identity.name) setMyPlayerName(identity.name);
+      if (identity.pic) setMyPlayerPic(identity.pic);
     }
   }, [isAdvanceMode]);
 
@@ -1993,7 +2775,7 @@ const GamePage = () => {
       const res = await fetch(`${API_BASE}/game/user/balance/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registration_id: 3, player_id: PLAYER_ID, amount: newBalance }),
+        body: JSON.stringify({ registration_id: REGISATION_ID, player_id: PLAYER_ID, amount: newBalance }),
       });
       if (!res.ok) {
         console.warn('[API] Balance update failed:', res.status);
@@ -2007,7 +2789,7 @@ const GamePage = () => {
         const infoRes = await fetch(`${API_BASE}/game/game/balance/and/user/info`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ regisation: 3, player_id: PLAYER_ID }),
+          body: JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID }),
         });
         if (infoRes.ok) {
           const info: ApiUserInfo = await infoRes.json();
@@ -2015,6 +2797,9 @@ const GamePage = () => {
             setBalance(info.balance);
             console.log('[API] Confirmed balance from server:', info.balance);
           }
+          const identity = parseApiIdentity(info);
+          if (identity.name) setMyPlayerName(identity.name);
+          if (identity.pic) setMyPlayerPic(identity.pic);
         }
       } catch { /* non-critical */ }
     } catch (err) {
@@ -2054,7 +2839,8 @@ const GamePage = () => {
           bet,
           element: elementId,
           mode: isAdvanceMode ? 1 : 2,
-          registration: 3,
+          registration: REGISATION_ID,
+          regisation: REGISATION_ID,
         }),
       });
 
@@ -2126,7 +2912,7 @@ const GamePage = () => {
 
     /* If we still don't have a winner, skip the round */
     if (winnerPollTokenRef.current !== token || phaseRef.current !== 'DRAWING') return;
-    console.warn('[LIVE] Could not get winner — skipping round');
+    console.warn('[LIVE] Could not get winner Ã¢â‚¬â€ skipping round');
     setPhase('SHOWTIME');
     phaseRef.current = 'SHOWTIME';
     setTimeLeft(1);
@@ -2172,7 +2958,7 @@ const GamePage = () => {
     const valid = sampled.filter((entry): entry is { session: ApiSessionTime; response: Response } => Boolean(entry));
     if (valid.length === 0) return null;
 
-    // Pick the EARLIEST (soonest) next_run_time — ensures all clients
+    // Pick the EARLIEST (soonest) next_run_time Ã¢â‚¬â€ ensures all clients
     // join the same current round even if the load balancer hits different servers
     let best = valid[0];
     let bestEndMs = Date.parse(best.session.next_run_time);
@@ -2251,7 +3037,7 @@ const GamePage = () => {
         }
 
         if (remaining <= 0) {
-          /* Session already expired — skip to DRAWING immediately */
+          /* Session already expired Ã¢â‚¬â€ skip to DRAWING immediately */
           console.log('[TIMER] Session already expired, skipping to DRAWING');
           currentSessionEndRef.current = '';
           bettingEndMsRef.current = 0;
@@ -2272,14 +3058,14 @@ const GamePage = () => {
         phaseRef.current = 'BETTING';
         setShowPreDraw(true);
         setTimeLeft(remaining);
-        return; // success — exit the retry loop
+        return; // success Ã¢â‚¬â€ exit the retry loop
       } catch (err) {
         console.error(`[TIMER] beginRound attempt ${attempt} failed:`, err);
         if (attempt < 3) { await new Promise(r => setTimeout(r, 500)); continue; }
       }
     }
 
-    /* All 3 attempts failed — fallback to local timer */
+    /* All 3 attempts failed Ã¢â‚¬â€ fallback to local timer */
     console.warn('[TIMER] All session sync attempts failed, falling back to BET_SECONDS =', BET_SECONDS);
     currentSessionEndRef.current = '';
     bettingEndMsRef.current = 0;
@@ -2303,7 +3089,10 @@ const GamePage = () => {
     const ids = Array.from(new Set(group));
 
     const totalCost = selectedChip * ids.length;
-    if (balance < totalCost) return; // require enough balance to bet on ALL items
+    if (balance < totalCost) {
+      setActiveModal('RECHARGE');
+      return; // require enough balance to bet on ALL items
+    }
 
     // 1) Update local UI state in one shot
     setBalance((prev) => prev - totalCost);
@@ -2411,7 +3200,7 @@ const GamePage = () => {
     return () => window.clearInterval(id);
   }, [getAlignedNowMs, phase]);
 
-  /* ── Periodic timer sync during BETTING (with backoff) ── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ Periodic timer sync during BETTING (with backoff) Ã¢â€â‚¬Ã¢â€â‚¬ */
   const timerSyncFailCountRef = useRef(0);
   useEffect(() => {
     if (phase !== 'BETTING') {
@@ -2472,7 +3261,7 @@ const GamePage = () => {
     };
   }, [applyServerSessionClock, phase, updateServerClockOffsetFromResponse]);
 
-  /* ── Periodic live data refresh during BETTING ── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬ Periodic live data refresh during BETTING Ã¢â€â‚¬Ã¢â€â‚¬ */
   useEffect(() => {
     if (phase !== 'BETTING') return;
 
@@ -2480,14 +3269,16 @@ const GamePage = () => {
       const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
       const pBody = apiBodyPlayer(isAdvanceMode ? 1 : 2);
 
-      const [jackpotRes, rankRes, topRes, winHistRes] = await Promise.allSettled([
+      const [jackpotRes, rankRes, topRes, winHistRes, myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
         apiFetch<ApiJackpot>('/game/jackpot', 1, mBody),
         apiFetch<ApiRankRow[]>('/game/game/rank/today', 1, mBody),
         apiFetch<ApiTopWinnerResponse>('/game/top/winers', 1, pBody),
         apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
+        apiFetch<ApiMyRankResponse>('/game/my/game/rank/today/', 1, pBody),
+        apiFetch<ApiMyRankResponse>('/game/my/game/rank/yesterday/', 1, pBody),
       ]);
 
-      /* Jackpot — only update if server returns a real value (avoids overwriting details total with 0) */
+      /* Jackpot Ã¢â‚¬â€ only update if server returns a real value (avoids overwriting details total with 0) */
       if (jackpotRes.status === 'fulfilled' && jackpotRes.value?.Jackpot != null && jackpotRes.value.Jackpot > 0) {
         setJackpotAmount(jackpotRes.value.Jackpot);
       }
@@ -2520,7 +3311,17 @@ const GamePage = () => {
         setTopWinnersRows(mapped);
       }
 
-      /* Result strip (win history) — only update during BETTING, and only if
+      if (myRankTodayRes.status === 'fulfilled') {
+        const parsed = parseMyRankResponse(myRankTodayRes.value);
+        if (parsed) setMyRankToday(parsed);
+      }
+
+      if (myRankYesterdayRes.status === 'fulfilled') {
+        const parsed = parseMyRankResponse(myRankYesterdayRes.value);
+        if (parsed) setMyRankYesterday(parsed);
+      }
+
+      /* Result strip (win history) Ã¢â‚¬â€ only update during BETTING, and only if
          the server has caught up (more entries than current state) to avoid
          wiping locally-added winners with stale server data */
       if (phase === 'BETTING' && winHistRes.status === 'fulfilled' && Array.isArray(winHistRes.value) && winHistRes.value.length > 0) {
@@ -2550,7 +3351,7 @@ const GamePage = () => {
 
         if (srcs.length > 0) {
           const serverResults = srcs.reverse();
-          /* Only replace if server has at least as many results — avoids wiping
+          /* Only replace if server has at least as many results Ã¢â‚¬â€ avoids wiping
              locally-added winners when server data is stale */
           setResultSrcs((prev) => serverResults.length >= prev.length ? serverResults : prev);
         }
@@ -2813,23 +3614,35 @@ const GamePage = () => {
       }
 
       if (winner) {
-        const sortedBets = (Object.entries(bets) as Array<[ItemId, number]>).sort((a, b) => b[1] - a[1]);
-        const selected = sortedBets[0] && sortedBets[0][1] > 0 ? sortedBets[0][0] : 'none';
-        const selectedAmount = sortedBets[0] && sortedBets[0][1] > 0 ? sortedBets[0][1] : 0;
+        const placedBets = (Object.entries(bets) as Array<[ItemId, number]>)
+          .filter(([, amount]) => amount > 0)
+          .sort((a, b) => b[1] - a[1]);
 
-        const record: GameRecord = {
-          round: roundRef.current,
-          at: formatRoundTime(new Date()),
-          winner,
-          selected,
-          selectedAmount,
-          win: winAmount,
-          balanceBefore,
-          balanceAfter,
-        };
+        // Record only rounds where the user actually placed at least one bet.
+        if (placedBets.length > 0) {
+          const selected = placedBets[0][0];
+          const selectedAmount = placedBets[0][1];
+          const winningBucket: 'VEGETABLES' | 'DRINKS' | null = roundType === 'JACKPOT'
+            ? (VEG_ITEMS.includes(winner[0]) ? 'VEGETABLES' : 'DRINKS')
+            : null;
+
+          const record: GameRecord = {
+            round: roundRef.current,
+            at: formatRoundTime(new Date()),
+            winner,
+            selected,
+            selectedAmount,
+            selectedBets: placedBets.map(([itemId, amount]) => ({ itemId, amount })),
+            winningBucket,
+            win: winAmount,
+            balanceBefore,
+            balanceAfter,
+          };
+
+          setRecords((prev) => [record, ...prev].slice(0, 30));
+        }
 
         roundRef.current += 1;
-        setRecords((prev) => [record, ...prev].slice(0, 30));
       }
 
       void refreshRoundStateFromServer();
@@ -2871,7 +3684,10 @@ const GamePage = () => {
 
   const placeBet = (itemId: ItemId) => {
     if (!canBet) return;
-    if (balance < selectedChip) return;
+    if (balance < selectedChip) {
+      setActiveModal('RECHARGE');
+      return;
+    }
 
     /* Enforce max bets per turn from API */
     const bettedItemCount = (Object.values(bets) as number[]).filter(v => v > 0).length;
@@ -2887,7 +3703,7 @@ const GamePage = () => {
 
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
 
-    /* Submit bet to API — only revert on client-side rejection (4xx), not server errors */
+    /* Submit bet to API Ã¢â‚¬â€ only revert on client-side rejection (4xx), not server errors */
     if (PLAYER_ID) {
       const chipAmount = selectedChip;
       submitParticipantBet({ itemId, bet: chipAmount, balanceAfterBet: balance - chipAmount }).then((status) => {
@@ -2901,7 +3717,7 @@ const GamePage = () => {
             [itemId]: Math.max(0, prev[itemId] - chipAmount),
           }));
         }
-        /* 'server_error' and 'ok' — don't revert (server may have accepted but returned error) */
+        /* 'server_error' and 'ok' Ã¢â‚¬â€ don't revert (server may have accepted but returned error) */
       });
     }
 
@@ -2968,6 +3784,15 @@ const GamePage = () => {
   const timerUrgent = phase === 'BETTING' && timeLeft <= 5;
   const winnerItem = pendingWin ? itemMap[pendingWin.itemId] : null;
   const rankRows = rankTab === 'TODAY' ? rankRowsToday : rankRowsYesterday;
+  const myRankRow = rankTab === 'TODAY' ? myRankToday : myRankYesterday;
+  const myRankLabel =
+    typeof myRankRow?.position === 'number' && myRankRow.position > 0
+      ? (myRankRow.position > 99 ? '99+' : String(myRankRow.position))
+      : '99+';
+  const myRankName = (myRankRow?.name ?? myPlayerName) || 'You';
+  const myRankDiamonds = myRankRow?.diamonds ?? 0;
+  const myRankPic = myRankRow?.pic ?? myPlayerPic;
+  const isRechargeModal = activeModal === 'RECHARGE';
   const remainingForAdvanceApi = advanceModeApi ? advanceModeApi.remanning_values : remainingForAdvance;
   const winAmountLabel = pendingWin ? formatNum(pendingWin.amount) : '0';
   const activePointerStop = pointerStops[pointerStopIndex] ?? POINTER_BASE_POSITION;
@@ -3041,7 +3866,7 @@ const GamePage = () => {
 
 
 
-        {/* Dynamic diamond balance bar â€” layered from individual assets */}
+        {/* Dynamic diamond balance bar ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â layered from individual assets */}
         <div
           className="absolute z-30 flex items-center"
           style={{
@@ -3059,7 +3884,7 @@ const GamePage = () => {
               style={{ borderRadius: 14 }}
             />
 
-            {/* Diamond icon â€” overlapping left edge */}
+            {/* Diamond icon ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â overlapping left edge */}
             <img
               src={coinIconSrc}
               alt=""
@@ -3440,7 +4265,7 @@ const GamePage = () => {
           );
         })()}
 
-        {/* Wooden signboard â€” always visible */}
+        {/* Wooden signboard ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â always visible */}
         <motion.img
           src={gameLogoSrc}
           alt=""
@@ -3455,7 +4280,7 @@ const GamePage = () => {
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Text overlay â€” always use local wordmark for consistent display */}
+        {/* Text overlay ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â always use local wordmark for consistent display */}
         <img
           src="/image2/greedy_wordmark.png"
           alt=""
@@ -3596,7 +4421,7 @@ const GamePage = () => {
                 }}
               />
 
-              {/* â”€â”€ Winner starburst sparkle effect â”€â”€ */}
+              {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Winner starburst sparkle effect ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
               {isShowWinner && (
                 <div className="pointer-events-none absolute inset-0 z-[-1] overflow-visible" style={{ left: '50%', top: '50%', width: 0, height: 0 }}>
                   {/* Radial light rays */}
@@ -3795,7 +4620,7 @@ const GamePage = () => {
               width: 75,
               height: 72,
               cursor: canBet ? 'pointer' : 'default',
-              opacity: 1,                 // âœ… never fade
+              opacity: 1,                 // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ never fade
               pointerEvents: canBet ? 'auto' : 'none',
             }}
           >
@@ -3818,7 +4643,7 @@ const GamePage = () => {
               width: 79,
               height: 68,
               cursor: canBet ? 'pointer' : 'default',
-              opacity: 1,                 // âœ… never fade
+              opacity: 1,                 // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ never fade
               pointerEvents: canBet ? 'auto' : 'none',
             }}
           >
@@ -4066,28 +4891,38 @@ const GamePage = () => {
             />
           </div>
 
-          {/* â”€â”€ Dynamic chests from API â”€â”€ */}
-          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
-          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
-          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
-          {/* â”€â”€ Dynamic chests from API (shake + flare when ready, clickable only when ready) â”€â”€ */}
+          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Dynamic chests from API ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Dynamic chests from API (shake + flare when ready, clickable only when ready) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Dynamic chests from API (shake + flare when ready, clickable only when ready) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Dynamic chests from API (shake + flare when ready, clickable only when ready) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Dynamic chests from API (shake + flare when ready, clickable only when ready) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
           {boxData.map((box, idx) => {
             const totalBoxes = boxData.length;
             const boxWidth = 56;
             // Align chests exactly with the progress bar (left: 25, width: 343)
             const barLeft = 25;
-            const barRight = 25 + 345; // 370 — aligned with chip container right edge
+            const barRight = 25 + 345; // 370 Ã¢â‚¬â€ aligned with chip container right edge
             const firstChestLeft = barLeft + 15; // 40
-            const lastChestLeft = barRight - boxWidth; // 314 — last chest right edge at 370
+            const lastChestLeft = barRight - boxWidth; // 314 Ã¢â‚¬â€ last chest right edge at 370
             const spacing = totalBoxes > 1 ? (lastChestLeft - firstChestLeft) / (totalBoxes - 1) : 0;
             const xPos = firstChestLeft + idx * spacing;
 
-            const threshold = BOX_THRESHOLDS[idx] ?? BOX_THRESHOLDS[BOX_THRESHOLDS.length - 1];
+            const threshold = box.threshold;
             const opened = !!openedChests[threshold];
             const ready = isChestReady(threshold);
 
-            const closedSrc = box.src;
-            const openSrc = box.openSrc || CHEST_OPEN_SRC_BY_THRESHOLD[threshold] || closedSrc;
+            const normalizedThreshold = Math.round(threshold);
+            const fallbackThreshold = DEFAULT_BOX_THRESHOLDS[Math.min(idx, DEFAULT_BOX_THRESHOLDS.length - 1)];
+            const closedFallback =
+              BOX_VALUE_TO_CHEST[normalizedThreshold]
+              ?? BOX_VALUE_TO_CHEST[fallbackThreshold]
+              ?? '/image2/chest_10k.png';
+            const openFallback =
+              CHEST_OPEN_SRC_BY_THRESHOLD[normalizedThreshold]
+              ?? CHEST_OPEN_SRC_BY_THRESHOLD[fallbackThreshold]
+              ?? closedFallback;
+            const closedSrc = box.src || closedFallback;
+            const openSrc = box.openSrc || openFallback;
             const chestSrc = opened ? openSrc : closedSrc;
 
             const flareSize = boxWidth + 30;
@@ -4096,7 +4931,7 @@ const GamePage = () => {
               <button
                 key={`${threshold}-${idx}`}
                 type="button"
-                onClick={() => openChest(threshold)}
+                onClick={() => { void openChest(threshold); }}
                 className="absolute z-20 p-0 border-none bg-transparent"
                 style={{
                   left: xPos,
@@ -4152,6 +4987,22 @@ const GamePage = () => {
                   alt=""
                   className="absolute object-contain"
                   style={{ left: 0, top: 0, width: boxWidth, height: boxWidth, zIndex: 1 }}
+                  onError={(e) => {
+                    const img = e.currentTarget as HTMLImageElement;
+                    const step = img.dataset.fallbackStep ?? '0';
+
+                    if (step === '0') {
+                      img.dataset.fallbackStep = '1';
+                      img.src = opened ? openFallback : closedFallback;
+                      return;
+                    }
+
+                    if (step === '1' && opened) {
+                      img.dataset.fallbackStep = '2';
+                      img.src = closedFallback;
+                      return;
+                    }
+                  }}
                   animate={
                     ready
                       ? { x: [0, -2, 2, -2, 2, 0], rotate: [0, -2, 2, -2, 2, 0], scale: [1, 1.03, 1] }
@@ -4160,7 +5011,7 @@ const GamePage = () => {
                   transition={ready ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
                 />
 
-                {/* Label removed — using API labels only from progress bar markers */}
+                {/* Label removed Ã¢â‚¬â€ using API labels only from progress bar markers */}
               </button>
             );
           })}
@@ -4190,7 +5041,7 @@ const GamePage = () => {
             borderImageSlice: 1
           }} />
 
-          {/* Scrollable result strip â€” newest at left */}
+          {/* Scrollable result strip ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â newest at left */}
           <div
             className="absolute z-20"
             style={{
@@ -4277,7 +5128,7 @@ const GamePage = () => {
                   alt="Game On"
                   style={{
                     width: ARTBOARD.width, // 402
-                    height: 'auto',        // âœ… keeps ratio (no stretch)
+                    height: 'auto',        // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ keeps ratio (no stretch)
                     display: 'block',
                   }}
                 />
@@ -4299,7 +5150,7 @@ const GamePage = () => {
             >
               <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.34)', backdropFilter: 'blur(2px)' }} />
 
-              {/* âœ… WIN PANEL â€” Trophy animation */}
+              {/* ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ WIN PANEL ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Trophy animation */}
               {resultKind === 'WIN' && winnerIds && winnerIds.length > 0 ? (
                 <TrophyWinOverlay
                   chipSrc={CHIP_IMAGE_MAP[selectedChip] || '/image2/chip_100.png'}
@@ -4311,11 +5162,11 @@ const GamePage = () => {
                   winnerIds={winnerIds}
                 />
               ) : (
-                /* âœ… NO BET + LOSE PANEL */
+                /* ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ NO BET + LOSE PANEL */
                 <div className="absolute" style={{ left: 26, top: 330, width: 350, height: 340, overflow: 'hidden' }}>
                   <img src="/image2/panel_scoreboard_blank.png" alt="" className="absolute inset-0 h-full w-full object-fill" />
 
-                  {/* â”€â”€ Header: inside the rounded pill-shaped strip â”€â”€ */}
+                  {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Header: inside the rounded pill-shaped strip ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                   <div className="absolute flex items-center" style={{ left: 30, top: 72, width: 290, height: 42 }}>
                     <div
                       className="shrink-0 flex items-center justify-center"
@@ -4349,7 +5200,7 @@ const GamePage = () => {
                     </div>
                   </div>
 
-                  {/* â”€â”€ Leaderboard rows â€” inside body area below header strip â”€â”€ */}
+                  {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Leaderboard rows ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â inside body area below header strip ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                   {rankRows.slice(0, 3).map((row, idx) => (
                     <div
                       key={`${row.name}-${idx}`}
@@ -4509,14 +5360,26 @@ const GamePage = () => {
                 style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(4px)' }}
               />
 
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                style={{ width: 326, height: 430 }}
+              <motion.div
+                className={`absolute left-1/2 -translate-x-1/2 ${isRechargeModal ? '' : 'top-1/2 -translate-y-1/2'}`}
+                style={{
+                  width: activeModal === 'RECHARGE' ? 352 : 326,
+                  height: activeModal === 'RECHARGE' ? 260 : 430,
+                  top: isRechargeModal ? 470 : undefined,
+                }}
+                initial={activeModal === 'RECHARGE' ? { y: 80, opacity: 0 } : { y: 0, opacity: 1 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={activeModal === 'RECHARGE' ? { y: 55, opacity: 0 } : { y: 0, opacity: 1 }}
+                transition={
+                  activeModal === 'RECHARGE'
+                    ? { type: 'spring', stiffness: 360, damping: 28 }
+                    : { duration: 0.18 }
+                }
               >
                 {activeModal === 'RULE' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* â”€â”€ rules_board.png as the outer frame â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ rules_board.png as the outer frame ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <img
                       src="/image2/rules_board.png"
                       alt=""
@@ -4524,7 +5387,7 @@ const GamePage = () => {
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
 
-                    {/* â”€â”€ "Rule" title â€” same gold style as jackpot board, NO red pill â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ "Rule" title ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â same gold style as jackpot board, NO red pill ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
                       style={{
@@ -4553,7 +5416,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* â”€â”€ Red × close button â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Red Ãƒâ€” close button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4572,10 +5435,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close rules"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>&times;</span>
                     </button>
 
-                    {/* â”€â”€ #FFEBBB content mask â€” hides baked-in board text â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ #FFEBBB content mask ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hides baked-in board text ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -4590,7 +5453,7 @@ const GamePage = () => {
                         overflow: 'hidden',
                       }}
                     >
-                      {/* â”€â”€ Scrollable rules list â”€â”€ */}
+                      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Scrollable rules list ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                       <div
                         style={{
                           height: '100%',
@@ -4656,7 +5519,7 @@ const GamePage = () => {
                 {activeModal === 'PRIZE' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* â”€â”€ Outer board frame â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Outer board frame ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <img
                       src="/image2/rules_board.png"
                       alt=""
@@ -4674,7 +5537,7 @@ const GamePage = () => {
                         borderRadius: 8,
                       }}
                     />
-                    {/* â”€â”€ "Prize distribution" gold title â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ "Prize distribution" gold title ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
                       style={{ top: 18, zIndex: 10, whiteSpace: 'nowrap' }}
@@ -4699,7 +5562,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* â”€â”€ Red × close button â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Red Ãƒâ€” close button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4718,10 +5581,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close prize"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>&times;</span>
                     </button>
 
-                    {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ #FFEBBB content mask ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -4738,7 +5601,7 @@ const GamePage = () => {
                         flexDirection: 'column',
                       }}
                     >
-                      {/* â”€â”€ Scrollable content â”€â”€ */}
+                      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Scrollable content ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                       <div
                         style={{
                           flex: 1,
@@ -4750,7 +5613,7 @@ const GamePage = () => {
                         }}
                       >
 
-                        {/* â”€â”€ Prize table â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Prize table ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         <div
                           style={{
                             width: '100%',
@@ -4795,7 +5658,7 @@ const GamePage = () => {
                             </span>
                           </div>
 
-                          {/* Table rows â€” pull from API or use defaults */}
+                          {/* Table rows ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pull from API or use defaults */}
                           {(() => {
                             const defaultRows = [
                               { rank: '1', prize: 1000000 },
@@ -4856,9 +5719,9 @@ const GamePage = () => {
                           })()}
                         </div>
 
-                        {/* â”€â”€ Numbered rules below table â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Numbered rules below table ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         {(() => {
-                          // If API has a title, show it (not needed per ref â€” ref has no sub-title)
+                          // If API has a title, show it (not needed per ref ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ref has no sub-title)
                           const rules = [
                             'The prize diamond will increase after each game round.',
                             'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
@@ -4895,7 +5758,7 @@ const GamePage = () => {
                 {activeModal === 'RECORDS' ? (
                   <div className="relative h-full w-full" style={{ overflow: 'visible' }}>
 
-                    {/* â”€â”€ game_record_board.png as outer frame â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ game_record_board.png as outer frame ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <img
                       src="/image2/game_record_board.png"
                       alt=""
@@ -4903,7 +5766,7 @@ const GamePage = () => {
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
 
-                    {/* â”€â”€ Red × close button â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Red Ãƒâ€” close button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -4922,10 +5785,10 @@ const GamePage = () => {
                       }}
                       aria-label="Close records"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>&times;</span>
                     </button>
 
-                    {/* â”€â”€ #FFEBBB content mask â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ #FFEBBB content mask ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       style={{
                         position: 'absolute',
@@ -4942,7 +5805,7 @@ const GamePage = () => {
                         flexDirection: 'column',
                       }}
                     >
-                      {/* â”€â”€ Scrollable records list â”€â”€ */}
+                      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Scrollable records list ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                       <div
                         style={{
                           flex: 1,
@@ -4954,17 +5817,210 @@ const GamePage = () => {
                         }}
                       >
                         {(() => {
-                          const displayRecords = apiPlayerRecords.length > 0
-                            ? apiPlayerRecords
-                            : records.map(r => ({
-                              round: r.round,
-                              element: ID_TO_API_NAME[r.winner[0]] ?? r.winner[0],
-                              bet: r.selectedAmount,
-                              win: r.win,
-                              time: r.at,
-                              balanceBefore: r.balanceBefore,
-                              balanceAfter: r.balanceAfter,
-                            }));
+                          type DisplayRecord = {
+                            round?: number;
+                            time?: string;
+                            selectedOptions: Array<{ itemId: ItemId; amount: number }>;
+                            winningItems: ItemId[];
+                            winningBucket: 'VEGETABLES' | 'DRINKS' | null;
+                            win: number;
+                            balanceBefore: number | null;
+                            balanceAfter: number | null;
+                          };
+
+                          const toItemId = (name?: string | null): ItemId | null => {
+                            if (!name) return null;
+                            const normalized = name.trim();
+                            return API_NAME_TO_ID[normalized] ?? API_NAME_TO_ID[normalized.toLowerCase()] ?? null;
+                          };
+
+                          const bucketFromItem = (itemId: ItemId | null): 'VEGETABLES' | 'DRINKS' | null => {
+                            if (!itemId) return null;
+                            return VEG_ITEMS.includes(itemId) ? 'VEGETABLES' : 'DRINKS';
+                          };
+
+                          const localDisplayRecords: DisplayRecord[] = records
+                            .map((record) => {
+                              const selectedOptions = Array.isArray(record.selectedBets) && record.selectedBets.length > 0
+                                ? record.selectedBets.filter((entry) => entry.amount > 0)
+                                : (
+                                  record.selected !== 'none' && record.selectedAmount > 0
+                                    ? [{ itemId: record.selected, amount: record.selectedAmount }]
+                                    : []
+                                );
+
+                              const bucket = record.winningBucket
+                                ?? (record.winner.length > 1 ? bucketFromItem(record.winner[0]) : null);
+                              const winningItems = bucket === 'VEGETABLES'
+                                ? [...VEG_ITEMS]
+                                : bucket === 'DRINKS'
+                                  ? [...DRINK_ITEMS]
+                                  : [...record.winner];
+
+                              return {
+                                round: record.round,
+                                time: record.at,
+                                selectedOptions,
+                                winningItems,
+                                winningBucket: bucket,
+                                win: record.win,
+                                balanceBefore: record.balanceBefore,
+                                balanceAfter: record.balanceAfter,
+                              };
+                            })
+                            .filter((record) => record.selectedOptions.length > 0);
+
+                          const apiDisplayRecords: DisplayRecord[] = (() => {
+                            if (apiPlayerRecords.length === 0) return [];
+
+                            const groups = new Map<string, {
+                              order: number;
+                              round?: number;
+                              time?: string;
+                              selectedMap: Map<ItemId, number>;
+                              winningSet: Set<ItemId>;
+                              fallbackWinning: ItemId | null;
+                              winningBucket: 'VEGETABLES' | 'DRINKS' | null;
+                              win: number;
+                              balanceBefore: number | null;
+                              balanceAfter: number | null;
+                            }>();
+
+                            apiPlayerRecords.forEach((row, rowIdx) => {
+                              const roundKey = row.round != null ? `r:${row.round}` : 'r:na';
+                              const timeKey = row.time ? `t:${row.time}` : '';
+                              const key = timeKey ? `${roundKey}|${timeKey}` : roundKey;
+                              const existing = groups.get(key) ?? {
+                                order: rowIdx,
+                                round: row.round,
+                                time: row.time,
+                                selectedMap: new Map<ItemId, number>(),
+                                winningSet: new Set<ItemId>(),
+                                fallbackWinning: null,
+                                winningBucket: null,
+                                win: 0,
+                                balanceBefore: null,
+                                balanceAfter: null,
+                              };
+
+                              const itemId = toItemId(row.element ?? null);
+                              const winningElementId =
+                                toItemId(row.winningElementName ?? null)
+                                ?? inferItemIdFromIconPath(row.winningElementIcon ?? null);
+                              const parsedBet = Number(row.bet ?? 0);
+                              const parsedWin = Number(row.win ?? 0);
+                              const betAmount = Number.isFinite(parsedBet) ? parsedBet : 0;
+                              const winAmount = Number.isFinite(parsedWin) ? parsedWin : 0;
+
+                              const selectedBets = Array.isArray(row.selectedBets) ? row.selectedBets : [];
+                              const winningItems = Array.isArray(row.winningItems) ? row.winningItems : [];
+                              if (selectedBets.length > 0) {
+                                selectedBets.forEach((entry) => {
+                                  const selectedItemId =
+                                    toItemId(entry.elementName)
+                                    ?? inferItemIdFromIconPath(entry.elementIcon);
+                                  const selectedAmount = Number(entry.bet ?? 0);
+                                  if (selectedItemId && Number.isFinite(selectedAmount) && selectedAmount > 0) {
+                                    existing.selectedMap.set(selectedItemId, (existing.selectedMap.get(selectedItemId) ?? 0) + selectedAmount);
+                                  }
+                                });
+                              } else if (itemId && betAmount > 0) {
+                                existing.selectedMap.set(itemId, (existing.selectedMap.get(itemId) ?? 0) + betAmount);
+                              }
+
+                              if (winningElementId) {
+                                existing.winningSet.add(winningElementId);
+                              } else if (winningItems.length > 0) {
+                                winningItems.forEach((entry) => {
+                                  const winningItemId =
+                                    toItemId(entry.elementName)
+                                    ?? inferItemIdFromIconPath(entry.elementIcon);
+                                  if (winningItemId) existing.winningSet.add(winningItemId);
+                                });
+                              } else if (itemId && winAmount > 0) {
+                                existing.winningSet.add(itemId);
+                              }
+
+                              if (!existing.fallbackWinning) {
+                                const firstWinningItemId = winningItems.length > 0
+                                  ? (toItemId(winningItems[0].elementName)
+                                    ?? inferItemIdFromIconPath(winningItems[0].elementIcon))
+                                  : null;
+                                existing.fallbackWinning = winningElementId ?? firstWinningItemId ?? itemId ?? null;
+                              }
+                              existing.win += winAmount;
+
+                              if (existing.balanceBefore == null) {
+                                existing.balanceBefore =
+                                  typeof row.balanceBefore === 'number' ? row.balanceBefore
+                                    : typeof row.balance === 'number' ? row.balance
+                                      : typeof row.totalBalance === 'number' ? row.totalBalance
+                                        : null;
+                              }
+
+                              const afterCandidate =
+                                typeof row.balanceAfter === 'number' ? row.balanceAfter
+                                  : typeof row.currentBalance === 'number' ? row.currentBalance
+                                    : null;
+                              if (afterCandidate != null) {
+                                existing.balanceAfter = afterCandidate;
+                              }
+
+                              const explicitBucket = row.winningBucket ?? null;
+                              if (explicitBucket) {
+                                existing.winningBucket = explicitBucket;
+                              }
+
+                              const jackpotFirstName = Array.isArray(row.jackpotElements) && row.jackpotElements.length > 0
+                                ? row.jackpotElements[0]
+                                : null;
+                              const jackpotItemId = toItemId(jackpotFirstName);
+                              const fallbackJackpotItemId =
+                                (winningElementId ?? itemId) && (row.roundType?.toUpperCase() === 'JACKPOT' || !!row.jackpotName)
+                                  ? (winningElementId ?? itemId)
+                                  : null;
+                              const jackpotBucket = bucketFromItem(jackpotItemId ?? fallbackJackpotItemId);
+                              if (jackpotBucket) {
+                                existing.winningBucket = jackpotBucket;
+                              }
+
+                              groups.set(key, existing);
+                            });
+
+                            return Array.from(groups.values())
+                              .sort((a, b) => a.order - b.order)
+                              .map((group) => {
+                                const selectedOptions = Array.from(group.selectedMap.entries())
+                                  .map(([itemId, amount]) => ({ itemId, amount }))
+                                  .sort((a, b) => b.amount - a.amount);
+
+                                const winningItems = group.winningBucket === 'VEGETABLES'
+                                  ? [...VEG_ITEMS]
+                                  : group.winningBucket === 'DRINKS'
+                                    ? [...DRINK_ITEMS]
+                                    : (
+                                      group.winningSet.size > 0
+                                        ? Array.from(group.winningSet)
+                                        : (group.fallbackWinning ? [group.fallbackWinning] : [])
+                                    );
+
+                                return {
+                                  round: group.round,
+                                  time: group.time,
+                                  selectedOptions,
+                                  winningItems,
+                                  winningBucket: group.winningBucket,
+                                  win: group.win,
+                                  balanceBefore: group.balanceBefore,
+                                  balanceAfter: group.balanceAfter,
+                                };
+                              })
+                              .filter((record) => record.selectedOptions.length > 0);
+                          })();
+
+                          const displayRecords = playerRecordsHydrated
+                            ? apiDisplayRecords
+                            : localDisplayRecords;
 
                           if (displayRecords.length === 0) {
                             return (
@@ -4980,14 +6036,9 @@ const GamePage = () => {
                             );
                           }
 
-                          return displayRecords.map((r, idx) => {
-                            // Resolve element â†’ ItemSpec for icon
-                            const itemId = r.element ? (API_NAME_TO_ID[r.element] ?? null) : null;
-                            const itemSpec = itemId ? ITEMS.find(it => it.id === itemId) : null;
-
-                            // Balances
-                            const balBefore = r.balanceBefore ?? null;
-                            const balAfter = r.balanceAfter ?? null;
+                          return displayRecords.map((record, idx) => {
+                            const balBefore = record.balanceBefore;
+                            const balAfter = record.balanceAfter;
 
                             return (
                               <div
@@ -5000,65 +6051,99 @@ const GamePage = () => {
                                   border: '1px solid rgba(180,120,50,0.15)',
                                 }}
                               >
-                                {/* â”€â”€ Row 1: Round + Time â”€â”€ */}
+                                {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Row 1: Round + Time ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
                                     fontWeight: 700, fontSize: 13, color: '#5a2d0c',
                                   }}>
-                                    Round: {r.round ?? '-'}
+                                    Round: {record.round ?? '-'}
                                   </span>
-                                  {r.time && (
+                                  {record.time && (
                                     <span style={{
                                       fontFamily: 'Inter, system-ui, sans-serif',
                                       fontWeight: 400, fontSize: 10.5, color: '#8a5a2a',
                                     }}>
-                                      {r.time}
+                                      {record.time}
                                     </span>
                                   )}
                                 </div>
 
-                                {/* â”€â”€ Row 2: Selected option â”€â”€ */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Row 2: Selected option ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
-                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
+                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0, marginTop: 2,
                                   }}>
                                     Selected option:
                                   </span>
-                                  {itemSpec && (
-                                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
-                                  )}
-                                  {r.bet != null && r.bet > 0 && (
-                                    <div style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: 3,
-                                      background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
-                                      borderRadius: 999, paddingLeft: 7, paddingRight: 7, height: 19,
-                                      border: '1px solid rgba(0,0,0,0.15)',
-                                    }}>
-                                      <span style={{ fontFamily: 'Inter', fontWeight: 800, fontSize: 11, color: '#0b2a12' }}>
-                                        {formatNum(r.bet)}
-                                      </span>
+                                  {record.selectedOptions.length > 0 ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                                      {record.selectedOptions.map((option) => {
+                                        const itemSpec = ITEMS.find((item) => item.id === option.itemId);
+                                        if (!itemSpec) return null;
+                                        return (
+                                          <div key={`${record.round}-${record.time}-${option.itemId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
+                                            <div style={{
+                                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                                              background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
+                                              borderRadius: 999, paddingLeft: 7, paddingRight: 7, height: 19,
+                                              border: '1px solid rgba(0,0,0,0.15)',
+                                            }}>
+                                              <span style={{ fontFamily: 'Inter', fontWeight: 800, fontSize: 11, color: '#0b2a12' }}>
+                                                {formatNum(option.amount)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  )}
-                                </div>
-
-                                {/* â”€â”€ Row 3: Winning items â”€â”€ */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                  <span style={{
-                                    fontFamily: 'Inter, system-ui, sans-serif',
-                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0,
-                                  }}>
-                                    Winning items:
-                                  </span>
-                                  {itemSpec ? (
-                                    <img src={itemSpec.src} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} />
                                   ) : (
                                     <span style={{ fontFamily: 'Inter', fontSize: 12, color: '#7b471d' }}>-</span>
                                   )}
                                 </div>
 
-                                {/* â”€â”€ Row 4: Win diamonds â”€â”€ */}
+                                {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Row 3: Winning items ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
+                                  <span style={{
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    fontWeight: 500, fontSize: 12.5, color: '#7b471d', flexShrink: 0, marginTop: 2,
+                                  }}>
+                                    Winning items:
+                                  </span>
+                                  {record.winningBucket ? (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                      <img
+                                        src={record.winningBucket === 'VEGETABLES' ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png'}
+                                        alt=""
+                                        style={{ width: 22, height: 22, objectFit: 'contain' }}
+                                      />
+                                      <span style={{ fontFamily: 'Inter, system-ui, sans-serif', fontSize: 12, color: '#7b471d', fontWeight: 600 }}>
+                                        {record.winningBucket === 'VEGETABLES' ? 'Vegetables Bucket' : 'Drinks Bucket'}
+                                      </span>
+                                    </div>
+                                  ) : record.winningItems.length > 0 ? (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                      {record.winningItems.map((itemId) => {
+                                        const itemSpec = ITEMS.find((item) => item.id === itemId);
+                                        if (!itemSpec) return null;
+                                        return (
+                                          <img
+                                            key={`${record.round}-${record.time}-win-${itemId}`}
+                                            src={itemSpec.src}
+                                            alt=""
+                                            style={{ width: 20, height: 20, objectFit: 'contain' }}
+                                          />
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontFamily: 'Inter', fontSize: 12, color: '#7b471d' }}>-</span>
+                                  )}
+                                </div>
+
+                                {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Row 4: Win diamonds ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                                   <span style={{
                                     fontFamily: 'Inter, system-ui, sans-serif',
@@ -5077,12 +6162,12 @@ const GamePage = () => {
                                       fontFamily: 'Inter, system-ui, sans-serif',
                                       fontWeight: 700, fontSize: 11.5, color: '#fff',
                                     }}>
-                                      {r.win != null ? formatNum(r.win) : '0'}
+                                      {formatNum(record.win)}
                                     </span>
                                   </div>
                                 </div>
 
-                                {/* â”€â”€ Row 5: Diamond Balance â”€â”€ */}
+                                {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Row 5: Diamond Balance ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                                 {(balBefore != null || balAfter != null) && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{
@@ -5113,7 +6198,7 @@ const GamePage = () => {
                         })()}
                       </div>
 
-                      {/* â”€â”€ Footer note pinned at bottom â”€â”€ */}
+                      {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Footer note pinned at bottom ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                       <div style={{
                         flexShrink: 0,
                         padding: '7px 12px 9px',
@@ -5132,7 +6217,7 @@ const GamePage = () => {
 
                 {activeModal === 'JACKPOT' ? (
                   (() => {
-                    /* â”€â”€ Jackpot number formatter: pad to 11 digits with leading zeros â”€â”€ */
+                    /* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Jackpot number formatter: pad to 11 digits with leading zeros ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
                     const jackpotStr = String(jackpotAmount).padStart(11, '0');
 
                     return (
@@ -5140,9 +6225,9 @@ const GamePage = () => {
                         className="relative flex items-center justify-center"
                         style={{ width: 326, height: 430 }}
                       >
-                        {/* â”€â”€ LAYER 1: Outer orange board background â”€â”€ */}
-                        {/* jackpot_board_bg: 339Ã—535, #EC9813, borderRadius 17 */}
-                        {/* We scale it to fit the 326Ã—430 modal container */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 1: Outer orange board background ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                        {/* jackpot_board_bg: 339ÃƒÆ’Ã¢â‚¬â€535, #EC9813, borderRadius 17 */}
+                        {/* We scale it to fit the 326ÃƒÆ’Ã¢â‚¬â€430 modal container */}
                         <img
                           src="/image2/jackpot_board_bg.png"
                           alt=""
@@ -5150,8 +6235,8 @@ const GamePage = () => {
                           style={{ objectFit: 'fill', borderRadius: 17, zIndex: 0 }}
                         />
 
-                        {/* â”€â”€ LAYER 2: Inner front panel â”€â”€ */}
-                        {/* jackpot_front_bg: 323Ã—517, borderRadius 17 */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 2: Inner front panel ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                        {/* jackpot_front_bg: 323ÃƒÆ’Ã¢â‚¬â€517, borderRadius 17 */}
                         {/* Centered, ~8px inset on each side */}
                         <img
                           src="/image2/jackpot_front_bg.png"
@@ -5167,7 +6252,7 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* â”€â”€ LAYER 3: Ribbon at top center â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 3: Ribbon at top center ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         {/* ribbon.png sits on the top edge, overlapping both panels */}
                         <img
                           src="/image2/ribbon.png"
@@ -5183,7 +6268,7 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* â”€â”€ LAYER 4: "Jackpot" text on the ribbon â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 4: "Jackpot" text on the ribbon ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         {/* Match Game Rank text style: gold with brown border */}
                         <div
                           className="absolute"
@@ -5215,7 +6300,7 @@ const GamePage = () => {
                           </span>
                         </div>
 
-                        {/* â”€â”€ LAYER 5: Close button â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 5: Close button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         <button
                           type="button"
                           onClick={() => setActiveModal('NONE')}
@@ -5232,11 +6317,11 @@ const GamePage = () => {
                           }}
                           aria-label="Close jackpot"
                         >
-                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
+                          <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>&times;</span>
                         </button>
 
-                        {/* â”€â”€ LAYER 6: Purple diamonds pile â”€â”€ */}
-                        {/* diamonds.png: 273Ã—131, centered below ribbon */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 6: Purple diamonds pile ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                        {/* diamonds.png: 273ÃƒÆ’Ã¢â‚¬â€131, centered below ribbon */}
                         <img
                           src="/image2/diamonds.png"
                           alt=""
@@ -5244,7 +6329,7 @@ const GamePage = () => {
                           style={{
                             left: '50%',
                             transform: 'translateX(-50%)',
-                            top: 42, /* Below ribbon â€” adjust if ribbon top changes */
+                            top: 42, /* Below ribbon ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â adjust if ribbon top changes */
                             width: 260,
                             height: 125,
                             objectFit: 'contain',
@@ -5252,8 +6337,8 @@ const GamePage = () => {
                           }}
                         />
 
-                        {/* â”€â”€ LAYER 7: Red number frame â”€â”€ */}
-                        {/* jackpot_red_frame: 296Ã—65 */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 7: Red number frame ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
+                        {/* jackpot_red_frame: 296ÃƒÆ’Ã¢â‚¬â€65 */}
                         <div
                           className="absolute"
                           style={{
@@ -5285,7 +6370,7 @@ const GamePage = () => {
                               style={{ width: 22, height: 22, flexShrink: 0 }}
                             />
 
-                            {/* Padded jackpot number â€” leading zeros dimmer, significant digits bright */}
+                            {/* Padded jackpot number ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â leading zeros dimmer, significant digits bright */}
                             <div
                               className="flex items-center"
                               style={{
@@ -5318,7 +6403,7 @@ const GamePage = () => {
                           </div>
                         </div>
 
-                        {/* â”€â”€ LAYER 8: Description text â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 8: Description text ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         <div
                           className="absolute"
                           style={{
@@ -5337,7 +6422,7 @@ const GamePage = () => {
                           the higher your chances.
                         </div>
 
-                        {/* â”€â”€ LAYER 9: Awards section â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 9: Awards section ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         <div
                           className="absolute"
                           style={{
@@ -5348,7 +6433,7 @@ const GamePage = () => {
                           }}
                         >
 
-                          {/* â”€â”€ "Awards" label â€” sits ABOVE the prize board strip â”€â”€ */}
+                          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ "Awards" label ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sits ABOVE the prize board strip ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                           <div
                             className="flex items-center justify-center"
                             style={{ marginBottom: 6 }}
@@ -5368,7 +6453,7 @@ const GamePage = () => {
                             <div style={{ flex: 1, height: 1, background: 'rgba(180,110,40,0.4)', marginLeft: 8 }} />
                           </div>
 
-                          {/* â”€â”€ Prize board strip â€” column headers â”€â”€ */}
+                          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Prize board strip ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â column headers ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                           <div
                             className="relative flex items-center"
                             style={{ width: '100%', height: 28 }}
@@ -5401,7 +6486,7 @@ const GamePage = () => {
                             ))}
                           </div>
 
-                          {/* â”€â”€ Awards rows â”€â”€ */}
+                          {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Awards rows ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                           <div
                             style={{
                               marginTop: 2,
@@ -5440,7 +6525,7 @@ const GamePage = () => {
                           </div>
                         </div>
 
-                        {/* â”€â”€ LAYER 10: Footer note â”€â”€ */}
+                        {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ LAYER 10: Footer note ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         <div
                           className="absolute"
                           style={{
@@ -5475,14 +6560,14 @@ const GamePage = () => {
                       overflow: 'visible',
                     }}
                   >
-                    {/* â”€â”€ 1. Gameboard background (ribbon + "Game Rank" baked in) â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 1. Gameboard background (ribbon + "Game Rank" baked in) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <img
                       src="/image2/gameboard.png"
                       alt=""
                       className="absolute inset-0 w-full h-full"
                       style={{ objectFit: 'fill', borderRadius: 18, zIndex: 0 }}
                     />
-                    {/* â”€â”€ Title: Game Rank â”€â”€ */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Title: Game Rank ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                     <div
                       className="absolute"
                       style={{
@@ -5514,7 +6599,7 @@ const GamePage = () => {
                       </span>
                     </div>
 
-                    {/* â”€â”€ 2. Close button â”€â”€ top: 60, right: -5 â†’ move these independently */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 2. Close button ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ top: 60, right: -5 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ move these independently */}
                     <button
                       type="button"
                       onClick={() => setActiveModal('NONE')}
@@ -5533,16 +6618,16 @@ const GamePage = () => {
                       }}
                       aria-label="Close rank"
                     >
-                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>×</span>
+                      <span style={{ color: '#fff', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>&times;</span>
                     </button>
 
-                    {/* â”€â”€ 3. Timer pill â”€â”€ left/top independent */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 3. Timer pill ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
                     <div
                       className="absolute flex items-center justify-center"
                       style={{
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        top: 102.5,          /* â† change only this to move timer */
+                        top: 102.5,          /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to move timer */
                         width: rankTab === 'YESTERDAY' ? 190 : 135,
                         height: 20,
                         borderRadius: 13,
@@ -5564,7 +6649,7 @@ const GamePage = () => {
 
                         <>
 
-                          <span style={{ fontSize: 13 }}>⌛</span>
+                          <span style={{ fontSize: 13 }}>&#8987;</span>
                           {`${String(Math.floor(dayResetSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((dayResetSeconds % 3600) / 60)).padStart(2, '0')}:${String(dayResetSeconds % 60).padStart(2, '0')}`}
 
                         </>
@@ -5572,13 +6657,13 @@ const GamePage = () => {
                       )}
                     </div>
 
-                    {/* â”€â”€ 4. Today / Yesterday sliding tab â”€â”€ left/top independent */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 4. Today / Yesterday sliding tab ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
                     <div
                       className="absolute"
                       style={{
                         left: '50.8%',
                         transform: 'translateX(-50%)',
-                        top: 124,         /* â† change only this to move tab row */
+                        top: 124,         /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to move tab row */
                         width: 245,
                         height: 38,
                         zIndex: 5,
@@ -5673,7 +6758,7 @@ const GamePage = () => {
                         </button>
                       </div>
 
-                      {/* ? help button â€” outside the pill, right side */}
+                      {/* ? help button ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â outside the pill, right side */}
                       <button
                         type="button"
                         onClick={() => setActiveModal('PRIZE')}
@@ -5701,13 +6786,13 @@ const GamePage = () => {
                       </button>
                     </div>
 
-                    {/* â”€â”€ 5. Column headers â”€â”€ left/top independent */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 5. Column headers ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
                     <div
                       className="absolute flex items-center"
                       style={{
                         left: 25,
                         right: 40,
-                        top: 164,         /* â† change only this to move headers */
+                        top: 164,         /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to move headers */
                         height: 28,
                         zIndex: 5,
                       }}
@@ -5717,14 +6802,14 @@ const GamePage = () => {
                       <span style={{ width: 100, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#fff' }}>Diamonds Play</span>
                     </div>
 
-                    {/* â”€â”€ 6. Scrollable rank rows â”€â”€ left/top independent */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 6. Scrollable rank rows ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
                     <div
                       className="absolute overflow-y-auto overflow-x-hidden"
                       style={{
                         left: 30,
                         right: 30,
-                        top: 198,         /* â† change only this to move the rows area */
-                        height: 310,      /* â† change only this to adjust rows height */
+                        top: 198,         /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to move the rows area */
+                        height: 310,      /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to adjust rows height */
                         zIndex: 5,
                         scrollbarWidth: 'none',
                         msOverflowStyle: 'none',
@@ -5759,17 +6844,13 @@ const GamePage = () => {
                             </div>
 
                             {/* Profile picture */}
-                            {row.pic ? (
-                              <img
-                                src={row.pic}
-                                alt=""
-                                className="absolute"
-                                style={{ left: 59, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.75)' }}
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="absolute" style={{ left: 56, top: '50%', transform: 'translateY(-50%)', width: 32, height: 32, borderRadius: '50%', background: 'rgba(180,130,60,0.35)', border: '2px solid rgba(255,255,255,0.5)' }} />
-                            )}
+                            <RankAvatar
+                              src={row.pic}
+                              size={32}
+                              borderColor="rgba(255,255,255,0.75)"
+                              className="absolute"
+                              style={{ left: 58, top: '50%', transform: 'translateY(-50%)' }}
+                            />
 
                             {/* Name */}
                             <div
@@ -5792,10 +6873,11 @@ const GamePage = () => {
                                 right: 12,             // Fixed distance from the right edge of the row
                                 top: '50%',
                                 transform: 'translateY(-50%)',
-                                width: 90,             // Fixed width so the diamond doesn't move
+                                width: 126,            // Wider value area for large balances
                                 gap: 4,
                                 display: 'flex',
-                                justifyContent: 'flex-start' // Keeps the diamond on the left of this box
+                                justifyContent: 'flex-start', // Keeps the diamond on the left of this box
+                                overflow: 'hidden',
                               }}
                             >
                               {/* The Diamond: Locked at the start of the 90px box */}
@@ -5809,12 +6891,15 @@ const GamePage = () => {
                               <span
                                 style={{
                                   flex: 1,              // Takes up all space between diamond and right edge
+                                  minWidth: 0,
                                   textAlign: 'right',   // Aligns the text to the right
                                   fontFamily: 'Inter, system-ui, sans-serif',
                                   fontWeight: 400,
                                   fontSize: 13,
                                   color: '#5a2d0c',
-                                  whiteSpace: 'nowrap'
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
                                 }}
                               >
                                 {formatNum(row.diamonds)}
@@ -5825,13 +6910,13 @@ const GamePage = () => {
                       })}
                     </div>
 
-                    {/* â”€â”€ 7. 99+ sticky bottom row â”€â”€ left/top independent */}
+                    {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 7. 99+ sticky bottom row ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
                     <div
                       className="absolute"
                       style={{
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        top: 530,         /* â† change only this to move the 99+ row */
+                        top: 530,         /* ÃƒÂ¢Ã¢â‚¬Â Ã‚Â change only this to move the 99+ row */
                         width: 340,
                         height: 55,
                         zIndex: 5,
@@ -5861,14 +6946,13 @@ const GamePage = () => {
     `,
                           }}
                         >
-                          99+
+                          {myRankLabel}
                         </span>
-                        {/* Profile Picture Circle */}
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(180,130,60,0.4)', flexShrink: 0, border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-                          ðŸ‘¤
-                        </div>
-
-                        {/* "You" Text - Now White with Brown Border */}
+                        <RankAvatar
+                          src={myRankPic}
+                          size={34}
+                          borderColor="rgba(255,255,255,0.5)"
+                        />
                         <span style={{
                           fontFamily: 'Inter, system-ui, sans-serif',
                           fontWeight: 400,
@@ -5880,7 +6964,7 @@ const GamePage = () => {
                           textOverflow: 'ellipsis',
 
                         }}>
-                          You
+                          {myRankName}
                         </span>
 
                         {/* Diamond Container - Aligned with the rows above */}
@@ -5889,20 +6973,25 @@ const GamePage = () => {
                           style={{
                             gap: 4,
                             flexShrink: 0,
-                            width: 90,             // Matches the width we gave the list rows
-                            justifyContent: 'flex-start'
+                            width: 126,            // Matches the wider list-row value area
+                            justifyContent: 'flex-start',
+                            overflow: 'hidden',
                           }}
                         >
                           <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
                           <span style={{
                             flex: 1,
+                            minWidth: 0,
                             textAlign: 'right',    // Pushes the "0" to the right edge
                             fontFamily: 'Inter, system-ui, sans-serif',
                             fontWeight: 400,
                             fontSize: 15,
                             color: '#7a3c08',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                           }}>
-                            0
+                            {formatNum(myRankDiamonds)}
                           </span>
                         </div>
                       </div>
@@ -6025,10 +7114,10 @@ const GamePage = () => {
                     <div
                       className="absolute inset-0"
                       style={{
-                        borderRadius: 22,
-                        border: '5px solid #f09c16',
+                        borderRadius: 20,
+                        border: '7px solid #f09c16',
                         background: 'linear-gradient(180deg, #fff3cc 0%, #ffdd9d 100%)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                        boxShadow: '0 10px 24px rgba(0,0,0,0.32)',
                       }}
                     />
 
@@ -6038,18 +7127,18 @@ const GamePage = () => {
                       style={{
                         fontFamily: 'Inter, system-ui, sans-serif',
                         fontWeight: 700,
-                        fontSize: 18,
+                        fontSize: 17,
                         color: '#5a2d0c',
                         textAlign: 'center',
-                        padding: '0 20px',
-                        marginBottom: 24,
+                        padding: '0 18px',
+                        marginBottom: 20,
                       }}
                     >
-                      Are you want to Recharge now??
+                      Are you want to Recharge now?
                     </div>
 
                     {/* Buttons row */}
-                    <div className="relative flex items-center" style={{ gap: 16 }}>
+                    <div className="relative flex items-center" style={{ gap: 14 }}>
                       {/* Recharge button */}
                       <button
                         type="button"
@@ -6058,7 +7147,7 @@ const GamePage = () => {
                             await fetch(`${API_BASE}/game/recharge/panal`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ regisation: 3, payer_id: PLAYER_ID }),
+                              body: JSON.stringify({ regisation: REGISATION_ID, payer_id: PLAYER_ID }),
                             });
                             console.log('[API] Recharge request sent for player:', PLAYER_ID);
                           } catch (err) {
@@ -6067,8 +7156,8 @@ const GamePage = () => {
                           setActiveModal('NONE');
                         }}
                         style={{
-                          width: 120,
-                          height: 44,
+                          width: 132,
+                          height: 46,
                           borderRadius: 12,
                           background: 'linear-gradient(180deg, #7CFF6A 0%, #25C640 100%)',
                           border: '2px solid rgba(0,0,0,0.15)',
@@ -6089,8 +7178,8 @@ const GamePage = () => {
                         type="button"
                         onClick={() => setActiveModal('NONE')}
                         style={{
-                          width: 120,
-                          height: 44,
+                          width: 132,
+                          height: 46,
                           borderRadius: 12,
                           background: 'linear-gradient(180deg, #FFD84A 0%, #F5A623 100%)',
                           border: '2px solid rgba(0,0,0,0.15)',
@@ -6108,7 +7197,7 @@ const GamePage = () => {
                     </div>
                   </div>
                 ) : null}
-              </div>
+              </motion.div>
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -6119,3 +7208,4 @@ const GamePage = () => {
 };
 
 export default GamePage;
+

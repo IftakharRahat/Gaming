@@ -59,15 +59,24 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
         /* Prefetch critical API data so GamePage doesn't show hardcoded defaults */
         const prefetchApis = async () => {
             const API_BASE = '';
-            const API_BODY = JSON.stringify({ regisation: 3 });
-            const mBody = JSON.stringify({ regisation: 3, mode: 2 });
+            const urlParams = new URLSearchParams(window.location.search);
+            const regisationId =
+                Number(urlParams.get('regisation') ?? urlParams.get('registration_id'))
+                || Number((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_REGISATION_ID)
+                || 3;
+            const rawPlayerId = Number(urlParams.get('player_id')) || 0;
+            const playerId = rawPlayerId < 10000 ? rawPlayerId * 100 : rawPlayerId;
+            const API_BODY = JSON.stringify({ regisation: regisationId });
+            const mBody = JSON.stringify({ regisation: regisationId, mode: 2 });
+            const pBody = JSON.stringify({ regisation: regisationId, mode: 2, player_id: playerId });
+            const boxBody = playerId ? pBody : mBody;
 
             const endpoints = [
                 { key: 'elements', path: '/game/game/elements', body: mBody },
                 { key: 'buttons', path: '/game/sorce/buttons', body: mBody },
-                { key: 'boxes', path: '/game/magic/boxs', body: mBody },
+                { key: 'boxes', path: '/game/magic/boxs', body: boxBody },
                 { key: 'jackpotDetails', path: '/game/jackpot/details', body: mBody },
-                { key: 'gameMode', path: '/game/game/mode', body: mBody },
+                { key: 'gameMode', path: '/game/game/mode', body: boxBody },
                 { key: 'winHistory', path: '/game/win/elements/list', body: mBody },
                 { key: 'trophy', path: '/game/game/trophy', body: API_BODY },
                 { key: 'coin', path: '/game/game/coin', body: API_BODY },
