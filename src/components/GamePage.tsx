@@ -1636,6 +1636,7 @@ const GamePage = () => {
   const [rankRowsToday, setRankRowsToday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
   const [rankRowsYesterday, setRankRowsYesterday] = useState<{ name: string; diamonds: number; pic?: string }[]>([]);
   const [myRankToday, setMyRankToday] = useState<MyRankView | null>(null);
+  const [playerPosition, setPlayerPosition] = useState<number | null>(null);
   const [myRankYesterday, setMyRankYesterday] = useState<MyRankView | null>(null);
   const [myPlayerName, setMyPlayerName] = useState('');
   const [myPlayerPic, setMyPlayerPic] = useState<string | undefined>(undefined);
@@ -1684,6 +1685,8 @@ const GamePage = () => {
           /* 18: User info / balance */
           () => apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 2,
             JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID })),
+          /* 20: Player position */
+          () => apiFetch<{ player_positon?: number }>('/game/position/', 1, pBody),
         ];
 
         /* If prefetched data exists, all calls resolve fast; otherwise batch them */
@@ -1733,6 +1736,7 @@ const GamePage = () => {
         const gameMetadata = val<ApiGameMetadata>(17);
         const todayWinApi = val<ApiTodayWin>(18);
         const userInfo = val<ApiUserInfo>(19);
+        const positionApi = val<{ player_positon?: number }>(20);
 
         /* Log failures */
         results.forEach((r, i) => {
@@ -2096,6 +2100,12 @@ const GamePage = () => {
           if (identity.pic) setMyPlayerPic(identity.pic);
         }
 
+        /* Player Position */
+        if (positionApi && typeof positionApi.player_positon === 'number') {
+          setPlayerPosition(positionApi.player_positon);
+          console.log('[API] Player position loaded:', positionApi.player_positon);
+        }
+
       } catch (err) {
         console.warn('[API] Unexpected error:', err);
       }
@@ -2184,6 +2194,9 @@ const GamePage = () => {
   const savedChestsAdvanceRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
 
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
+  /* Snapshot of bets frozen at BETTING→DRAWING transition.
+     Used during SHOWTIME so mode-switching mid-round doesn't lose bet data. */
+  const roundBetsRef = useRef<BetsState>(buildEmptyBets());
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
 
   const [resultSrcs, setResultSrcs] = useState<string[]>(INITIAL_RESULT_SRCS);
@@ -2538,6 +2551,8 @@ const GamePage = () => {
     }
     return 1; // exceeded all thresholds
   }, [progressThresholds, todayWin]);
+
+
   const openChest = async (threshold: number) => {
     // can ONLY open if it's ready (met threshold + currently not opened)
     if (!isChestReady(threshold)) return;
@@ -2566,8 +2581,9 @@ const GamePage = () => {
       // show popup
       setChestPopup({ threshold, amount });
 
-      if (PLAYER_ID && typeof box?.id === 'number') {
+      if (typeof box?.id === 'number') {
         const modeNum = isAdvanceMode ? 1 : 2;
+        const pBody = apiBodyPlayer(modeNum);
         const res = await fetch(`${API_BASE}/game/magic/boxs/open`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2587,11 +2603,44 @@ const GamePage = () => {
           } catch {
             console.log('[API] Magic box open saved');
           }
+
+          /* Re-fetch box status from server to confirm persistence */
+          try {
+            const freshBoxes = await apiFetch<ApiBox[]>('/game/magic/boxs', 1, pBody);
+            if (freshBoxes && Array.isArray(freshBoxes) && freshBoxes.length > 0) {
+              const serverOpened: Record<number, boolean> = {};
+              for (const b of freshBoxes) {
+                const t = resolveThresholdFromBoxSource(b.box_source);
+                if (t != null) {
+                  serverOpened[t] = isTruthyBoxStatus(b.status);
+                }
+              }
+              setOpenedChests((prev) => {
+                const merged = { ...prev };
+                for (const [key, val] of Object.entries(serverOpened)) {
+                  merged[Number(key)] = val || prev[Number(key)] || false;
+                }
+                return merged;
+              });
+              // Sync local refs with server-confirmed state
+              setOpenedChests((latest) => {
+                if (isAdvanceMode) {
+                  savedChestsAdvanceRef.current = { ...latest };
+                } else {
+                  savedChestsBasicRef.current = { ...latest };
+                }
+                return latest;
+              });
+              console.log('[API] Box status re-fetched after open, server state:', serverOpened);
+            }
+          } catch (refetchErr) {
+            console.warn('[API] Re-fetch box status after open failed (not critical):', refetchErr);
+          }
         } else {
           console.warn('[API] Magic box open save failed:', res.status, '(kept local open state)');
         }
       } else {
-        console.warn('[API] Missing player_id or box_id; using local open fallback');
+        console.warn('[API] Missing box_id for threshold', threshold, '; box open saved locally only');
       }
     } catch (err) {
       console.warn('[API] Failed to save opened magic box (kept local open state):', err);
@@ -3041,6 +3090,7 @@ const GamePage = () => {
           console.log('[TIMER] Session already expired, skipping to DRAWING');
           currentSessionEndRef.current = '';
           bettingEndMsRef.current = 0;
+          roundBetsRef.current = { ...bets }; // snapshot bets for SHOWTIME
           setPhase('DRAWING');
           phaseRef.current = 'DRAWING';
           setTimeLeft(DRAW_SECONDS);
@@ -3168,6 +3218,10 @@ const GamePage = () => {
   }, []);
 
   useEffect(() => {
+    /* Guard: don't restart the round if we're already in DRAWING or SHOWTIME.
+       Mode switches cause beginRound to be recreated (via isAdvanceMode dep chain),
+       which would otherwise re-fire this effect and reset the phase to BETTING mid-round. */
+    if (phaseRef.current === 'DRAWING' || phaseRef.current === 'SHOWTIME') return;
     void beginRound();
   }, [beginRound]);
 
@@ -3269,13 +3323,14 @@ const GamePage = () => {
       const mBody = apiBodyWithMode(isAdvanceMode ? 1 : 2);
       const pBody = apiBodyPlayer(isAdvanceMode ? 1 : 2);
 
-      const [jackpotRes, rankRes, topRes, winHistRes, myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
+      const [jackpotRes, rankRes, topRes, winHistRes, myRankTodayRes, myRankYesterdayRes, positionRes] = await Promise.allSettled([
         apiFetch<ApiJackpot>('/game/jackpot', 1, mBody),
         apiFetch<ApiRankRow[]>('/game/game/rank/today', 1, mBody),
         apiFetch<ApiTopWinnerResponse>('/game/top/winers', 1, pBody),
         apiFetch<ApiWinElement[]>('/game/win/elements/list', 1, mBody),
         apiFetch<ApiMyRankResponse>('/game/my/game/rank/today/', 1, pBody),
         apiFetch<ApiMyRankResponse>('/game/my/game/rank/yesterday/', 1, pBody),
+        apiFetch<{ player_positon?: number }>('/game/position/', 1, pBody),
       ]);
 
       /* Jackpot Ã¢â‚¬â€ only update if server returns a real value (avoids overwriting details total with 0) */
@@ -3319,6 +3374,11 @@ const GamePage = () => {
       if (myRankYesterdayRes.status === 'fulfilled') {
         const parsed = parseMyRankResponse(myRankYesterdayRes.value);
         if (parsed) setMyRankYesterday(parsed);
+      }
+
+      /* Player Position */
+      if (positionRes.status === 'fulfilled' && typeof positionRes.value?.player_positon === 'number') {
+        setPlayerPosition(positionRes.value.player_positon);
       }
 
       /* Result strip (win history) Ã¢â‚¬â€ only update during BETTING, and only if
@@ -3532,6 +3592,7 @@ const GamePage = () => {
       /* Timer sync keeps countdown accurate; transition immediately to DRAWING */
       currentSessionEndRef.current = '';
       bettingEndMsRef.current = 0;
+      roundBetsRef.current = { ...bets }; // snapshot bets for SHOWTIME
       setPhase('DRAWING');
       phaseRef.current = 'DRAWING';
       setTimeLeft(DRAW_SECONDS);
@@ -3551,24 +3612,28 @@ const GamePage = () => {
       const winners = winnerRef.current;
       if (!winners || winners.length === 0) return;
 
-      const hadAnyBet = totalBet > 0;
+      /* Use snapshotted bets from BETTING→DRAWING transition
+         so mode-switching mid-round doesn't lose bet data */
+      const frozenBets = roundBetsRef.current;
+      const frozenTotalBet = Object.values(frozenBets).reduce((sum, val) => sum + val, 0);
+      const hadAnyBet = frozenTotalBet > 0;
 
       let winAmount = 0;
       let primaryId: ItemId = winners[0];
 
       if (roundType === 'JACKPOT') {
         const jackpotItems = winners;
-        const j = computeJackpotWin({ jackpotItems, bets, itemMultiplier, jackpotBonus: jackpotAmount });
+        const j = computeJackpotWin({ jackpotItems, bets: frozenBets, itemMultiplier, jackpotBonus: jackpotAmount });
         winAmount = j.totalWin;
         primaryId = jackpotItems[0];
       } else {
         const winner = winners[0];
-        const betOnWinner = bets[winner] ?? 0;
+        const betOnWinner = frozenBets[winner] ?? 0;
         winAmount = betOnWinner > 0 ? betOnWinner * itemMultiplier[winner] : 0;
         primaryId = winner;
       }
 
-      setPendingWin({ itemId: primaryId, amount: winAmount, hadAnyBet, totalBet });
+      setPendingWin({ itemId: primaryId, amount: winAmount, hadAnyBet, totalBet: frozenTotalBet });
       setResultKind(!hadAnyBet ? 'NOBET' : winAmount > 0 ? 'WIN' : 'LOSE');
 
       setResultSrcs((prev) => {
@@ -3614,7 +3679,9 @@ const GamePage = () => {
       }
 
       if (winner) {
-        const placedBets = (Object.entries(bets) as Array<[ItemId, number]>)
+        /* Use snapshotted bets for record-keeping (mode may have switched) */
+        const frozenBets = roundBetsRef.current;
+        const placedBets = (Object.entries(frozenBets) as Array<[ItemId, number]>)
           .filter(([, amount]) => amount > 0)
           .sort((a, b) => b[1] - a[1]);
 
@@ -3786,9 +3853,11 @@ const GamePage = () => {
   const rankRows = rankTab === 'TODAY' ? rankRowsToday : rankRowsYesterday;
   const myRankRow = rankTab === 'TODAY' ? myRankToday : myRankYesterday;
   const myRankLabel =
-    typeof myRankRow?.position === 'number' && myRankRow.position > 0
-      ? (myRankRow.position > 99 ? '99+' : String(myRankRow.position))
-      : '99+';
+    typeof playerPosition === 'number' && playerPosition > 0
+      ? (playerPosition > 99 ? '99+' : String(playerPosition))
+      : typeof myRankRow?.position === 'number' && myRankRow.position > 0
+        ? (myRankRow.position > 99 ? '99+' : String(myRankRow.position))
+        : '99+';
   const myRankName = (myRankRow?.name ?? myPlayerName) || 'You';
   const myRankDiamonds = myRankRow?.diamonds ?? 0;
   const myRankPic = myRankRow?.pic ?? myPlayerPic;
@@ -4067,7 +4136,9 @@ const GamePage = () => {
               strokeLinejoin="round"
               paintOrder="stroke"
             >
-              99+
+              {typeof playerPosition === 'number' && playerPosition > 0
+                ? (playerPosition > 99 ? '99+' : String(playerPosition))
+                : myRankLabel}
             </text>
           </svg>
         </div>
