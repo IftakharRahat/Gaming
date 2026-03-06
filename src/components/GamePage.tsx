@@ -2288,17 +2288,21 @@ const GamePage = () => {
     if (prevModeRef.current === mode) return; // skip initial mount
     prevModeRef.current = mode;
 
-    console.log('[MODE] Switched to', mode, 'Ã¢â‚¬â€ saving bets for old mode, restoring bets for new mode');
+    console.log('[MODE] Switched to', mode, '— phase:', phaseRef.current);
 
-    /* 1. Save current bets for the OLD mode, restore saved bets for NEW mode */
+    /* 1. Save/restore bets ONLY during BETTING phase.
+       During DRAWING/SHOWTIME, bets must stay as-is so the round result
+       (winner/no-bet) displays correctly with the frozen bet snapshot. */
     const oldMode = mode === 'ADVANCE' ? 'BASIC' : 'ADVANCE';
-    if (oldMode === 'BASIC') {
-      savedBetsBasicRef.current = { ...bets } as BetsState;
-    } else {
-      savedBetsAdvanceRef.current = { ...bets } as BetsState;
+    if (phaseRef.current === 'BETTING') {
+      if (oldMode === 'BASIC') {
+        savedBetsBasicRef.current = { ...bets } as BetsState;
+      } else {
+        savedBetsAdvanceRef.current = { ...bets } as BetsState;
+      }
+      const restoredBets = mode === 'ADVANCE' ? savedBetsAdvanceRef.current : savedBetsBasicRef.current;
+      setBets({ ...restoredBets });
     }
-    const restoredBets = mode === 'ADVANCE' ? savedBetsAdvanceRef.current : savedBetsBasicRef.current;
-    setBets({ ...restoredBets });
 
     /* 2. Reset todayWin temporarily, will be set from API below */
     setTodayWin(0);
