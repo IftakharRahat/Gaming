@@ -75,7 +75,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
                 { key: 'elements', path: '/game/game/elements', body: mBody },
                 { key: 'buttons', path: '/game/sorce/buttons', body: mBody },
                 { key: 'boxes', path: '/game/magic/boxs', body: boxBody },
-                { key: 'jackpotDetails', path: '/game/jackpot/details', body: mBody },
+                { key: 'jackpotDetails', path: '/game/jackpot/details', body: pBody },
                 { key: 'gameMode', path: '/game/game/mode', body: boxBody },
                 { key: 'winHistory', path: '/game/win/elements/list', body: mBody },
                 { key: 'trophy', path: '/game/game/trophy', body: API_BODY },

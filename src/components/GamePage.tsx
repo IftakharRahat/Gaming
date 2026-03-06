@@ -1602,26 +1602,31 @@ const LeaderboardRow = React.memo(({ row, idx, formatNum }: LeaderboardRowProps)
   return (
     <div className="relative" style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}>
       <img src={rowBg} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: 'fill', borderRadius: 8 }} />
-      {/* Rank badge: medals for top 3, numbers for 4+ */}
-      <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
-        {idx < 3 ? (
-          <img
-            src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
-            alt={`#${idx + 1}`}
-            style={{ width: 30, height: 30, objectFit: 'contain' }}
-          />
-        ) : (
+      {/* Rank number — only for positions 4+ (top 3 medals are in the row background image) */}
+      {idx >= 3 && (
+        <div className="absolute flex items-center justify-center" style={{
+          left: 10,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'linear-gradient(180deg, #f5d88a 0%, #d4a84a 100%)',
+          border: '2px solid #c49540',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }}>
           <span style={{
             fontFamily: 'Inter, system-ui, sans-serif',
-            fontWeight: 700,
-            fontSize: 14,
-            color: '#5a2d0c',
+            fontWeight: 800,
+            fontSize: 13,
+            color: '#6b3a12',
             textAlign: 'center',
+            lineHeight: 1,
           }}>
             {idx + 1}
           </span>
-        )}
-      </div>
+        </div>
+      )}
       <RankAvatar
         src={row.pic}
         size={32}
@@ -1735,7 +1740,7 @@ const GamePage = () => {
           () => prefetched?.winHistory ? Promise.resolve(prefetched.winHistory) : apiFetch<ApiWinElement[]>('/game/win/elements/list', 2, mBody),
           () => apiFetch<ApiTopWinnerResponse>('/game/top/winers', 2, pBody),
           () => prefetched?.jackpot ? Promise.resolve(prefetched.jackpot) : apiFetch<ApiJackpot>('/game/jackpot', 2, mBody),
-          () => prefetched?.jackpotDetails ? Promise.resolve(prefetched.jackpotDetails) : apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, mBody),
+          () => prefetched?.jackpotDetails ? Promise.resolve(prefetched.jackpotDetails) : apiFetch<ApiJackpotDetails>('/game/jackpot/details', 2, pBody),
           () => prefetched?.gameMode ? Promise.resolve(prefetched.gameMode) : apiFetch<ApiGameMode>('/game/game/mode', 2, pBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
