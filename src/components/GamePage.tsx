@@ -2194,9 +2194,11 @@ const GamePage = () => {
   const savedChestsAdvanceRef = useRef<Record<number, boolean>>({ ...EMPTY_CHESTS });
 
   const [bets, setBets] = useState<BetsState>(buildEmptyBets());
-  /* Snapshot of bets frozen at BETTING→DRAWING transition.
-     Used during SHOWTIME so mode-switching mid-round doesn't lose bet data. */
-  const roundBetsRef = useRef<BetsState>(buildEmptyBets());
+  /* Per-mode bet snapshots frozen at BETTING→DRAWING transition.
+     Both modes process wins in parallel during SHOWTIME. */
+  const roundBetsBasicRef = useRef<BetsState>(buildEmptyBets());
+  const roundBetsAdvanceRef = useRef<BetsState>(buildEmptyBets());
+  const otherModeWinRef = useRef(0);
   const [pendingWin, setPendingWin] = useState<PendingWin | null>(null);
 
   const [resultSrcs, setResultSrcs] = useState<string[]>(INITIAL_RESULT_SRCS);
@@ -3094,7 +3096,14 @@ const GamePage = () => {
           console.log('[TIMER] Session already expired, skipping to DRAWING');
           currentSessionEndRef.current = '';
           bettingEndMsRef.current = 0;
-          roundBetsRef.current = { ...bets }; // snapshot bets for SHOWTIME
+          /* Snapshot BOTH modes' bets for parallel SHOWTIME processing */
+          if (isAdvanceMode) {
+            savedBetsAdvanceRef.current = { ...bets };
+          } else {
+            savedBetsBasicRef.current = { ...bets };
+          }
+          roundBetsBasicRef.current = { ...savedBetsBasicRef.current };
+          roundBetsAdvanceRef.current = { ...savedBetsAdvanceRef.current };
           setPhase('DRAWING');
           phaseRef.current = 'DRAWING';
           setTimeLeft(DRAW_SECONDS);
@@ -3596,7 +3605,14 @@ const GamePage = () => {
       /* Timer sync keeps countdown accurate; transition immediately to DRAWING */
       currentSessionEndRef.current = '';
       bettingEndMsRef.current = 0;
-      roundBetsRef.current = { ...bets }; // snapshot bets for SHOWTIME
+      /* Snapshot BOTH modes' bets for parallel SHOWTIME processing */
+      if (isAdvanceMode) {
+        savedBetsAdvanceRef.current = { ...bets };
+      } else {
+        savedBetsBasicRef.current = { ...bets };
+      }
+      roundBetsBasicRef.current = { ...savedBetsBasicRef.current };
+      roundBetsAdvanceRef.current = { ...savedBetsAdvanceRef.current };
       setPhase('DRAWING');
       phaseRef.current = 'DRAWING';
       setTimeLeft(DRAW_SECONDS);
@@ -3616,9 +3632,8 @@ const GamePage = () => {
       const winners = winnerRef.current;
       if (!winners || winners.length === 0) return;
 
-      /* Use snapshotted bets from BETTING→DRAWING transition
-         so mode-switching mid-round doesn't lose bet data */
-      const frozenBets = roundBetsRef.current;
+      /* Use snapshotted bets for the CURRENTLY VIEWED mode */
+      const frozenBets = isAdvanceMode ? roundBetsAdvanceRef.current : roundBetsBasicRef.current;
       const frozenTotalBet = Object.values(frozenBets).reduce((sum, val) => sum + val, 0);
       const hadAnyBet = frozenTotalBet > 0;
 
@@ -3636,6 +3651,22 @@ const GamePage = () => {
         winAmount = betOnWinner > 0 ? betOnWinner * itemMultiplier[winner] : 0;
         primaryId = winner;
       }
+
+      /* Parallel: calculate win for the OTHER mode in the background */
+      const otherBets = isAdvanceMode ? roundBetsBasicRef.current : roundBetsAdvanceRef.current;
+      const otherTotalBet = Object.values(otherBets).reduce((sum, val) => sum + val, 0);
+      let otherWin = 0;
+      if (otherTotalBet > 0) {
+        if (roundType === 'JACKPOT') {
+          const j2 = computeJackpotWin({ jackpotItems: winners, bets: otherBets, itemMultiplier, jackpotBonus: jackpotAmount });
+          otherWin = j2.totalWin;
+        } else {
+          const betOther = otherBets[winners[0]] ?? 0;
+          otherWin = betOther > 0 ? betOther * itemMultiplier[winners[0]] : 0;
+        }
+      }
+      otherModeWinRef.current = otherWin;
+      console.log('[MODE] Parallel win calc:', isAdvanceMode ? 'ADV' : 'BASIC', '=', winAmount, ', other =', otherWin);
 
       setPendingWin({ itemId: primaryId, amount: winAmount, hadAnyBet, totalBet: frozenTotalBet });
       setResultKind(!hadAnyBet ? 'NOBET' : winAmount > 0 ? 'WIN' : 'LOSE');
@@ -3674,17 +3705,20 @@ const GamePage = () => {
       transitioningRef.current = true;
       const winner = winnerRef.current;
       const winAmount = pendingWin?.amount ?? 0;
+      const otherWin = otherModeWinRef.current;
+      const totalWin = winAmount + otherWin;
       const balanceBefore = balance;
-      const balanceAfter = balanceBefore + winAmount;
+      const balanceAfter = balanceBefore + totalWin;
 
-      if (winAmount > 0) {
+      if (totalWin > 0) {
         setBalance(balanceAfter);
-        setTodayWin((prev) => prev + winAmount);
+        setTodayWin((prev) => prev + totalWin);
       }
+      otherModeWinRef.current = 0;
 
       if (winner) {
         /* Use snapshotted bets for record-keeping (mode may have switched) */
-        const frozenBets = roundBetsRef.current;
+        const frozenBets = isAdvanceMode ? roundBetsAdvanceRef.current : roundBetsBasicRef.current;
         const placedBets = (Object.entries(frozenBets) as Array<[ItemId, number]>)
           .filter(([, amount]) => amount > 0)
           .sort((a, b) => b[1] - a[1]);
@@ -3721,7 +3755,10 @@ const GamePage = () => {
       /* Persist new absolute balance to server, then fetch confirmed value */
       void updateBalanceOnServer(balanceAfter);
 
+      /* Clear bets for BOTH modes so they don't carry to next round */
       setBets(buildEmptyBets());
+      savedBetsBasicRef.current = buildEmptyBets() as BetsState;
+      savedBetsAdvanceRef.current = buildEmptyBets() as BetsState;
       setPendingWin(null);
       setDrawHighlightIndex(0);
 
