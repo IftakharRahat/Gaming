@@ -1517,7 +1517,7 @@ type RankAvatarProps = {
   style?: React.CSSProperties;
 };
 
-const RankAvatar = ({
+const RankAvatar = React.memo(({
   src,
   size,
   borderColor = 'rgba(255,255,255,0.6)',
@@ -1582,7 +1582,55 @@ const RankAvatar = ({
       ) : null}
     </div>
   );
+});
+
+/* Memoized leaderboard row — only re-renders when the row data actually changes */
+type LeaderboardRowProps = {
+  row: { name: string; diamonds: number; pic?: string };
+  idx: number;
+  formatNum: (n: number) => string;
 };
+const LeaderboardRow = React.memo(({ row, idx, formatNum }: LeaderboardRowProps) => {
+  const rowBg =
+    idx === 0 ? '/image2/rank1_gameboard.png'
+      : idx === 1 ? '/image2/rank2_gameboard.png'
+        : idx === 2 ? '/image2/rank3_gameboard.png'
+          : '/image2/defaultrank_gameboard.png';
+  const rowH = idx === 0 ? 47 : 48;
+  const isTop3 = idx < 3;
+
+  return (
+    <div className="relative" style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}>
+      <img src={rowBg} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: 'fill', borderRadius: 8 }} />
+      <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }} />
+      <RankAvatar
+        src={row.pic}
+        size={32}
+        borderColor="rgba(255,255,255,0.75)"
+        className="absolute"
+        style={{ left: 58, top: '50%', transform: 'translateY(-50%)' }}
+      />
+      <div
+        className="absolute"
+        style={{ left: 96, top: '50%', transform: 'translateY(-50%)', width: 96, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      >
+        {row.name}
+      </div>
+      {isTop3 && (
+        <div className="absolute" style={{ left: 199, top: '50%', transform: 'translateY(-50%)', width: 1.5, height: 22, background: 'rgba(120,80,30,0.28)', borderRadius: 1 }} />
+      )}
+      <div
+        className="absolute flex items-center"
+        style={{ right: 12, top: '50%', transform: 'translateY(-50%)', width: 126, gap: 4, display: 'flex', justifyContent: 'flex-start', overflow: 'hidden' }}
+      >
+        <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 400, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {formatNum(row.diamonds)}
+        </span>
+      </div>
+    </div>
+  );
+});
 
 const GamePage = () => {
   const flags = useMemo(() => {
@@ -6927,99 +6975,9 @@ const GamePage = () => {
                         msOverflowStyle: 'none',
                       }}
                     >
-                      {rankRows.map((row, idx) => {
-                        const rowBg =
-                          idx === 0 ? '/image2/rank1_gameboard.png'
-                            : idx === 1 ? '/image2/rank2_gameboard.png'
-                              : idx === 2 ? '/image2/rank3_gameboard.png'
-                                : '/image2/defaultrank_gameboard.png';
-
-                        const rowH = idx === 0 ? 47 : 48;
-                        const isTop3 = idx < 3;
-
-                        return (
-                          <div
-                            key={`rank-row-${row.name}-${idx}`}
-                            className="relative"
-                            style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}
-                          >
-                            <img
-                              src={rowBg}
-                              alt=""
-                              className="absolute inset-0 w-full h-full"
-                              style={{ objectFit: 'fill', borderRadius: 8 }}
-                            />
-
-                            {/* Rank badge / number */}
-                            <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
-
-                            </div>
-
-                            {/* Profile picture */}
-                            <RankAvatar
-                              src={row.pic}
-                              size={32}
-                              borderColor="rgba(255,255,255,0.75)"
-                              className="absolute"
-                              style={{ left: 58, top: '50%', transform: 'translateY(-50%)' }}
-                            />
-
-                            {/* Name */}
-                            <div
-                              className="absolute"
-                              style={{ left: 96, top: '50%', transform: 'translateY(-50%)', width: 96, fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 13, color: '#5a2d0c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                            >
-                              {row.name}
-                            </div>
-
-                            {/* Divider */}
-                            {isTop3 && (
-                              <div className="absolute" style={{ left: 199, top: '50%', transform: 'translateY(-50%)', width: 1.5, height: 22, background: 'rgba(120,80,30,0.28)', borderRadius: 1 }} />
-                            )}
-
-                            {/* Diamond + amount */}
-                            {/* Diamond + amount container */}
-                            <div
-                              className="absolute flex items-center"
-                              style={{
-                                right: 12,             // Fixed distance from the right edge of the row
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                width: 126,            // Wider value area for large balances
-                                gap: 4,
-                                display: 'flex',
-                                justifyContent: 'flex-start', // Keeps the diamond on the left of this box
-                                overflow: 'hidden',
-                              }}
-                            >
-                              {/* The Diamond: Locked at the start of the 90px box */}
-                              <img
-                                src="/image2/diamond.png"
-                                alt=""
-                                style={{ width: 18, height: 18, flexShrink: 0 }}
-                              />
-
-                              {/* The Number: Fills remaining space and pushes text to the right */}
-                              <span
-                                style={{
-                                  flex: 1,              // Takes up all space between diamond and right edge
-                                  minWidth: 0,
-                                  textAlign: 'right',   // Aligns the text to the right
-                                  fontFamily: 'Inter, system-ui, sans-serif',
-                                  fontWeight: 400,
-                                  fontSize: 13,
-                                  color: '#5a2d0c',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                {formatNum(row.diamonds)}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {rankRows.map((row, idx) => (
+                        <LeaderboardRow key={`rank-row-${row.name}-${idx}`} row={row} idx={idx} formatNum={formatNum} />
+                      ))}
                     </div>
 
                     {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 7. 99+ sticky bottom row ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ left/top independent */}
