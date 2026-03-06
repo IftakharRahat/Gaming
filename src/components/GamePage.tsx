@@ -1478,18 +1478,18 @@ const TrophyWinOverlay = ({ chipSrc, bets, winnerItems, winAmountLabel, rankRows
                         {row.name}
                       </div>
 
-                      <div className="flex items-center" style={{ gap: 5, marginLeft: 'auto', flexShrink: 0, width: 75, paddingLeft: 4 }}>
-                        <img src="/image2/diamond.png" alt="" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                      <div className="flex items-center" style={{ gap: 4, marginLeft: 'auto', flexShrink: 0, width: 95, paddingRight: 6 }}>
+                        <img src="/image2/diamond.png" alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
                         <span
                           style={{
                             color: '#ffe8a9',
                             fontFamily: 'Inter, system-ui, sans-serif',
                             fontWeight: 700,
-                            fontSize: 18,
+                            fontSize: 16,
                             lineHeight: '18px',
                             textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                             whiteSpace: 'nowrap',
-                            width: 65,
+                            flex: 1,
                             textAlign: 'right',
                           }}
                         >
