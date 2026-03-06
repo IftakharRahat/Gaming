@@ -13,7 +13,7 @@ const PRE_DRAW_MS = 1200;             // pre-draw flash before drawing starts
 const WINNER_POLL_INTERVAL_MS = 600;
 const TIMER_SYNC_INTERVAL_MS = 5000;
 const BETTING_TICK_INTERVAL_MS = 250;
-const LIVE_REFRESH_INTERVAL_MS = 10000;
+const LIVE_REFRESH_INTERVAL_MS = 5000;  // Refresh rank/jackpot/top winners every 5 seconds
 const WINNER_MAX_WAIT_MS = 10000;      // more time to wait for winner in 40s round
 
 const GAME_ON_MS = 1200;
@@ -1602,7 +1602,26 @@ const LeaderboardRow = React.memo(({ row, idx, formatNum }: LeaderboardRowProps)
   return (
     <div className="relative" style={{ width: '100%', height: rowH, marginBottom: 4, flexShrink: 0 }}>
       <img src={rowBg} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: 'fill', borderRadius: 8 }} />
-      <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }} />
+      {/* Rank badge: medals for top 3, numbers for 4+ */}
+      <div className="absolute flex items-center justify-center" style={{ left: 0, top: 0, width: 56, height: rowH }}>
+        {idx < 3 ? (
+          <img
+            src={['/image2/first1.png', '/image2/second2.png', '/image2/third3.png'][idx]}
+            alt={`#${idx + 1}`}
+            style={{ width: 30, height: 30, objectFit: 'contain' }}
+          />
+        ) : (
+          <span style={{
+            fontFamily: 'Inter, system-ui, sans-serif',
+            fontWeight: 700,
+            fontSize: 14,
+            color: '#5a2d0c',
+            textAlign: 'center',
+          }}>
+            {idx + 1}
+          </span>
+        )}
+      </div>
       <RankAvatar
         src={row.pic}
         size={32}
