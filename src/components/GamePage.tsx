@@ -121,7 +121,7 @@ type ApiMyRankResponse = {
   my_position?: Record<string, unknown> | null;
   data?: Record<string, unknown> | Record<string, unknown>[] | null;
 };
-type ApiGameRule = { general: { title: string; rules: string[]; version: string } };
+type ApiGameRule = { general: { title: string; rules: string[]; version: string }; advance: { title: string; rules: string[]; version: string } };
 type ApiJackpotDetails = { jackpot_total: number; awards: { round: number; win: number; time: string }[] };
 type ApiGameMetadata = { game__name: string; game__icon: string; game_icon: string }[];
 type ApiRecordBetRow = {
@@ -2131,6 +2131,10 @@ const GamePage = () => {
           setApiRulesVersion(gameRules.general.version || '');
           console.log('[API] Rules loaded:', gameRules.general.rules.length, 'rules, version:', gameRules.general.version);
         }
+        if (gameRules?.advance?.rules?.length) {
+          setApiAdvanceRules(gameRules.advance.rules);
+          console.log('[API] Advance rules loaded:', gameRules.advance.rules.length, 'rules');
+        }
 
         /* Jackpot Details */
         if (jackpotDetails?.awards?.length) {
@@ -2328,6 +2332,7 @@ const GamePage = () => {
 
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [apiRules, setApiRules] = useState<string[]>([]);
+  const [apiAdvanceRules, setApiAdvanceRules] = useState<string[]>([]);
   const [apiRulesVersion, setApiRulesVersion] = useState('');
   const [jackpotAwards, setJackpotAwards] = useState<{ round: number; win: number; time: string }[]>([]);
   const [gameName, setGameName] = useState('Gready Market');
@@ -5906,11 +5911,18 @@ const GamePage = () => {
                         {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Numbered rules below table ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                         {(() => {
                           // If API has a title, show it (not needed per ref ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ref has no sub-title)
-                          const rules = [
-                            'The prize diamond will increase after each game round.',
-                            'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
-                            'The ranking of the leaderboard depends on the amount of players\' diamonds Played. The more diamonds Played in the game, the higher the ranking and the richer the rewards.',
-                          ];
+                          const rules = isAdvanceMode
+                            ? (apiAdvanceRules.length > 0 ? apiAdvanceRules : [
+                              'Select diamond quantity and place advanced bets.',
+                              'Betting time is 30 seconds per round.',
+                              'Winning diamonds are calculated based on selected option.',
+                              'Maximum 6 bets allowed per round.',
+                            ])
+                            : (apiRules.length > 0 ? apiRules : [
+                              'The prize diamond will increase after each game round.',
+                              'The top 15 players can display in the ranking list. The list will updated at 0 o\'clock every day.',
+                              'The ranking of the leaderboard depends on the amount of players\' diamonds Played.',
+                            ]);
 
                           return (
                             <ol style={{ margin: 0, padding: '0 0 0 18px', listStyleType: 'decimal' }}>
