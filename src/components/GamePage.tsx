@@ -5352,7 +5352,7 @@ const GamePage = () => {
                         {row.name}
                       </div>
 
-                      <div className="absolute flex items-center" style={{ gap: 3, left: 190, top: 0, bottom: 0 }}>
+                      <div className="absolute flex items-center" style={{ gap: 3, left: 170, top: 0, bottom: 0, paddingRight: 4 }}>
                         <img src="/image2/diamond.png" alt="" style={{ width: 16, height: 16, flexShrink: 0 }} />
                         <span
                           style={{
@@ -5363,7 +5363,7 @@ const GamePage = () => {
                             lineHeight: '18px',
                             textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                             whiteSpace: 'nowrap',
-                            width: 50,
+                            flex: 1,
                             textAlign: 'right',
                           }}
                         >
