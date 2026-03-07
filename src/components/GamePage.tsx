@@ -3903,6 +3903,8 @@ const GamePage = () => {
     }));
 
     setItemPulse((prev) => ({ id: itemId, key: prev.key + 1 }));
+    /* Auto-clear pulse after animation completes so it doesn't replay on re-renders */
+    setTimeout(() => setItemPulse((prev) => ({ ...prev, id: null })), 300);
 
     /* Submit bet to API Ã¢â‚¬â€ only revert on client-side rejection (4xx), not server errors */
     if (PLAYER_ID) {
