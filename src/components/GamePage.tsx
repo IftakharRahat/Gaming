@@ -3770,7 +3770,7 @@ const GamePage = () => {
       });
 
       setPhase('SHOWTIME');
-      setTimeLeft(roundType === 'JACKPOT' ? 5 : SHOW_SECONDS);
+      setTimeLeft(roundType === 'JACKPOT' ? 8 : SHOW_SECONDS);
 
       if (winAmount > 0) {
         setShowFireworks(true);
