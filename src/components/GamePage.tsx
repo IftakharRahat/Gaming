@@ -3500,7 +3500,8 @@ const GamePage = () => {
         const itemSrcMap: Record<string, string> = {};
         for (const item of ITEMS) {
           const apiName = ID_TO_API_NAME[item.id];
-          if (apiName) itemSrcMap[apiName] = item.src;
+          const imgSrc = itemImageOverrides[item.id] || item.src;
+          if (apiName) itemSrcMap[apiName] = imgSrc;
         }
 
         const srcs = winHistRes.value
@@ -3517,9 +3518,8 @@ const GamePage = () => {
 
         if (srcs.length > 0) {
           const serverResults = srcs.reverse();
-          /* Only replace if server has at least as many results Ã¢â‚¬â€ avoids wiping
-             locally-added winners when server data is stale */
-          setResultSrcs((prev) => serverResults.length >= prev.length ? serverResults : prev);
+          /* Always trust server data — ensures consistency across devices */
+          setResultSrcs(serverResults);
         }
       }
     };
