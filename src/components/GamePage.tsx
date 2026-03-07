@@ -3457,10 +3457,10 @@ const GamePage = () => {
       if (topRes.status === 'fulfilled' && Array.isArray(topRes.value) && topRes.value.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mapped = topRes.value.slice(0, 3).map((r: any) => ({
-          name: r.mrs_player_id_player_name,
-          amount: r.last_balance,
-          pic: r.mrs_player_id_player_pic
-            ? encodeURI(`/media/${r.mrs_player_id_player_pic}`)
+          name: r.mrs__player_id__player_name ?? r.mrs_player_id_player_name ?? r.player_name ?? 'Unknown',
+          amount: r.last_balance ?? r.balance ?? 0,
+          pic: (r.mrs__player_id__player_pic ?? r.mrs_player_id_player_pic ?? r.player_pic)
+            ? encodeURI(`/media/${r.mrs__player_id__player_pic ?? r.mrs_player_id_player_pic ?? r.player_pic}`)
             : undefined,
         }));
         setTopWinnersRows(mapped);
