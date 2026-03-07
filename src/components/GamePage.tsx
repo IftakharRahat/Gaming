@@ -3319,7 +3319,7 @@ const GamePage = () => {
   const hasBlockingOverlay =
     activeModal !== 'NONE' || showGameOn || showPreDraw || showResultBoard || chestPopup !== null;
   const canBet = phase === 'BETTING' && !hasBlockingOverlay;
-  const canOpenSystemModal = phase === 'BETTING' && !showGameOn;
+  const canOpenSystemModal = !showGameOn;
 
   useEffect(() => {
     return () => {
