@@ -58,6 +58,8 @@ const API_BODY = JSON.stringify({ regisation: REGISATION_ID });
 /* Body with mode: 2 = general/basic, 1 = advance */
 const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, mode });
 const apiBodyPlayer = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID, mode });
+/* records/of/player endpoint uses 'payer_id' (backend field name) */
+const apiBodyPayer = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, payer_id: PLAYER_ID, mode });
 
 type ApiElement = {
   id: number;
@@ -1748,7 +1750,7 @@ const GamePage = () => {
           () => prefetched?.gameMode ? Promise.resolve(prefetched.gameMode) : apiFetch<ApiGameMode>('/game/game/mode', 2, pBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/today', 2, mBody),
           () => apiFetch<ApiRankRow[]>('/game/game/rank/yesterday', 2, mBody),
-          () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, pBody),
+          () => apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 2, apiBodyPayer(modeNum)),
           /* 11ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“18: APIs that DON'T need mode */
           () => prefetched?.trophy ? Promise.resolve(prefetched.trophy) : apiFetch<ApiTrophy>('/game/game/trophy'),
           () => prefetched?.coin ? Promise.resolve(prefetched.coin) : apiFetch<ApiCoin>('/game/game/coin'),
@@ -2803,7 +2805,7 @@ const GamePage = () => {
     const pBody = apiBodyPlayer(modeNum);
 
     const [recordsRes, todayWinRes, userInfoRes, boxesRes, myRankTodayRes, myRankYesterdayRes] = await Promise.allSettled([
-      apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, pBody),
+      apiFetch<ApiPlayerRecords>('/game/game/records/of/player', 1, apiBodyPayer(modeNum)),
       apiFetch<ApiTodayWin>('/game/today/win', 1, pBody),
       apiFetch<ApiUserInfo>('/game/game/balance/and/user/info', 1,
         JSON.stringify({ regisation: REGISATION_ID, player_id: PLAYER_ID })),
