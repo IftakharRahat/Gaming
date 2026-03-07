@@ -434,7 +434,9 @@ function parseWinningItems(value: unknown): Array<{ elementName: string; element
 function resolveProfilePic(path?: string | null): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//i.test(path)) return path;
-  return encodeURI(path.startsWith('/') ? path : `/media/${path}`);
+  // Strip leading 'media/' to avoid double prefix (API sometimes returns 'media/...')
+  const cleaned = path.replace(/^\/?(media\/)/, '');
+  return encodeURI(`/media/${cleaned}`);
 }
 
 function normalizeDisplayName(value: unknown): string | undefined {
@@ -3444,9 +3446,7 @@ const GamePage = () => {
         const parsed = rankRes.value.map((row: any) => ({
           name: row.mrs_player_id_player_name ?? row.player_name ?? row.name ?? 'Unknown',
           diamonds: row.last_balance ?? row.balance ?? 0,
-          pic: (row.mrs_player_id_player_pic ?? row.player_pic ?? null)
-            ? encodeURI(`/media/${row.mrs_player_id_player_pic ?? row.player_pic}`)
-            : undefined,
+          pic: resolveProfilePic(row.mrs__player_id__player_pic ?? row.mrs_player_id_player_pic ?? row.player_pic),
         }));
         if (parsed.length > 0) {
           setRankRowsToday(parsed);
@@ -3459,9 +3459,7 @@ const GamePage = () => {
         const mapped = topRes.value.slice(0, 3).map((r: any) => ({
           name: r.mrs__player_id__player_name ?? r.mrs_player_id_player_name ?? r.player_name ?? 'Unknown',
           amount: r.last_balance ?? r.balance ?? 0,
-          pic: (r.mrs__player_id__player_pic ?? r.mrs_player_id_player_pic ?? r.player_pic)
-            ? encodeURI(`/media/${r.mrs__player_id__player_pic ?? r.mrs_player_id_player_pic ?? r.player_pic}`)
-            : undefined,
+          pic: resolveProfilePic(r.mrs__player_id__player_pic ?? r.mrs_player_id_player_pic ?? r.player_pic),
         }));
         setTopWinnersRows(mapped);
       }
