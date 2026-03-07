@@ -53,7 +53,7 @@ const RAW_REGISATION_ID =
   || 3;
 const REGISATION_ID = RAW_REGISATION_ID;
 const RAW_PLAYER_ID = Number(URL_PARAMS.get('player_id')) || 0;
-const PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
+let PLAYER_ID = RAW_PLAYER_ID < 10000 ? RAW_PLAYER_ID * 100 : RAW_PLAYER_ID;
 const API_BODY = JSON.stringify({ regisation: REGISATION_ID });
 /* Body with mode: 2 = general/basic, 1 = advance */
 const apiBodyWithMode = (mode: number) => JSON.stringify({ regisation: REGISATION_ID, mode });
@@ -2173,7 +2173,12 @@ const GamePage = () => {
         if (userInfo) {
           if (typeof userInfo.balance === 'number') {
             setBalance(userInfo.balance);
-            console.log('[API] User info loaded Ã¢â‚¬â€ balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+            console.log('[API] User info loaded \u2014 balance:', userInfo.balance, 'user_id:', userInfo.user_id);
+          }
+          /* Use backend-authoritative user_id as PLAYER_ID for all subsequent calls */
+          if (typeof userInfo.user_id === 'number' && userInfo.user_id > 0) {
+            console.log('[API] Updating PLAYER_ID:', PLAYER_ID, '\u2192', userInfo.user_id);
+            PLAYER_ID = userInfo.user_id;
           }
           const identity = parseApiIdentity(userInfo);
           if (identity.name) setMyPlayerName(identity.name);
