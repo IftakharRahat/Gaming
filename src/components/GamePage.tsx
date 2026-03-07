@@ -435,7 +435,8 @@ function resolveProfilePic(path?: string | null): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//i.test(path)) return path;
   // Strip leading 'media/' to avoid double prefix (API sometimes returns 'media/...')
-  const cleaned = path.replace(/^\/?(media\/)/, '');
+  const cleaned = path.replace(/^\/?(media\/)/, '').replace(/^\/+/, '');
+  if (!cleaned) return undefined;
   return encodeURI(`/media/${cleaned}`);
 }
 
