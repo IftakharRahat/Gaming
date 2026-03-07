@@ -1700,6 +1700,7 @@ const GamePage = () => {
   const [elementApiIds, setElementApiIds] = useState<Record<string, number>>({});
   const elementApiIdsRef = useRef<Record<string, number>>({});
   const missingElementMapWarnedRef = useRef<Set<ItemId>>(new Set());
+  const [itemImageOverrides, setItemImageOverrides] = useState<Record<string, string>>({});
   const [coinIconSrc, setCoinIconSrc] = useState('/image2/diamond.png');
   const [gameLogoSrc] = useState('/image2/greedy_sign_board.png');
   const [jackpotAmount, setJackpotAmount] = useState(0);
@@ -1925,9 +1926,10 @@ const GamePage = () => {
           const itemSrcMap: Record<string, string> = {};
           for (const item of ITEMS) {
             const apiName = ID_TO_API_NAME[item.id];
+            const imgSrc = itemImageOverrides[item.id] || item.src;
             if (apiName) {
-              itemSrcMap[apiName] = item.src;
-              itemSrcMap[apiName.toLowerCase()] = item.src;
+              itemSrcMap[apiName] = imgSrc;
+              itemSrcMap[apiName.toLowerCase()] = imgSrc;
             }
           }
 
@@ -2418,20 +2420,28 @@ const GamePage = () => {
           const multipliers = { ...DEFAULT_MULTIPLIER };
           const badges: Record<string, string> = {};
           const apiIds: Record<string, number> = {};
+          const imgOverrides: Record<string, string> = {};
           for (const el of elemRes.value) {
             const id = API_NAME_TO_ID[el.element_name];
             if (id) {
               multipliers[id] = el.paytable;
               badges[id] = `x${el.paytable}`;
               apiIds[id] = el.id;
+              if (el.element_icon) {
+                const iconPath = el.element_icon.startsWith('http')
+                  ? el.element_icon
+                  : `https://funint.site/${el.element_icon}`;
+                imgOverrides[id] = iconPath;
+              }
             }
           }
           setItemMultiplier(multipliers);
           setBadgeOverrides(badges as Record<ItemId, string>);
           setElementApiIds(apiIds);
           elementApiIdsRef.current = apiIds;
+          setItemImageOverrides(imgOverrides);
           missingElementMapWarnedRef.current.clear();
-          console.log('[MODE] Elements reloaded for', mode);
+          console.log('[MODE] Elements reloaded for', mode, 'images:', Object.keys(imgOverrides).length);
         }
 
         /* Buttons */
@@ -4592,7 +4602,7 @@ const GamePage = () => {
               disabled={!canBet}
             >
               <img
-                src={it.src}
+                src={itemImageOverrides[it.id] || it.src}
                 alt=""
                 className="h-full w-full object-contain"
                 style={{
@@ -5364,7 +5374,7 @@ const GamePage = () => {
                       <img
                         src={roundType === 'JACKPOT'
                           ? (winnerIds && winnerIds.length > 0 && VEG_ITEMS.includes(winnerIds[0]) ? '/image2/tab_vegetables.png' : '/image2/tab_drinks.png')
-                          : (winnerItem ? winnerItem.src : '/image2/lemon.png')}
+                          : (winnerItem ? (itemImageOverrides[winnerItem.id] || winnerItem.src) : '/image2/lemon.png')}
                         alt=""
                         className="h-[34px] w-[34px] object-contain drop-shadow-md"
                       />
